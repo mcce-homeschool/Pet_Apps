@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Import / Export — Ashley Dogs</title>
+  <link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+  <div id="app-nav"></div>
+  <main>
+    <div class="page-header">
+      <div>
+        <h1>Import / Export</h1>
+        <p class="page-subtitle">Back up your records, restore from a file, or import CSV data.</p>
+      </div>
+    </div>
+
+    <div id="page-msg"></div>
+
+    <section class="card">
+      <h2 style="margin-top:0;">JSON backup</h2>
+      <p class="muted">Downloads every record as a single JSON file. This is also the migration path if this app ever moves to a new web address — your data does not follow an address change automatically.</p>
+      <p class="muted">Last backup: <strong id="last-backup">—</strong></p>
+      <button class="btn btn-primary" id="btn-backup">⬇ Download backup</button>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2 style="margin-top:0;">JSON restore</h2>
+      <p class="muted">Load records from a backup file. <strong>Merge</strong> adds/updates by id and keeps everything else; <strong>Replace</strong> wipes current records first.</p>
+      <input type="file" id="restore-file" accept="application/json,.json">
+      <div id="restore-preview" style="margin-top:14px;"></div>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2 style="margin-top:0;">CSV import</h2>
+      <p class="muted">Match-or-create with a dry-run preview before anything is written.</p>
+      <div class="pill-row">
+        <a class="btn" href="dog-import.html">Import dogs (CSV)</a>
+        <a class="btn" href="contact-import.html">Import contacts (CSV)</a>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px;" id="sample-data-section">
+      <h2 style="margin-top:0;">Sample data</h2>
+      <p class="muted" id="sample-data-status">Checking…</p>
+      <button class="btn btn-danger" id="btn-clear-sample" style="display:none;">Clear Sample Data</button>
+    </section>
+
+    <section class="card" style="margin-top:16px;" id="kennel-setup-section">
+      <h2 style="margin-top:0;">Your kennel</h2>
+      <p class="muted" id="kennel-setup-status">Checking…</p>
+      <button class="btn" id="btn-kennel-setup">Set up your kennel</button>
+    </section>
+
+    <section class="card" style="margin-top:16px; border-color:#e0a0a0;" id="danger-zone-section">
+      <h2 style="margin-top:0;">Danger zone</h2>
+      <p class="muted" id="reset-app-status">Checking…</p>
+      <p class="muted">Permanently deletes every dog, contact, kennel, and event, plus all app settings (kennel setup, sample-data status, last backup date) — landing back on the first-run setup screen, like a browser that has never opened this app. There is no undo. Download a backup first if you might want this data again.</p>
+      <button class="btn btn-danger" id="btn-reset-app">Reset app to start…</button>
+    </section>
+  </main>
+
+  <script type="module" src="../app.js"></script>
+  <script type="module" src="./import-export.js"></script>
+</body>
+</html>
