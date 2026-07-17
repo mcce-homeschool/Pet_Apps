@@ -6,7 +6,7 @@ import { contractRepo } from '../data/contractRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import { PLACEMENT_TYPE, SALE_STATUS, CONTRACT_TYPE, CONTRACT_STATUS } from '../data/vocab.js';
-import { esc, badge, fmtDate, param, confirmAction } from '../assets/ui.js';
+import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { openEventForm } from '../assets/eventForm.js';
 
 // Statuses that warrant the "log a scheduled pickup" prompt (Stage4.5 Addendum §D4).
@@ -234,6 +234,62 @@ function cancel() {
   renderContractsSection();
 }
 
+// Soft prompt on the Delivered transition (Enhancements Batch #7): offer to
+// update the sold dog's ownership to reflect it has left the program.
+// "External"/"Co-owned" are OWNERSHIP_TYPE values, not DOG_STATUS values — this
+// edits dog.ownership_type (and, for External, may also set status to
+// external_reference). Optional/warn-don't-block: the sale is already saved by
+// the time this shows, and a skipped/failed update never blocks anything.
+// Resolves once the modal is dismissed, so callers can sequence it.
+function promptOwnershipUpdate(sale) {
+  return new Promise((resolve) => {
+    const dogLabel = dogName(sale.dog_id) || 'this dog';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+      <h2 style="margin-top:0;">Sale delivered — update ${esc(dogLabel)}'s ownership?</h2>
+      <div class="field">
+        <label>Ownership</label>
+        <select id="own-choice">
+          <option value="">— leave unchanged —</option>
+          <option value="external">External</option>
+          <option value="co_owned">Co-owned</option>
+        </select>
+      </div>
+      <div id="own-error"></div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="own-confirm">Confirm</button>
+        <button class="btn" id="own-skip">Skip</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const close = () => { overlay.remove(); resolve(); };
+    overlay.querySelector('#own-skip').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#own-confirm').addEventListener('click', async () => {
+      const choice = overlay.querySelector('#own-choice').value;
+      if (!choice) { close(); return; }
+      try {
+        // Re-fetch: the co-own convenience above may have just updated this dog.
+        const dog = await dogRepo.getById(sale.dog_id);
+        if (choice === 'external') {
+          const updates = { ownership_type: 'external', status: 'external_reference', status_date: todayYMD() };
+          if (!dog?.owner_contact_id) updates.owner_contact_id = sale.buyer_contact_id;
+          await dogRepo.update(sale.dog_id, updates);
+        } else if (choice === 'co_owned') {
+          const coOwners = dog?.co_owner_contact_ids || [];
+          const updates = { ownership_type: 'co_owned' };
+          if (!coOwners.includes(sale.buyer_contact_id)) updates.co_owner_contact_ids = [...coOwners, sale.buyer_contact_id];
+          await dogRepo.update(sale.dog_id, updates);
+        }
+        close();
+      } catch (e) {
+        overlay.querySelector('#own-error').innerHTML = `<div class="inline-error">${esc(e.message || String(e))}</div>`;
+      }
+    });
+  });
+}
+
 async function save() {
   clearError();
   const candidate = normalizeMoney(readForm());
@@ -264,6 +320,12 @@ async function save() {
       ctx.original = await saleRepo.getById(saved.id);
       renderAll();
     };
+
+    // Ownership-update prompt (#7) fires only on the transition INTO delivered,
+    // before the existing placement-event prompt below.
+    if (saved.status === 'delivered' && prevStatus !== 'delivered') {
+      await promptOwnershipUpdate(saved);
+    }
 
     // Soft-suggestion prompt (Stage4.5 Addendum §D4) — offered, never forced;
     // no stored Sale↔event link. Only on the transition INTO a prompt-worthy

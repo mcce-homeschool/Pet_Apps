@@ -371,6 +371,7 @@ async function renderRosterSection() {
 
   const puppies = await dogRepo.getByLitter(ctx.original.id);
   puppies.sort((a, b) => (a.call_name || '').localeCompare(b.call_name || '', undefined, { numeric: true }));
+  const activePuppies = puppies.filter((d) => !d.is_archived);
 
   const rowsHtml = puppies.length
     ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + puppies.map((d) => `
@@ -390,6 +391,7 @@ async function renderRosterSection() {
         <div class="pill-row">
           <button class="btn btn-primary btn-sm" id="btn-add-puppy"${damHasBreed ? '' : ' disabled title="Set the dam\'s breed first."'}>+ Add Puppy</button>
           <button class="btn btn-sm" id="btn-add-puppies"${damHasBreed ? '' : ' disabled'}>+ Add N Puppies</button>
+          <button class="btn btn-sm" id="btn-cascade-event"${activePuppies.length ? '' : ' disabled title="No puppies to log against."'}>+ Log event for whole litter</button>
         </div>
       </div>
       ${rowsHtml}
@@ -399,6 +401,14 @@ async function renderRosterSection() {
   const addN = document.getElementById('btn-add-puppies');
   if (add && damHasBreed) add.onclick = () => openAddPuppyForm({ litter: ctx.original, dam, onSaved: refreshRosterAndCounts });
   if (addN && damHasBreed) addN.onclick = () => openAddPuppiesForm({ litter: ctx.original, dam, existingCount: puppies.length, onSaved: refreshRosterAndCounts });
+  const cascadeBtn = document.getElementById('btn-cascade-event');
+  if (cascadeBtn && activePuppies.length) {
+    cascadeBtn.onclick = () => openEventForm({
+      subjectType: 'dog',
+      cascadeTargets: activePuppies.map((p) => ({ id: p.id, label: `${p.call_name}${p.sex ? ` (${descriptor(SEX, p.sex).label[0]})` : ''}` })),
+      onSaved: () => { renderRosterSection(); renderTimelineSection(); }
+    });
+  }
 }
 
 // After adding puppies the roster (and dog names cached in ctx) may have changed.

@@ -318,6 +318,8 @@ table.data tr.row-detail .dl-meta { margin: 0; }
   table.data th.col-collapse, table.data td.col-collapse { display: none; }
 }
 
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
 .empty-state { text-align: center; color: var(--text-muted); padding: 40px 20px; }
 
 /* --- Forms / edit-in-place --------------------------------------------- */

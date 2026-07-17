@@ -70,6 +70,7 @@ const ctx = {
   original: null,      // saved record (null in new mode)
   draft: null,         // working copy while editing
   coiEditing: false,   // Recorded COI panel has its own inline edit toggle
+  plannedTestsAddOpen: false, // Planned Tests add/copy controls toggle (survives re-render after an add)
   pickerArchived: false,
   allDogs: [],
   allContacts: [],
@@ -185,7 +186,7 @@ function kennelOptions(current) {
 
 // --- Rendering: read-only view ------------------------------------------
 function row(label, valueHtml) {
-  return `<dt>${esc(label)}</dt><dd>${valueHtml || '<span class="faint">—</span>'}</dd>`;
+  return valueHtml ? `<dt>${esc(label)}</dt><dd>${valueHtml}</dd>` : '';
 }
 
 function renderView() {
@@ -644,18 +645,18 @@ async function renderPlannedTestsSection() {
     }
   }
 
-  const rowsHtml = planned.length
-    ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + planned.map((t) => {
-        const matched = loggedTokens.has(t.trim().toLowerCase());
-        const flag = matched
-          ? '<span class="badge badge-green">Logged</span>'
-          : '<span class="badge badge-amber">Planned — no matching event found, verify</span>';
+  // (#8) Only show planned tokens that are NOT yet matched by a logged event —
+  // matched ones already surface in the Health-Test Summary card above.
+  const unlogged = planned.filter((t) => !loggedTokens.has(t.trim().toLowerCase()));
+
+  const rowsHtml = unlogged.length
+    ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + unlogged.map((t) => {
         return `<li class="row-between" style="padding:8px 0; border-top:1px solid var(--border);">
-          <span>${esc(t)} ${flag}</span>
-          <button class="btn btn-sm" data-act="pt-remove" data-token="${esc(t)}">Remove</button>
+          <span>${esc(t)} <span class="badge badge-amber">Planned</span></span>
+          <button class="btn btn-sm" data-act="pt-remove" data-token="${esc(t)}" aria-label="Remove ${esc(t)}" title="Remove">✕</button>
         </li>`;
       }).join('') + `</ul>`
-    : `<p class="muted" style="margin:14px 0 0;">No tests planned yet.</p>`;
+    : `<p class="muted" style="margin:14px 0 0;">${planned.length ? 'All planned tests logged.' : 'No tests planned yet.'}</p>`;
 
   // Copy-plan-from sources (§5): other dogs' plans, and kennel panels.
   const dogSources = ctx.allDogs.filter((o) => o.id !== d.id && (o.planned_tests || []).length);
@@ -666,11 +667,10 @@ async function renderPlannedTestsSection() {
     ...dogSources.map((o) => `<option value="dog:${esc(o.id)}">Dog: ${esc(o.call_name)}</option>`)
   ].join('');
 
-  els.plannedTests.innerHTML = `
-    <section class="card" style="margin-top:16px;">
-      <h2 style="margin:0;">Planned Tests</h2>
-      <p class="field-hint">The tests this dog's plan says to run — an undated intention, not an event. Advisory only.</p>
-      ${rowsHtml}
+  // (#9) Add/copy controls collapse behind a header toggle; state survives
+  // re-render (ctx.plannedTestsAddOpen) so it stays open across an add/copy.
+  const controlsHtml = `
+    <div id="pt-controls"${ctx.plannedTestsAddOpen ? '' : ' hidden'}>
       <div class="form-grid" style="margin-top:12px;">
         ${field('Add a test', `<input id="pt-new" type="text" list="pt-dl" placeholder="Type a test, then press Enter"><datalist id="pt-dl">${vocabulary.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>`)}
       </div>
@@ -679,7 +679,23 @@ async function renderPlannedTestsSection() {
         ${field('Copy plan from…', `<select id="pt-source">${sourceOptions}</select>`)}
       </div>
       <div class="form-actions"><button class="btn btn-sm" id="pt-copy">Copy</button></div>
+    </div>`;
+
+  els.plannedTests.innerHTML = `
+    <section class="card" style="margin-top:16px;">
+      <div class="row-between">
+        <h2 style="margin:0;">Planned Tests</h2>
+        <button class="btn btn-sm" id="pt-toggle">${ctx.plannedTestsAddOpen ? 'Hide' : '+ Plan a test'}</button>
+      </div>
+      <p class="field-hint">The tests this dog's plan says to run — an undated intention, not an event. Advisory only.</p>
+      ${rowsHtml}
+      ${controlsHtml}
     </section>`;
+
+  document.getElementById('pt-toggle').addEventListener('click', () => {
+    ctx.plannedTestsAddOpen = !ctx.plannedTestsAddOpen;
+    renderPlannedTestsSection();
+  });
 
   const addTest = async () => {
     const input = document.getElementById('pt-new');
@@ -793,6 +809,7 @@ async function renderStudServicesSection() {
   const d = ctx.original;
   const studServices = await studServiceRepo.getForDog(d.id);
   if (!studServices.length && !BREEDING_STATUSES.includes(d.status)) { els.studServices.innerHTML = ''; return; }
+  studServices.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
 
   const rowsHtml = studServices.length
     ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + studServices.map((s) => {

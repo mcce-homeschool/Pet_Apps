@@ -19,8 +19,8 @@ function displayRow(k, blocked) {
   const title = blocked.length ? 'Referenced by ' + blocked.map((b) => `${b.label} (${b.count})`).join(', ') : 'Delete kennel';
   return `<tr class="${k.is_archived ? 'row-archived' : ''}">
     <td><strong>${esc(k.kennel_name)}</strong>${k.is_own_kennel ? ' <span class="badge badge-green">My kennel</span>' : ''}</td>
-    <td>${k.prefix ? esc(k.prefix) : '<span class="faint">—</span>'}</td>
-    <td>${k.location ? esc(k.location) : '<span class="faint">—</span>'}</td>
+    <td class="col-collapse">${k.prefix ? esc(k.prefix) : '<span class="faint">—</span>'}</td>
+    <td class="col-collapse">${k.location ? esc(k.location) : '<span class="faint">—</span>'}</td>
     <td class="pill-row" style="justify-content:flex-end;">
       ${k.is_own_kennel ? `<button class="btn btn-sm" data-act="toggle-tests" data-id="${esc(k.id)}">${testsOpenId === k.id ? 'Hide tests' : 'Preferred tests'}</button>` : ''}
       <button class="btn btn-sm" data-act="edit" data-id="${esc(k.id)}">Edit</button>
@@ -111,13 +111,13 @@ async function render() {
   }
   // Compute delete-blockers per kennel so the Delete button can be disabled.
   const blockers = await Promise.all(kennels.map((k) => kennelRepo.getDeleteBlockers(k.id)));
-  listEl.innerHTML = `<table class="data"><thead><tr><th>Name</th><th>Prefix</th><th>Location</th><th></th></tr></thead><tbody>${
+  listEl.innerHTML = `<div class="table-scroll"><table class="data"><thead><tr><th>Name</th><th class="col-collapse">Prefix</th><th class="col-collapse">Location</th><th></th></tr></thead><tbody>${
     kennels.map((k, i) => {
       const rowHtml = k.id === editingId ? editRow(k) : displayRow(k, blockers[i]);
       const testsHtml = (k.is_own_kennel && testsOpenId === k.id) ? testsPanelRow(k) : '';
       return rowHtml + testsHtml;
     }).join('')
-  }</tbody></table>`;
+  }</tbody></table></div>`;
 
   listEl.querySelectorAll('[data-act="edit"], [data-act="archive"], [data-act="delete"]').forEach((btn) => {
     if (btn.disabled) return;

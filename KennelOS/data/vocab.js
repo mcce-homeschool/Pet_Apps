@@ -21,6 +21,7 @@ export const DOG_STATUS = [
   { value: 'active_breeding',    label: 'Active breeding',    badge: 'badge-green' },
   { value: 'retired_breeding',   label: 'Retired breeding',   badge: 'badge-amber' },
   { value: 'pet_home',           label: 'Pet home',           badge: 'badge-neutral' },
+  { value: 'for_sale',           label: 'For Sale',           badge: 'badge-amber' },
   { value: 'deceased',           label: 'Deceased',           badge: 'badge-gray' },
   { value: 'external_reference', label: 'External reference', badge: 'badge-gray' }
 ];
@@ -127,6 +128,7 @@ export const FEE_STRUCTURE = [
 
 export const STUD_SERVICE_STATUS = [
   { value: 'arranged', label: 'Arranged', badge: 'badge-blue' },
+  { value: 'in_progress', label: 'In progress', badge: 'badge-amber' },
   { value: 'completed', label: 'Completed', badge: 'badge-green' },
   { value: 'failed',    label: 'Failed',    badge: 'badge-red' },
   { value: 'cancelled', label: 'Cancelled', badge: 'badge-gray' }

@@ -11,10 +11,11 @@ import { dogRepo } from '../data/dogRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import {
   STUD_SERVICE_DIRECTION, FEE_STRUCTURE, STUD_SERVICE_STATUS,
-  CONTRACT_TYPE, CONTRACT_STATUS
+  CONTRACT_TYPE, CONTRACT_STATUS, SEX, descriptor
 } from '../data/vocab.js';
 import { esc, badge, fmtDate, param, confirmAction } from '../assets/ui.js';
 import { openEventForm } from '../assets/eventForm.js';
+import { getMyContactId } from '../data/kennelSetup.js';
 
 const els = {
   title: document.getElementById('ss-title'),
@@ -28,7 +29,8 @@ const els = {
 
 const blankStudService = () => ({
   direction: '', our_dog_id: '', partner_dog_id: '', partner_contact_id: '',
-  fee_amount: '', fee_structure: '', pairing_id: '', status: '', result_notes: '', notes: ''
+  fee_amount: '', fee_structure: '', pairing_id: '', status: '', result_notes: '', notes: '',
+  sent_date: '', returned_date: ''
 });
 
 const ctx = {
@@ -69,16 +71,44 @@ function vocabOptions(vocab, current, placeholder) {
   ).join('');
 }
 
-function dogOptions(current) {
-  const opts = ctx.allDogs
+function sexLetter(d) {
+  return d.sex ? ` (${descriptor(SEX, d.sex).label[0]})` : '';
+}
+
+// Owned/co-owned active breeders only — males first, then by call name. The
+// current selection always stays in the list (edit safety) even if it no
+// longer matches. "Males first," not "males only" — an incoming service has
+// our dam as our dog.
+function ourDogOptions(current) {
+  const list = ctx.allDogs
+    .filter((d) => (['owned', 'co_owned'].includes(d.ownership_type) && d.status === 'active_breeding') || d.id === current)
     .filter((d) => ctx.pickerArchived || !d.is_archived || d.id === current)
-    .map((d) => `<option value="${esc(d.id)}"${d.id === current ? ' selected' : ''}>${esc(d.call_name)}${d.registered_name ? ' — ' + esc(d.registered_name) : ''}${d.is_archived ? ' (archived)' : ''}</option>`)
+    .sort((a, b) => {
+      const rank = (d) => (d.sex === 'male' ? 0 : d.sex === 'female' ? 1 : 2);
+      const r = rank(a) - rank(b);
+      return r !== 0 ? r : (a.call_name || '').localeCompare(b.call_name || '', undefined, { numeric: true });
+    });
+  const opts = list
+    .map((d) => `<option value="${esc(d.id)}"${d.id === current ? ' selected' : ''}>${esc(d.call_name)}${sexLetter(d)}${d.registered_name ? ' — ' + esc(d.registered_name) : ''}${d.is_archived ? ' (archived)' : ''}</option>`)
     .join('');
   return `<option value="">— select —</option>` + opts;
 }
 
+// External dogs only — the outside partner.
+function partnerDogOptions(current) {
+  const opts = ctx.allDogs
+    .filter((d) => d.ownership_type === 'external' || d.id === current)
+    .filter((d) => ctx.pickerArchived || !d.is_archived || d.id === current)
+    .map((d) => `<option value="${esc(d.id)}"${d.id === current ? ' selected' : ''}>${esc(d.call_name)}${sexLetter(d)}${d.registered_name ? ' — ' + esc(d.registered_name) : ''}${d.is_archived ? ' (archived)' : ''}</option>`)
+    .join('');
+  return `<option value="">— select —</option>` + opts;
+}
+
+// Other breeders only — never the user themselves.
 function contactOptions(current) {
+  const myContactId = getMyContactId();
   const opts = ctx.allContacts
+    .filter((c) => c.id === current || ((c.contact_type || []).includes('breeder') && c.id !== myContactId))
     .filter((c) => ctx.pickerArchived || !c.is_archived || c.id === current)
     .map((c) => `<option value="${esc(c.id)}"${c.id === current ? ' selected' : ''}>${esc(c.name)}${c.is_archived ? ' (archived)' : ''}</option>`)
     .join('');
@@ -115,6 +145,8 @@ function renderView() {
       ${row('Fee', esc(money(s.fee_amount)) + (s.fee_structure ? ` <span class="faint">(${esc((FEE_STRUCTURE.find(f => f.value === s.fee_structure) || {}).label || s.fee_structure)})</span>` : ''))}
       ${row('Linked pairing', pairingHtml)}
       ${row('Status', badge(STUD_SERVICE_STATUS, s.status))}
+      ${row('Sent', s.sent_date ? esc(fmtDate(s.sent_date)) : '')}
+      ${row('Returned', s.returned_date ? esc(fmtDate(s.returned_date)) : '')}
       ${row('Result notes', s.result_notes ? esc(s.result_notes).replace(/\n/g, '<br>') : '')}
       ${row('Notes', s.notes ? esc(s.notes).replace(/\n/g, '<br>') : '')}
     </dl>`;
@@ -134,13 +166,15 @@ function renderEdit() {
   els.body.innerHTML = `
     <div class="form-grid" id="ss-form" style="margin-top:14px;">
       ${field('Direction', `<select id="f-direction">${vocabOptions(STUD_SERVICE_DIRECTION, s.direction, 'Select…')}</select>`, { required: true, hint: 'Outgoing = our dog is the stud. Incoming = our dog is the dam.' })}
-      ${field('Our dog', `<select id="f-our_dog_id">${dogOptions(s.our_dog_id)}</select>`, { required: true })}
-      ${field('Partner dog', `<select id="f-partner_dog_id">${dogOptions(s.partner_dog_id)}</select>`, { required: true })}
+      ${field('Our dog', `<select id="f-our_dog_id">${ourDogOptions(s.our_dog_id)}</select>`, { required: true })}
+      ${field('Partner dog', `<select id="f-partner_dog_id">${partnerDogOptions(s.partner_dog_id)}</select>`, { required: true })}
       ${field('Partner contact', `<select id="f-partner_contact_id">${contactOptions(s.partner_contact_id)}</select>`, { required: true, hint: 'Owner of the partner dog.' })}
       ${field('Fee amount', `<input id="f-fee_amount" type="number" min="0" step="0.01" value="${esc(s.fee_amount)}">`)}
       ${field('Fee structure', `<select id="f-fee_structure">${vocabOptions(FEE_STRUCTURE, s.fee_structure, '— none —')}</select>`)}
       ${field('Linked pairing', `<select id="f-pairing_id">${pairingOptions(s.pairing_id)}</select>`, { hint: 'Optional — the actual breeding record and outcome.' })}
       ${field('Status', `<select id="f-status">${vocabOptions(STUD_SERVICE_STATUS, s.status, 'Select…')}</select>`, { required: true })}
+      ${field('Sent', `<input id="f-sent_date" type="date" value="${esc(s.sent_date)}">`, { hint: 'Date the dog/semen was sent out (optional).' })}
+      ${field('Returned', `<input id="f-returned_date" type="date" value="${esc(s.returned_date)}">`)}
       <div class="field field-wide">
         <label class="check-inline"><input id="picker-archived" type="checkbox"${ctx.pickerArchived ? ' checked' : ''}> Include archived dogs/contacts/pairings in the pickers above</label>
       </div>
@@ -172,6 +206,8 @@ function readForm() {
     fee_structure: val('f-fee_structure') || '',
     pairing_id: val('f-pairing_id') || null,
     status: val('f-status'),
+    sent_date: val('f-sent_date'),
+    returned_date: val('f-returned_date'),
     result_notes: val('f-result_notes'),
     notes: val('f-notes')
   };
@@ -184,6 +220,7 @@ function updateWarnings() {
   if (our && s.direction === 'outgoing' && our.sex === 'female') warns.push('Direction is “outgoing” (our dog is the stud) but our dog is recorded as female.');
   if (our && s.direction === 'incoming' && our.sex === 'male') warns.push('Direction is “incoming” (our dog is the dam) but our dog is recorded as male.');
   if (s.our_dog_id && s.partner_dog_id && s.our_dog_id === s.partner_dog_id) warns.push('Our dog and the partner dog are the same dog — this will be blocked on save.');
+  if (s.sent_date && s.returned_date && s.returned_date < s.sent_date) warns.push('Returned date is before the sent date.');
   const box = document.getElementById('form-warn');
   if (box) box.innerHTML = warns.length ? `<div class="inline-warn">${warns.map(esc).join('<br>')}</div>` : '';
 }

@@ -22,10 +22,19 @@ const TEST_VOCAB_FIELDS = { genetic_test: 'panel_name', breed_specific_test: 'te
 // soft-suggestion prompts (Stage4.5 Addendum §C6/§D4: StudService→boarding,
 // Litter→grow-out, Sale→placement). It's a one-time seed, never a stored link
 // back to whatever triggered it.
+//
+// `cascadeTargets` (optional): [{ id, label }] — when present, this is a
+// litter-wide "log for the whole litter" entry (Enhancements Batch #3). Instead
+// of writing one event for `subjectId`, an "Apply to" checkbox list lets the
+// user pick which targets get the SAME payload, and save writes one independent
+// Event per checked target (no cascade record, no stored link between them).
+// `subjectId` is unused in this mode. The single-subject path is unchanged.
 export async function openEventForm(opts) {
-  const { subjectType, subjectId, event = null, prefill = null, onSaved, onCancel } = opts;
+  const { subjectType, subjectId, event = null, prefill = null, cascadeTargets = null, onSaved, onCancel } = opts;
   const types = eventTypesFor(subjectType);
   const isEdit = !!event;
+  const isCascade = !isEdit && !!cascadeTargets?.length;
+  const cascadeChecked = new Set(cascadeTargets ? cascadeTargets.map((t) => t.id) : []);
 
   // Contacts are only ever needed for relatedContact types (boarding, placement,
   // both dog-subject) — loaded once up front so the picker is ready on first render.
@@ -100,9 +109,15 @@ export async function openEventForm(opts) {
     const isSpan = typeDef.duration === 'span';
     modal.innerHTML = `
       <div class="row-between" style="margin-bottom:12px;">
-        <h2 style="margin:0;">${isEdit ? 'Edit event' : 'Add event'}</h2>
+        <h2 style="margin:0;">${isEdit ? 'Edit event' : isCascade ? 'Log event for whole litter' : 'Add event'}</h2>
         <button class="btn btn-sm" data-act="cancel">✕</button>
       </div>
+      ${isCascade ? `<div class="field field-wide" style="margin-bottom:14px;">
+        <label>Apply to</label>
+        ${cascadeTargets.map((t) => `<label class="check-inline" style="display:block; margin:4px 0;">
+          <input type="checkbox" data-cascade-target="${esc(t.id)}"${cascadeChecked.has(t.id) ? ' checked' : ''}> ${esc(t.label)}
+        </label>`).join('')}
+      </div>` : ''}
       <div class="form-grid">
         <div class="field"><label>Type <span class="req">*</span></label>
           <select id="ef-type">${typeOptions}</select></div>
@@ -138,6 +153,14 @@ export async function openEventForm(opts) {
       if (!draft.title) draft.title = descriptor(EVENT_TYPES, draft.event_type).label;
       render();
     });
+    if (isCascade) {
+      modal.querySelectorAll('[data-cascade-target]').forEach((cb) => {
+        cb.addEventListener('change', (e) => {
+          const id = e.target.dataset.cascadeTarget;
+          if (e.target.checked) cascadeChecked.add(id); else cascadeChecked.delete(id);
+        });
+      });
+    }
     modal.querySelector('[data-act="save"]').addEventListener('click', save);
     modal.querySelectorAll('[data-act="cancel"]').forEach((b) => b.addEventListener('click', close));
   }
@@ -165,13 +188,16 @@ export async function openEventForm(opts) {
 
   async function save() {
     captureInputs();
+    if (isCascade && !cascadeChecked.size) {
+      showError('Select at least one puppy to apply this event to.');
+      return;
+    }
     // Soft warning: reminder should not precede the event.
     if (draft.reminder_date && draft.event_date && draft.reminder_date < draft.event_date) {
       if (!window.confirm('Reminder date is before the event date. Save anyway?')) return;
     }
-    const payload = {
+    const basePayload = {
       subject_type: subjectType,
-      subject_id: subjectId,
       event_type: draft.event_type,
       event_date: draft.event_date,
       event_end_date: draft.event_end_date || null,
@@ -183,9 +209,17 @@ export async function openEventForm(opts) {
       notes: draft.notes
     };
     try {
-      const saved = isEdit
-        ? await HistoryEvent.update(event.id, payload)
-        : await HistoryEvent.create(payload);
+      let saved;
+      if (isCascade) {
+        saved = await Promise.all(
+          [...cascadeChecked].map((id) => HistoryEvent.create({ ...basePayload, subject_id: id }))
+        );
+      } else {
+        const payload = { ...basePayload, subject_id: subjectId };
+        saved = isEdit
+          ? await HistoryEvent.update(event.id, payload)
+          : await HistoryEvent.create(payload);
+      }
       close();
       onSaved?.(saved);
     } catch (e) {
