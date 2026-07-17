@@ -4,6 +4,7 @@
 import { db } from './db.js';
 import { makeRepo, nowIso } from './repoBase.js';
 import { DOG_REFERENCES } from './referenceRegistry.js';
+import { todayYMD } from './dateUtils.js';
 
 const base = makeRepo('dogs', DOG_REFERENCES);
 
@@ -11,13 +12,6 @@ const base = makeRepo('dogs', DOG_REFERENCES);
 // name, DOB, registration number — is commonly unknown at entry time.
 const REQUIRED_FIELDS = ['call_name', 'sex', 'breed', 'ownership_type', 'status'];
 const OWNER_REQUIRED_TYPES = ['external', 'leased_in'];
-
-function today() {
-  // Local date as YYYY-MM-DD, to compare against date-only fields lexicographically.
-  const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 // Walk up from a starting parent id and return the set of all ancestor ids.
 // `dogsById` is a Map of the current dog table so the walk is a pure in-memory
@@ -48,7 +42,7 @@ async function validateDog(candidate, existingId = null) {
     }
   }
 
-  if (candidate.date_of_birth && candidate.date_of_birth > today()) {
+  if (candidate.date_of_birth && candidate.date_of_birth > todayYMD()) {
     throw new Error('Dog: date_of_birth cannot be in the future.');
   }
 

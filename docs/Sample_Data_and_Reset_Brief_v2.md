@@ -1,9 +1,9 @@
 # Dog Breeding Management App
 ## Sample Data & Reset Brief — v2
 
-**How to use this doc:** hand this to Claude Code alongside `Data_Model_Architecture_Proposal_v2.md`, `Stage1_Stage2_Build_Brief_v2.md`, and `Stage3_Build_Brief_v1.md`. **This version replaces `Sample_Data_and_Reset_Brief_v1.md` entirely** — it is not a diff or an addendum. It defines one unified sample packet across all six tables that exist through Stage 3 (Dog, Event, Contact, Kennel, Pairing, Litter), seeded and cleared together as a single set.
+**How to use this doc:** hand this to Claude Code alongside `Data_Model_Architecture_Proposal_v3.md`, `Stage1_Stage2_Build_Brief_v2.md`, `Stage3_Build_Brief_v1-1.md`, `Stage4_As_Built_v1.md`, and `Stage4.5_Reconciliation_and_Logistics_Addendum_v1.md`. **This version replaces `Sample_Data_and_Reset_Brief_v1.md` entirely** — it is not a diff or an addendum. It defines one unified sample packet across all six tables that exist through Stage 3 (Dog, Event, Contact, Kennel, Pairing, Litter), seeded and cleared together as a single set. §9–§10 below are later, *additive* extensions (Stage 4, then Stage 4.5) to that same packet — read alongside this base.
 
-**Scope:** the six tables live at the end of Stage 3. Nothing here references Buyer/Sale/Contract/StudService — those get their own extension when their stage lands, following the same pattern this doc establishes.
+**Scope:** §1–§8 describe the six tables live at the end of Stage 3. §9 folds in Sale/Contract/StudService (Stage 4, reconciled by `Stage4.5_Reconciliation_and_Logistics_Addendum_v1.md` §A4 after `Stage4_As_Built_v1.md` §10 shipped ahead of this doc). §10 folds in the Stage 4.5 boarding/placement sample events.
 
 ---
 
@@ -169,3 +169,46 @@ Pairing P2 (planned, no litter) intentionally has **no** events yet — it demon
 - [ ] Thornfield is flagged `is_own_kennel`; all owned/co-owned sample dogs resolve `kennel_id` → Thornfield; Gunnar (external) has `kennel_id: null`; deleting Thornfield is blocked by `KENNEL_REFERENCES` while any sample dog points at it (Own-Kennel Identity addendum)
 - [ ] Choosing "Start with a blank kennel" offers the kennel-setup wizard; choosing "Explore with sample data" does not (that run only)
 - [ ] "Reset App to Start" is blocked from completing until the exact phrase `RESET` is typed; on confirm, every table and every settings key is cleared and the app reloads to the first-run prompt
+
+---
+
+## 9. Stage 4 Extension — Sales, Contracts, Stud Services
+
+`Stage4_As_Built_v1.md` §10 shipped these sample records ahead of this doc ever being updated for them; `Stage4.5_Reconciliation_and_Logistics_Addendum_v1.md` §A4 is what closes that gap. This section is the authoritative record — confirmed to match the code in `data/sampleData.js`, no new records invented here.
+
+`sampleDataManifest` gains `sales`, `contracts`, `stud_services` arrays (still **no** `buyers` array — buyer is a Contact, Data Model v3 §5.5).
+
+**Buyers-as-Contacts (added to the 5 in §7's table):**
+| Name | Waitlist | Demonstrates |
+|---|---|---|
+| Priya Shah | fulfilled | `first_contact_source: Instagram`; buyer on the sample Sale below |
+| Owen Farrow | active | **no Sale** yet — the empty-waitlist demo |
+| Ellen Brooks | (none) | owner of external partner dog Nell, below |
+
+**Dogs (+1, 9 total):** Nell — external, `owner_contact_id` → Ellen, partner dog in the sample Stud Service.
+
+**Pairings (+1, P3):** Birch × Nell, `actual`/`ai_chilled`/`confirmed_pregnant` — the pairing produced by the sample Stud Service, linked via its canonical `pairing_id` (never a stored back-pointer).
+
+**Stud Service (1):** Birch (`outgoing`) services Nell, `status: completed`, `pairing_id` → P3; fee `$1200` flat. Plus a `signed` stud-service Contract (`related_stud_service_id`).
+
+**Sale (1):** Hazel → Priya, `placement_type: pet`, `status: delivered`, `lead_source: Instagram`. Plus a `signed` sale Contract (`related_sale_id`).
+
+**Acceptance checks (append to §8):**
+- [ ] Buyers-as-Contacts: Priya, Owen, Ellen exist as Contacts; **no** `buyers` table/array anywhere
+- [ ] Owen shows in the Buyers/waitlist view with `waitlist_status: active` and **no** linked Sale
+- [ ] Hazel's Sale resolves buyer → Priya (a Contact), and Sale Detail's Contract panel lists the signed sale contract with a status badge
+- [ ] Sale Detail shows the derived **governing-contract** line resolving to the signed contract (Stage4.5 Addendum §A2)
+- [ ] Birch's StudService links to **P3** via `pairing_id`; Stud Service Detail's Contract panel shows the signed stud-service contract
+- [ ] Clearing sample data with a **real** Contract pointed at a sample Sale/StudService is blocked with the specific message and offers archive-instead (exercises `SALE_REFERENCES` / `STUD_SERVICE_REFERENCES`)
+- [ ] Contract is confirmed hard-deletable with nothing blocking (leaf; `CONTRACT_REFERENCES` empty)
+
+## 10. Stage 4.5 Extension — Boarding & Placement Events
+
+`Stage4.5_Reconciliation_and_Logistics_Addendum_v1.md` Part C/D adds `event_end_date`, `related_contact_id`, and the `boarding`/`placement` catalog types (no new table). Two sample events exercise them, both dated **relative to seed time** (not fixed calendar dates, unlike the rest of §7's events) so they stay demonstrative no matter when the packet is seeded:
+
+- **Boarding:** Birch's outgoing stud stay with Ellen — `related_contact_id` → Ellen, `boarding_reason: Stud service`, started a few days before seeding, **no** `event_end_date` (ongoing) so it always appears on the Location/Status Board.
+- **Placement:** a scheduled pickup for Fern — `related_contact_id` → Owen (the sample's active-waitlist buyer, still with no Sale), dated about a week after seeding. Deliberately **no** Sale record — a placement event never carries a stored link to one.
+
+**Acceptance checks (append to §8):**
+- [ ] At least one sample boarding event exists and appears on the Location/Status Board with the right contact link
+- [ ] The sample placement event appears on the Upcoming Deliverables view and in the Scheduled Placements report, with no corresponding Sale record

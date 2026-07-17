@@ -1,6 +1,6 @@
 # Where To Go Looking — Code Orientation Guide
 
-**Purpose:** a map from *"the symptom I'm seeing"* or *"the thing I want to change"* to *"the file that owns it."* Built from the module boundaries in `Data_Model_Architecture_Proposal_v2.md` §11 and the three build briefs. Hand this to Claude Code so it edits the one place that owns a concern instead of chasing the same logic through five files.
+**Purpose:** a map from *"the symptom I'm seeing"* or *"the thing I want to change"* to *"the file that owns it."* Built from the module boundaries in `Data_Model_Architecture_Proposal_v3.md` §11 and the build briefs. Hand this to Claude Code alongside `Data_Model_Architecture_Proposal_v3.md`, `Stage4_As_Built_v1.md`, and `Stage4.5_Reconciliation_and_Logistics_Addendum_v1.md` so it edits the one place that owns a concern instead of chasing the same logic through five files.
 
 **The one rule everything else follows:** pages never touch Dexie. Pages call repos; repos own all `db.<table>.*` access for their table. If you find a page reaching into `db` directly, that's the bug — not a shortcut to copy.
 

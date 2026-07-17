@@ -7,6 +7,10 @@ import { dogRepo } from '../data/dogRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import { PLACEMENT_TYPE, SALE_STATUS, CONTRACT_TYPE, CONTRACT_STATUS } from '../data/vocab.js';
 import { esc, badge, fmtDate, param, confirmAction } from '../assets/ui.js';
+import { openEventForm } from '../assets/eventForm.js';
+
+// Statuses that warrant the "log a scheduled pickup" prompt (Stage4.5 Addendum §D4).
+const PLACEMENT_PROMPT_STATUSES = ['paid_in_full', 'delivered'];
 
 const els = {
   title: document.getElementById('sale-title'),
@@ -233,6 +237,7 @@ function cancel() {
 async function save() {
   clearError();
   const candidate = normalizeMoney(readForm());
+  const prevStatus = ctx.mode === 'new' ? null : ctx.original.status;
   try {
     let saved;
     if (ctx.mode === 'new') {
@@ -250,15 +255,29 @@ async function save() {
         }
       }
     }
-    if (ctx.mode === 'new') {
-      location.href = `sale.html?id=${encodeURIComponent(saved.id)}`;
-      return;
+
+    const finish = async () => {
+      if (ctx.mode === 'new') { location.href = `sale.html?id=${encodeURIComponent(saved.id)}`; return; }
+      ctx.original = saved;
+      ctx.mode = 'view';
+      await loadRefs();
+      ctx.original = await saleRepo.getById(saved.id);
+      renderAll();
+    };
+
+    // Soft-suggestion prompt (Stage4.5 Addendum §D4) — offered, never forced;
+    // no stored Sale↔event link. Only on the transition INTO a prompt-worthy
+    // status, so re-saving an already-delivered sale doesn't re-nag.
+    const enteringPlacementPrompt = PLACEMENT_PROMPT_STATUSES.includes(saved.status) && prevStatus !== saved.status;
+    if (enteringPlacementPrompt && confirmAction('Log a scheduled pickup for this placement?')) {
+      openEventForm({
+        subjectType: 'dog', subjectId: saved.dog_id,
+        prefill: { event_type: 'placement', related_contact_id: saved.buyer_contact_id, title: 'Puppy pickup' },
+        onSaved: finish, onCancel: finish
+      });
+    } else {
+      await finish();
     }
-    ctx.original = saved;
-    ctx.mode = 'view';
-    await loadRefs();
-    ctx.original = await saleRepo.getById(saved.id);
-    renderAll();
   } catch (e) {
     showError(e.message || String(e));
   }
@@ -291,6 +310,14 @@ async function renderContractsSection() {
   const contracts = await contractRepo.getBySale(ctx.original.id);
   contracts.sort((a, b) => (b.signed_date || b.created_at || '').localeCompare(a.signed_date || a.created_at || ''));
 
+  // Derived governing-contract line (Stage4.5 Addendum §A2) — proves invariant
+  // #8 (the "live contract" is derived, never a stored flag) by exercising
+  // contractRepo.governingContract() somewhere real, not just leaving it unused.
+  const governing = contractRepo.governingContract(contracts);
+  const governingHtml = governing
+    ? `Governing contract: <a href="contract.html?id=${encodeURIComponent(governing.id)}">signed ${esc(fmtDate(governing.signed_date || governing.created_at))}</a>`
+    : 'Governing contract: none signed yet';
+
   const inner = contracts.length
     ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + contracts.map((c) => `
         <li class="row-between" style="padding:8px 0; border-top:1px solid var(--border);">
@@ -302,7 +329,10 @@ async function renderContractsSection() {
   els.contracts.innerHTML = `
     <section class="card" style="margin-top:16px;">
       <div class="row-between">
-        <h2 style="margin:0;">Contracts</h2>
+        <div>
+          <h2 style="margin:0;">Contracts</h2>
+          <p class="muted" style="margin:4px 0 0; font-size:13px;">${governingHtml}</p>
+        </div>
         <a class="btn btn-sm" href="contract.html?new=1&sale=${encodeURIComponent(ctx.original.id)}">+ Create Contract</a>
       </div>
       ${inner}

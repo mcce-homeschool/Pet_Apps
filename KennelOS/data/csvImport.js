@@ -17,7 +17,12 @@ import { kennelRepo } from './kennelRepo.js';
 import { pairingRepo } from './pairingRepo.js';
 import { litterRepo } from './litterRepo.js';
 import { saleRepo } from './saleRepo.js';
-import { SEX, OWNERSHIP_TYPE, DOG_STATUS, CONTACT_TYPE, PAIRING_TYPE, PAIRING_METHOD, PAIRING_STATUS, LITTER_STATUS, PLACEMENT_TYPE, SALE_STATUS } from './vocab.js';
+import { HistoryEvent } from './eventRepo.js';
+import { studServiceRepo } from './studServiceRepo.js';
+import {
+  SEX, OWNERSHIP_TYPE, DOG_STATUS, CONTACT_TYPE, PAIRING_TYPE, PAIRING_METHOD, PAIRING_STATUS,
+  LITTER_STATUS, PLACEMENT_TYPE, SALE_STATUS, eventTypesFor, STUD_SERVICE_DIRECTION, FEE_STRUCTURE, STUD_SERVICE_STATUS
+} from './vocab.js';
 
 // --- Parsing --------------------------------------------------------------
 // Headers are normalized to lower_snake_case so "Registered Name", "registered
@@ -683,7 +688,325 @@ const SALE_MAPPING = {
   repo: saleRepo
 };
 
-const MAPPINGS = { dog: DOG_MAPPING, contact: CONTACT_MAPPING, pairing: PAIRING_MAPPING, litter: LITTER_MAPPING, sale: SALE_MAPPING };
+// =========================================================================
+// Event mapping (Stage4.5 Addendum §A1.1) — dog-subject only
+// =========================================================================
+// Natural key: dog + event_type + event_date, title as a tiebreak on collision
+// (multiple existing events sharing that same dog/type/date). Pairing/litter
+// subject events are out of scope for this importer (Data Model §8's worked
+// example is dog-only; subject resolution for those has no registered-name key
+// — flagged as a future item, not half-built here).
+const EVENT_MAPPING = {
+  entity: 'event',
+  label: 'Events',
+  templateHeaders: [
+    'dog_registered_name', 'event_type', 'event_date', 'event_end_date', 'title',
+    'related_contact_name', 'details_json', 'notes'
+  ],
+  requiredForCreate: ['subject_id', 'event_type', 'event_date', 'title'],
+
+  async loadExisting() {
+    const [events, dogs, contacts] = await Promise.all([
+      HistoryEvent.getAll({ includeArchived: true }),
+      dogRepo.getAll({ includeArchived: true }),
+      contactRepo.getAll({ includeArchived: true })
+    ]);
+    this._dogNames = buildDogNameIndex(dogs);
+    this._contactByName = new Map();
+    for (const c of contacts) if (c.name) this._contactByName.set(c.name.trim().toLowerCase(), c);
+    return events.filter((e) => e.subject_type === 'dog');
+  },
+
+  buildIndex(existing) {
+    // Multiple events can legitimately share dog+type+date (e.g. two vaccines
+    // logged same day) — the key maps to an ARRAY, resolved by title below.
+    const byKey = new Map();
+    for (const e of existing) {
+      const key = nkParts(e.subject_id, e.event_type, e.event_date);
+      if (!key) continue;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(e);
+    }
+    return { byKey, dogNames: this._dogNames, contactByName: this._contactByName };
+  },
+
+  classify(row, index, i) {
+    const reasons = [];
+    const record = { subject_type: 'dog' };
+
+    const dogNameRaw = col(row, 'dog_registered_name', 'dog_name');
+    let dogId = '';
+    if (dogNameRaw) {
+      const hit = index.dogNames.get(dogNameRaw.toLowerCase());
+      if (hit) { dogId = hit.id; record.subject_id = hit.id; }
+      else reasons.push(`Dog "${dogNameRaw}" not found.`);
+    }
+
+    const eventTypeRaw = col(row, 'event_type', 'type');
+    const eventType = normEnum(eventTypesFor('dog'), eventTypeRaw);
+    if (eventType === null) reasons.push(`Unrecognized event_type "${eventTypeRaw}" for a dog-subject event.`);
+    else if (eventType) record.event_type = eventType;
+
+    const dateRaw = col(row, 'event_date');
+    const eventDate = normDate(dateRaw);
+    if (eventDate === null) reasons.push(`Unrecognized event_date "${dateRaw}".`);
+    else if (eventDate) record.event_date = eventDate;
+
+    const endRaw = col(row, 'event_end_date');
+    const eventEnd = normDate(endRaw);
+    if (eventEnd === null && endRaw) reasons.push(`Unrecognized event_end_date "${endRaw}" (ignored).`);
+    else if (eventEnd) record.event_end_date = eventEnd;
+
+    const title = col(row, 'title');
+    if (title) record.title = title;
+
+    const relatedName = col(row, 'related_contact_name');
+    if (relatedName) {
+      const hit = index.contactByName.get(relatedName.toLowerCase());
+      if (hit) record.related_contact_id = hit.id;
+      else reasons.push(`Related contact "${relatedName}" not found — leave the CSV column blank or add the contact first (never auto-created).`);
+    }
+
+    const detailsRaw = col(row, 'details_json');
+    let detailsError = false;
+    if (detailsRaw) {
+      try {
+        const parsed = JSON.parse(detailsRaw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) record.details = parsed;
+        else { detailsError = true; reasons.push(`details_json is not a JSON object: "${detailsRaw}".`); }
+      } catch (e) {
+        detailsError = true;
+        reasons.push(`Malformed details_json: ${e.message}.`);
+      }
+    } else {
+      record.details = {};
+    }
+
+    const notes = col(row, 'notes');
+    if (notes) record.notes = notes;
+
+    // Natural key → match-or-create; title is the tiebreak when dog+type+date
+    // collides across more than one existing event.
+    const key = (dogId && eventType && eventDate) ? nkParts(dogId, eventType, eventDate) : null;
+    let status_ = 'create';
+    let match = null;
+    if (!key) {
+      status_ = 'review';
+      if (!dogNameRaw) reasons.push('No dog_registered_name — cannot form a natural key.');
+      if (!eventTypeRaw) reasons.push('No event_type — cannot form a natural key.');
+      if (!dateRaw) reasons.push('No event_date — cannot form a natural key.');
+    } else {
+      const candidates = index.byKey.get(key) || [];
+      if (candidates.length === 0) {
+        status_ = 'create';
+      } else if (candidates.length === 1) {
+        match = candidates[0];
+        status_ = 'update';
+      } else {
+        const titleMatches = title
+          ? candidates.filter((c) => (c.title || '').trim().toLowerCase() === title.trim().toLowerCase())
+          : [];
+        if (titleMatches.length === 1) {
+          match = titleMatches[0];
+          status_ = 'update';
+        } else {
+          status_ = 'review';
+          match = candidates[0];
+          reasons.push('Multiple existing events share this dog + type + date, and the title didn\'t uniquely resolve which one to update — choose "Update match" and pick the right one, or create a new one.');
+        }
+      }
+    }
+
+    if (status_ === 'create') {
+      const missing = this.requiredForCreate.filter((f) => !record[f]);
+      if (missing.length) { status_ = 'review'; reasons.push(`Missing required field(s) for a new event: ${missing.join(', ')}.`); }
+    }
+    if (!dogId && dogNameRaw) status_ = 'review'; // unresolved dog is always flagged, never auto-created
+    if (relatedName && !record.related_contact_id) status_ = 'review'; // unresolved contact is always flagged, never auto-created
+    if (detailsError) status_ = 'review';
+
+    const display = `${dogNameRaw || '?'} — ${eventTypeRaw || '?'}${eventDate ? ` (${eventDate})` : ''}`;
+    return {
+      index: i, raw: row, entity: 'event', display,
+      record, changes: { ...record },
+      status: status_, match, matchLabel: match ? EVENT_MAPPING.describe(match) : '',
+      reasons,
+      decision: status_ === 'review' ? 'skip' : status_,
+      decisionTarget: match ? match.id : null
+    };
+  },
+
+  describe: (e) => `${descriptorLabel(eventTypesFor('dog'), e.event_type)} — ${e.event_date || 'no date'}${e.title ? `: ${e.title}` : ''}` + (e.is_archived ? ' (archived)' : ''),
+
+  repo: HistoryEvent
+};
+
+// Small local helper so EVENT_MAPPING.describe doesn't need to import the
+// shared `descriptor()` (would require pulling in badge/label plumbing it
+// doesn't otherwise need) — just the label lookup.
+function descriptorLabel(vocab, value) {
+  return vocab.find((v) => v.value === value)?.label || value || 'Event';
+}
+
+// =========================================================================
+// StudService mapping (Stage4.5 Addendum §A1.2)
+// =========================================================================
+// Natural-key wrinkle, stated plainly: StudService has no date field, so its
+// natural key is our_dog + partner_dog + direction — which collapses REPEAT
+// arrangements between the same pair. Rather than silently overwrite, any
+// existing match is always routed to needs-review as an ambiguous match (the
+// user decides update-vs-create), never auto-treated as an update.
+const STUD_SERVICE_MAPPING = {
+  entity: 'stud_service',
+  label: 'Stud Services',
+  templateHeaders: [
+    'direction', 'our_dog_registered_name', 'partner_dog_registered_name',
+    'partner_contact_name', 'fee_amount', 'fee_structure', 'status', 'result_notes'
+  ],
+  requiredForCreate: ['direction', 'our_dog_id', 'partner_dog_id', 'partner_contact_id', 'status'],
+
+  async loadExisting() {
+    const [studServices, dogs, contacts] = await Promise.all([
+      studServiceRepo.getAll({ includeArchived: true }),
+      dogRepo.getAll({ includeArchived: true }),
+      contactRepo.getAll({ includeArchived: true })
+    ]);
+    this._dogNames = buildDogNameIndex(dogs);
+    this._dogsById = new Map(dogs.map((d) => [d.id, d]));
+    this._contactByName = new Map();
+    for (const c of contacts) if (c.name) this._contactByName.set(c.name.trim().toLowerCase(), c);
+    return studServices;
+  },
+
+  buildIndex(existing) {
+    const byKey = new Map();
+    for (const s of existing) {
+      const key = nkParts(s.our_dog_id, s.partner_dog_id, s.direction);
+      if (!key) continue;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(s);
+    }
+    return { byKey, dogNames: this._dogNames, contactByName: this._contactByName, dogsById: this._dogsById };
+  },
+
+  classify(row, index, i) {
+    const reasons = [];
+    const record = {};
+
+    const direction = normEnum(STUD_SERVICE_DIRECTION, col(row, 'direction'));
+    if (direction === null) reasons.push(`Unrecognized direction "${col(row, 'direction')}".`);
+    else if (direction) record.direction = direction;
+
+    const ourDogName = col(row, 'our_dog_registered_name', 'our_dog_name');
+    let ourDogId = '';
+    if (ourDogName) {
+      const hit = index.dogNames.get(ourDogName.toLowerCase());
+      if (hit) { ourDogId = hit.id; record.our_dog_id = hit.id; }
+      else reasons.push(`Our dog "${ourDogName}" not found.`);
+    }
+
+    const partnerDogName = col(row, 'partner_dog_registered_name', 'partner_dog_name');
+    let partnerDogId = '';
+    if (partnerDogName) {
+      const hit = index.dogNames.get(partnerDogName.toLowerCase());
+      if (hit) { partnerDogId = hit.id; record.partner_dog_id = hit.id; }
+      else reasons.push(`Partner dog "${partnerDogName}" not found — add it (even as an external reference) before importing, or it can be created inline from the Stud Service Detail screen.`);
+    }
+
+    const partnerContactName = col(row, 'partner_contact_name');
+    let toCreateContact = '';
+    if (partnerContactName) {
+      const hit = index.contactByName.get(partnerContactName.trim().toLowerCase());
+      if (hit) record.partner_contact_id = hit.id;
+      else toCreateContact = partnerContactName.trim(); // created inline on commit — never flagged
+    }
+
+    const feeRaw = col(row, 'fee_amount');
+    if (feeRaw !== '') {
+      const n = Number(feeRaw);
+      if (!Number.isFinite(n)) reasons.push(`Unrecognized fee_amount "${feeRaw}" (ignored).`);
+      else record.fee_amount = n;
+    }
+
+    const feeStructure = normEnum(FEE_STRUCTURE, col(row, 'fee_structure'));
+    if (feeStructure === null) reasons.push(`Unrecognized fee_structure "${col(row, 'fee_structure')}" (ignored).`);
+    else if (feeStructure) record.fee_structure = feeStructure;
+
+    const status = normEnum(STUD_SERVICE_STATUS, col(row, 'status'));
+    if (status === null) reasons.push(`Unrecognized status "${col(row, 'status')}".`);
+    else if (status) record.status = status;
+
+    const resultNotes = col(row, 'result_notes');
+    if (resultNotes) record.result_notes = resultNotes;
+
+    // pairing_id is deliberately never set via CSV (Addendum §A1.2) — link it
+    // later from the Stud Service Detail screen.
+
+    const key = (ourDogId && partnerDogId && direction) ? nkParts(ourDogId, partnerDogId, direction) : null;
+    let status_ = 'create';
+    let match = null;
+    if (!key) {
+      status_ = 'review';
+      if (!ourDogName) reasons.push('No our_dog_registered_name — cannot form a natural key.');
+      if (!partnerDogName) reasons.push('No partner_dog_registered_name — cannot form a natural key.');
+      if (!direction) reasons.push('No direction — cannot form a natural key.');
+    } else {
+      const candidates = index.byKey.get(key) || [];
+      if (candidates.length === 0) {
+        status_ = 'create';
+      } else {
+        // Always ambiguous — a repeat arrangement is indistinguishable from an
+        // update of the existing one by key alone (Addendum §A1.2). Surface it,
+        // don't guess: the user picks "Update match" (and which one) or "Create new".
+        status_ = 'review';
+        match = candidates[0];
+        reasons.push('An existing stud service already matches this dog pair + direction. Is this an update to that arrangement, or a new repeat service? Choose "Update match" (pick the right one if more than one exists) or "Create new".');
+      }
+    }
+
+    if (status_ === 'create') {
+      const missing = this.requiredForCreate.filter((f) => !record[f]);
+      if (missing.length) { status_ = 'review'; reasons.push(`Missing required field(s) for a new stud service: ${missing.join(', ')}.`); }
+    }
+    if (!ourDogId && ourDogName) status_ = 'review';
+    if (!partnerDogId && partnerDogName) status_ = 'review';
+    if (toCreateContact) reasons.push(`Partner contact "${toCreateContact}" not found — will be created as a new Contact.`);
+
+    const display = `${ourDogName || '?'} × ${partnerDogName || '?'}${direction ? ` (${direction})` : ''}`;
+    return {
+      index: i, raw: row, entity: 'stud_service', display,
+      record, changes: { ...record },
+      status: status_, match, matchLabel: match ? STUD_SERVICE_MAPPING.describe(match) : '',
+      reasons,
+      decision: status_ === 'review' ? 'skip' : status_,
+      decisionTarget: match ? match.id : null,
+      _partnerContactNameToCreate: toCreateContact || null
+    };
+  },
+
+  // The one auto-create in this mapping, mirroring the Sale buyer_name
+  // exception (Addendum §A1.2) — an unmatched partner contact becomes a real
+  // Contact here, never a silent drop and never a "needs review" stall.
+  async prepareRecord(r) {
+    if (!r._partnerContactNameToCreate) return;
+    const contact = await contactRepo.create({ name: r._partnerContactNameToCreate, contact_type: ['breeder'] });
+    r.record.partner_contact_id = contact.id;
+    r.changes.partner_contact_id = contact.id;
+  },
+
+  describe(s) {
+    const ours = this._dogsById?.get(s.our_dog_id);
+    const partner = this._dogsById?.get(s.partner_dog_id);
+    return `${ours?.call_name || '—'} × ${partner?.call_name || '—'} (${s.direction || '?'})` + (s.is_archived ? ' (archived)' : '');
+  },
+
+  repo: studServiceRepo
+};
+
+const MAPPINGS = {
+  dog: DOG_MAPPING, contact: CONTACT_MAPPING, pairing: PAIRING_MAPPING, litter: LITTER_MAPPING,
+  sale: SALE_MAPPING, event: EVENT_MAPPING, stud_service: STUD_SERVICE_MAPPING
+};
 
 export function getMapping(entity) {
   const m = MAPPINGS[entity];

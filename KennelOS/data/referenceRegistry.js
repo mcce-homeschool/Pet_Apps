@@ -70,7 +70,8 @@ export const CONTACT_REFERENCES = [
   { table: 'dogs',          field: 'owner_contact_id',     label: 'owner of a dog' },
   { table: 'dogs',          field: 'co_owner_contact_ids', label: 'co-owner of a dog', multiEntry: true },
   { table: 'sales',         field: 'buyer_contact_id',     label: 'buyer on a sale' },
-  { table: 'stud_services', field: 'partner_contact_id',   label: 'partner contact in a stud service' }
+  { table: 'stud_services', field: 'partner_contact_id',   label: 'partner contact in a stud service' },
+  { table: 'events',        field: 'related_contact_id',   label: 'contact on a boarding event' }
 ];
 
 // --- Kennel: what can point at a Kennel -------------------------------------

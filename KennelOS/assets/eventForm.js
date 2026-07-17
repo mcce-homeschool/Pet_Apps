@@ -1,23 +1,39 @@
 // eventForm.js — modal form for creating/editing a HistoryEvent. Picks the
 // type-specific short form from the EVENT_TYPES catalog (Build Brief B1) so
 // `details` stays structured, not a free-text dumping ground.
+//
+// Stage4.5 Addendum §C3/D1: a `span`-duration type (boarding, heat_cycle,
+// medication) also shows the plain `event_end_date` field, and a
+// `relatedContact: true` type (boarding, placement) shows a top-level Contact
+// picker — the canonical events.related_contact_id FK, never a `details` field.
 import { HistoryEvent } from '../data/eventRepo.js';
+import { contactRepo } from '../data/contactRepo.js';
 import { eventTypesFor, descriptor, EVENT_TYPES } from '../data/vocab.js';
 import { esc, todayYMD } from './ui.js';
 
-// Open the modal. opts: { subjectType, subjectId, event?, onSaved, onCancel? }
-// If `event` is provided we're editing; otherwise creating.
-export function openEventForm(opts) {
-  const { subjectType, subjectId, event = null, onSaved, onCancel } = opts;
+// Open the modal. opts: { subjectType, subjectId, event?, prefill?, onSaved, onCancel? }
+// If `event` is provided we're editing; otherwise creating. `prefill` seeds a
+// NEW event's draft (event_type/related_contact_id/title/details) — used by the
+// soft-suggestion prompts (Stage4.5 Addendum §C6/§D4: StudService→boarding,
+// Litter→grow-out, Sale→placement). It's a one-time seed, never a stored link
+// back to whatever triggered it.
+export async function openEventForm(opts) {
+  const { subjectType, subjectId, event = null, prefill = null, onSaved, onCancel } = opts;
   const types = eventTypesFor(subjectType);
   const isEdit = !!event;
 
+  // Contacts are only ever needed for relatedContact types (boarding, placement,
+  // both dog-subject) — loaded once up front so the picker is ready on first render.
+  const contacts = await contactRepo.getAll({ includeArchived: true });
+
   // Working state
   const draft = {
-    event_type: event?.event_type || types[0].value,
+    event_type: event?.event_type || prefill?.event_type || types[0].value,
     event_date: event?.event_date || todayYMD(),
-    title: event?.title || '',
-    details: { ...(event?.details || {}) },
+    event_end_date: event?.event_end_date || '',
+    related_contact_id: event?.related_contact_id || prefill?.related_contact_id || '',
+    title: event?.title || prefill?.title || '',
+    details: { ...(event?.details || prefill?.details || {}) },
     reminder_date: event?.reminder_date || '',
     cost: event?.cost ?? '',
     notes: event?.notes || ''
@@ -36,15 +52,28 @@ export function openEventForm(opts) {
       if (f.type === 'textarea') {
         return `<div class="field field-wide"><label>${esc(f.label)}</label><textarea data-detail="${esc(f.key)}">${esc(v)}</textarea></div>`;
       }
+      if (f.type === 'combobox') {
+        const dlId = `ef-dl-${f.key}`;
+        const opts = (f.options || []).map((o) => `<option value="${esc(o)}"></option>`).join('');
+        return `<div class="field"><label>${esc(f.label)}</label><input data-detail="${esc(f.key)}" type="text" list="${dlId}" value="${esc(v)}"><datalist id="${dlId}">${opts}</datalist></div>`;
+      }
       const inputType = f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text';
       return `<div class="field"><label>${esc(f.label)}</label><input data-detail="${esc(f.key)}" type="${inputType}" value="${esc(v)}"></div>`;
     }).join('') + `</div>`;
+  }
+
+  function contactOptions(current) {
+    const opts = contacts
+      .map((c) => `<option value="${esc(c.id)}"${c.id === current ? ' selected' : ''}>${esc(c.name)}${c.is_archived ? ' (archived)' : ''}</option>`)
+      .join('');
+    return `<option value="">— none —</option>` + opts;
   }
 
   function render() {
     const typeDef = descriptor(EVENT_TYPES, draft.event_type);
     const typeOptions = types.map((t) =>
       `<option value="${esc(t.value)}"${t.value === draft.event_type ? ' selected' : ''}>${esc(t.label)}</option>`).join('');
+    const isSpan = typeDef.duration === 'span';
     modal.innerHTML = `
       <div class="row-between" style="margin-bottom:12px;">
         <h2 style="margin:0;">${isEdit ? 'Edit event' : 'Add event'}</h2>
@@ -53,11 +82,17 @@ export function openEventForm(opts) {
       <div class="form-grid">
         <div class="field"><label>Type <span class="req">*</span></label>
           <select id="ef-type">${typeOptions}</select></div>
-        <div class="field"><label>Date <span class="req">*</span></label>
+        <div class="field"><label>${isSpan ? 'Start date' : 'Date'} <span class="req">*</span></label>
           <input id="ef-date" type="date" value="${esc(draft.event_date)}">
           <span class="field-hint">Future dates are allowed (e.g. a scheduled surgery).</span></div>
+        ${isSpan ? `<div class="field"><label>End date</label>
+          <input id="ef-end-date" type="date" value="${esc(draft.event_end_date)}">
+          <span class="field-hint">Leave blank for an open-ended/ongoing stay.</span></div>` : ''}
         <div class="field field-wide"><label>Title <span class="req">*</span></label>
           <input id="ef-title" type="text" value="${esc(draft.title)}" placeholder="Short summary shown in the timeline"></div>
+        ${typeDef.relatedContact ? `<div class="field"><label>Related contact</label>
+          <select id="ef-related-contact">${contactOptions(draft.related_contact_id)}</select>
+          <span class="field-hint">The person or kennel on the other side of this event.</span></div>` : ''}
       </div>
       <h2 style="font-size:15px;">${esc(typeDef.label)} details</h2>
       <div id="ef-details">${detailFieldsHtml(typeDef)}</div>
@@ -85,6 +120,10 @@ export function openEventForm(opts) {
 
   function captureInputs() {
     draft.event_date = modal.querySelector('#ef-date').value;
+    const endEl = modal.querySelector('#ef-end-date');
+    draft.event_end_date = endEl ? endEl.value : '';
+    const contactEl = modal.querySelector('#ef-related-contact');
+    draft.related_contact_id = contactEl ? contactEl.value : '';
     draft.title = modal.querySelector('#ef-title').value.trim();
     draft.reminder_date = modal.querySelector('#ef-reminder').value;
     draft.cost = modal.querySelector('#ef-cost').value;
@@ -111,6 +150,8 @@ export function openEventForm(opts) {
       subject_id: subjectId,
       event_type: draft.event_type,
       event_date: draft.event_date,
+      event_end_date: draft.event_end_date || null,
+      related_contact_id: draft.related_contact_id || null,
       title: draft.title,
       details: draft.details,
       reminder_date: draft.reminder_date || null,

@@ -137,58 +137,105 @@ export function descriptor(vocab, value) {
   return vocab.find((v) => v.value === value) || { value, label: value ?? '—', badge: 'badge-gray' };
 }
 
-// --- Event type catalog (Data Model doc §5.2) ----------------------------
+// Suggest-not-enforce starter set for boarding's `boarding_reason` (Stage4.5
+// Addendum §C3) — a plain string in `details`, never a validated vocab, so a
+// combobox surfaces these as suggestions without blocking free text.
+export const BOARDING_REASON_SUGGESTIONS = [
+  'Stud service', 'Co-owner rotation', 'Foster', 'Grow-out', 'Owner travel', 'Whelp assist', 'Other'
+];
+
+// --- Event type catalog (Data Model doc §5.2; Stage4.5 Addendum §C3/D1) ----
 // Each type carries a badge color and the type-specific `details` fields shown
 // as a short form (Build Brief B1: one small form per event_type, not a generic
 // key/value editor). `subjects` limits where a type can be logged; at Stage 2
 // only `dog` subjects exist, so pairing/litter-only types are intentionally
 // absent and get added with their tables in later stages.
 //
-// Field `type` is one of: text | textarea | date | number.
+// `duration` is 'instant' (a single dated occurrence) or 'span' (has a start —
+// event_date — and an optional open end — event_end_date). Only `boarding`,
+// `heat_cycle`, and `medication` are spans; everything else is instant. This is
+// the field the Location/Status Board deliberately does NOT filter on (Stage4.5
+// Addendum §C4/§C5) — whereabouts is a narrower set than "is a span."
+//
+// `relatedContact: true` means the type carries a top-level related_contact_id
+// (the events.related_contact_id FK, Stage4.5 Addendum §C2) — the person/kennel
+// on the other side of a boarding stay or a placement's buyer. It is NEVER a
+// field inside `details` (details.location stays a plain string; only a real
+// FK belongs at the top level).
+//
+// Field `type` is one of: text | textarea | date | number | combobox (a free-text
+// input with suggestions — suggest-not-enforce, never a validated enum).
 export const EVENT_TYPES = [
-  { value: 'vaccination',        label: 'Vaccination',        badge: 'badge-blue',    subjects: ['dog'],
+  { value: 'vaccination',        label: 'Vaccination',        badge: 'badge-blue',    subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'vaccine', label: 'Vaccine', type: 'text' }, { key: 'lot_number', label: 'Lot #', type: 'text' }, { key: 'next_due', label: 'Next due', type: 'date' }] },
-  { value: 'preventative',       label: 'Preventative',       badge: 'badge-blue',    subjects: ['dog'],
+  { value: 'preventative',       label: 'Preventative',       badge: 'badge-blue',    subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'product', label: 'Product', type: 'text' }, { key: 'dose', label: 'Dose', type: 'text' }] },
-  { value: 'genetic_test',       label: 'Genetic test',       badge: 'badge-purple',  subjects: ['dog'],
+  { value: 'genetic_test',       label: 'Genetic test',       badge: 'badge-purple',  subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'panel_name', label: 'Panel', type: 'text' }, { key: 'lab', label: 'Lab', type: 'text' }, { key: 'result', label: 'Result', type: 'text' }] },
-  { value: 'ofa_pennhip',        label: 'OFA / PennHIP',      badge: 'badge-purple',  subjects: ['dog'],
+  { value: 'ofa_pennhip',        label: 'OFA / PennHIP',      badge: 'badge-purple',  subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'joint', label: 'Joint', type: 'text' }, { key: 'method', label: 'Method', type: 'text' }, { key: 'rating', label: 'Rating', type: 'text' }] },
-  { value: 'breed_specific_test', label: 'Breed-specific test', badge: 'badge-purple', subjects: ['dog'],
+  { value: 'breed_specific_test', label: 'Breed-specific test', badge: 'badge-purple', subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'test_name', label: 'Test', type: 'text' }, { key: 'result', label: 'Result', type: 'text' }] },
-  { value: 'illness',            label: 'Illness',            badge: 'badge-red',     subjects: ['dog'],
+  { value: 'illness',            label: 'Illness',            badge: 'badge-red',     subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'diagnosis', label: 'Diagnosis', type: 'text' }, { key: 'treatment', label: 'Treatment', type: 'textarea' }] },
-  { value: 'medication',         label: 'Medication',         badge: 'badge-blue',    subjects: ['dog'],
-    fields: [{ key: 'drug', label: 'Drug', type: 'text' }, { key: 'dose', label: 'Dose', type: 'text' }, { key: 'frequency', label: 'Frequency', type: 'text' }, { key: 'end_date', label: 'End date', type: 'date' }] },
-  { value: 'surgery',            label: 'Surgery',            badge: 'badge-red',     subjects: ['dog'],
+  // Span (Stage4.5 Addendum §C5): event_date is the start, event_end_date the
+  // end (retired out of details.end_date — there's no shipped data to migrate).
+  { value: 'medication',         label: 'Medication',         badge: 'badge-blue',    subjects: ['dog'], duration: 'span',
+    fields: [{ key: 'drug', label: 'Drug', type: 'text' }, { key: 'dose', label: 'Dose', type: 'text' }, { key: 'frequency', label: 'Frequency', type: 'text' }] },
+  { value: 'surgery',            label: 'Surgery',            badge: 'badge-red',     subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'procedure', label: 'Procedure', type: 'text' }, { key: 'vet', label: 'Vet', type: 'text' }, { key: 'outcome', label: 'Outcome', type: 'textarea' }] },
-  { value: 'vet_visit',          label: 'Vet visit',          badge: 'badge-blue',    subjects: ['dog'],
+  { value: 'vet_visit',          label: 'Vet visit',          badge: 'badge-blue',    subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'reason', label: 'Reason', type: 'text' }, { key: 'vet', label: 'Vet', type: 'text' }, { key: 'findings', label: 'Findings', type: 'textarea' }] },
-  { value: 'injury',             label: 'Injury',             badge: 'badge-red',     subjects: ['dog'],
+  { value: 'injury',             label: 'Injury',             badge: 'badge-red',     subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'description', label: 'Description', type: 'textarea' }, { key: 'severity', label: 'Severity', type: 'text' }] },
-  { value: 'weight_check',       label: 'Weight check',       badge: 'badge-neutral', subjects: ['dog'],
+  { value: 'weight_check',       label: 'Weight check',       badge: 'badge-neutral', subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'weight_lbs', label: 'Weight (lbs)', type: 'number' }] },
-  { value: 'milestone',          label: 'Milestone',          badge: 'badge-green',   subjects: ['dog'],
+  { value: 'milestone',          label: 'Milestone',          badge: 'badge-green',   subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'description', label: 'Description', type: 'text' }] },
-  { value: 'title_earned',       label: 'Title earned',       badge: 'badge-green',   subjects: ['dog'],
+  { value: 'title_earned',       label: 'Title earned',       badge: 'badge-green',   subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'title_abbreviation', label: 'Title', type: 'text' }, { key: 'organization', label: 'Organization', type: 'text' }] },
-  { value: 'heat_cycle',         label: 'Heat cycle',         badge: 'badge-amber',   subjects: ['dog'],
-    fields: [{ key: 'cycle_start', label: 'Cycle start', type: 'date' }, { key: 'notes', label: 'Notes', type: 'textarea' }] },
-  { value: 'evaluation',         label: 'Evaluation',         badge: 'badge-neutral', subjects: ['dog'],
+  // Span (Stage4.5 Addendum §C5): event_date is the cycle start (retired out of
+  // details.cycle_start), event_end_date the (optional) end.
+  { value: 'heat_cycle',         label: 'Heat cycle',         badge: 'badge-amber',   subjects: ['dog'], duration: 'span',
+    fields: [{ key: 'notes', label: 'Notes', type: 'textarea' }] },
+  { value: 'evaluation',         label: 'Evaluation',         badge: 'badge-neutral', subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'evaluator', label: 'Evaluator', type: 'text' }, { key: 'temperament_notes', label: 'Temperament notes', type: 'textarea' }, { key: 'structure_notes', label: 'Structure notes', type: 'textarea' }] },
+  // Boarding (Stage4.5 Addendum §C3) — a span with a top-level related_contact_id
+  // (the person/kennel the dog is staying with). `location` and `boarding_reason`
+  // stay plain strings in `details`; boarding_reason is suggest-not-enforce, never
+  // a validated vocab. dropoff_time/pickup_time are inert display strings — never
+  // parsed or compared.
+  { value: 'boarding',           label: 'Boarding',           badge: 'badge-amber',   subjects: ['dog'], duration: 'span', relatedContact: true,
+    fields: [
+      { key: 'location', label: 'Location', type: 'text' },
+      { key: 'boarding_reason', label: 'Reason', type: 'combobox', options: BOARDING_REASON_SUGGESTIONS },
+      { key: 'dropoff_time', label: 'Drop-off time', type: 'text' },
+      { key: 'pickup_time', label: 'Pick-up time', type: 'text' },
+      { key: 'notes', label: 'Notes', type: 'textarea' }
+    ] },
   // Pairing-subject types (Stage 3) — the pairing's timeline is built from these.
-  { value: 'breeding_tie',       label: 'Breeding tie',       badge: 'badge-purple',  subjects: ['pairing'],
+  { value: 'breeding_tie',       label: 'Breeding tie',       badge: 'badge-purple',  subjects: ['pairing'], duration: 'instant',
     fields: [{ key: 'tie_date', label: 'Tie date', type: 'date' }, { key: 'method', label: 'Method', type: 'text' }] },
-  { value: 'progesterone_test',  label: 'Progesterone test',  badge: 'badge-blue',    subjects: ['pairing'],
+  { value: 'progesterone_test',  label: 'Progesterone test',  badge: 'badge-blue',    subjects: ['pairing'], duration: 'instant',
     fields: [{ key: 'value', label: 'Value (ng/mL)', type: 'number' }, { key: 'lab', label: 'Lab', type: 'text' }] },
-  { value: 'ultrasound',         label: 'Ultrasound',         badge: 'badge-blue',    subjects: ['pairing'],
+  { value: 'ultrasound',         label: 'Ultrasound',         badge: 'badge-blue',    subjects: ['pairing'], duration: 'instant',
     fields: [{ key: 'confirmed', label: 'Confirmed?', type: 'text' }, { key: 'estimated_count', label: 'Estimated count', type: 'number' }] },
-  { value: 'pregnancy_update',   label: 'Pregnancy update',   badge: 'badge-green',   subjects: ['pairing'],
+  { value: 'pregnancy_update',   label: 'Pregnancy update',   badge: 'badge-green',   subjects: ['pairing'], duration: 'instant',
     fields: [{ key: 'note', label: 'Note', type: 'textarea' }] },
   // Litter-subject type (Stage 3).
-  { value: 'whelping_summary',   label: 'Whelping summary',   badge: 'badge-green',   subjects: ['litter'],
+  { value: 'whelping_summary',   label: 'Whelping summary',   badge: 'badge-green',   subjects: ['litter'], duration: 'instant',
     fields: [{ key: 'total_born', label: 'Total born', type: 'number' }, { key: 'live_born', label: 'Live born', type: 'number' }, { key: 'notes', label: 'Notes', type: 'textarea' }] },
-  { value: 'note',               label: 'Note',               badge: 'badge-gray',    subjects: ['dog', 'pairing', 'litter'],
+  // Placement / drop-off (Stage4.5 Addendum §D1) — an instant event; subject_id
+  // is the puppy, related_contact_id is the buyer. No stored link to the Sale
+  // (prompted at the Sale, never tied to it — see saleRepo/sale.js prompt).
+  // placement_time is an inert display string, same posture as boarding's times.
+  { value: 'placement',          label: 'Placement / drop-off', badge: 'badge-green', subjects: ['dog'], duration: 'instant', relatedContact: true,
+    fields: [
+      { key: 'placement_time', label: 'Drop-off time', type: 'text' },
+      { key: 'location', label: 'Location', type: 'text' },
+      { key: 'notes', label: 'Notes', type: 'textarea' }
+    ] },
+  { value: 'note',               label: 'Note',               badge: 'badge-gray',    subjects: ['dog', 'pairing', 'litter'], duration: 'instant',
     fields: [] }
 ];
 

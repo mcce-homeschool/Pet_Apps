@@ -26,13 +26,16 @@ export const db = new Dexie('KennelOSBreedingApp');
 //    "timeline for this dog/pairing/litter" lookups. Do not split into two.
 //  - dogs '*co_owner_contact_ids' is a MULTI-ENTRY index so "dogs co-owned by X"
 //    is a real query, not a full scan.
-//  - Every canonical FK (Stage 4: sales/contracts/stud_services) is indexed, so
-//    every reverse lookup in referenceRegistry.js is an index probe, never a scan.
+//  - Every canonical FK (Stage 4: sales/contracts/stud_services; Stage 4.5:
+//    events.related_contact_id) is indexed, so every reverse lookup in
+//    referenceRegistry.js is an index probe, never a scan.
 //  - Only fields we actually query/filter on are indexed; all other fields still
-//    persist, they just aren't indexed.
+//    persist, they just aren't indexed. `events.event_end_date` (Stage 4.5) is a
+//    deliberate example: a plain nullable YYYY-MM-DD field, never queried/sorted
+//    on directly, so it carries no index (Stage4.5 Addendum §C1).
 db.version(1).stores({
   dogs:          'id, sire_id, dam_id, litter_id, owner_contact_id, *co_owner_contact_ids, status, ownership_type, sex, breed, kennel_id, is_archived',
-  events:        'id, [subject_type+subject_id], event_type, event_date, related_dog_id, is_archived',
+  events:        'id, [subject_type+subject_id], event_type, event_date, related_dog_id, related_contact_id, is_archived',
   contacts:      'id, kennel_id, waitlist_status, is_archived',
   kennels:       'id, is_archived',
   pairings:      'id, sire_id, dam_id, status, pairing_type, is_archived',

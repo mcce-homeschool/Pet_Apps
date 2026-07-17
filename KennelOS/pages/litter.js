@@ -6,10 +6,14 @@
 import { litterRepo, ReferenceBlockedError } from '../data/litterRepo.js';
 import { pairingRepo } from '../data/pairingRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
-import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX } from '../data/vocab.js';
+import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX, descriptor } from '../data/vocab.js';
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { renderTimeline } from '../assets/timeline.js';
 import { openAddPuppyForm, openAddPuppiesForm } from '../assets/puppyForm.js';
+import { openEventForm } from '../assets/eventForm.js';
+
+// Statuses that warrant the grow-out boarding prompt (Stage4.5 Addendum §C6).
+const GROW_OUT_STATUSES = ['ready', 'placed'];
 
 // Statuses at/after whelping — used to decide whether a future whelp_date warns.
 const WHELPED_OR_LATER = ['whelped', 'weaning', 'ready', 'placed', 'closed'];
@@ -297,6 +301,25 @@ function normalizeCounts(candidate) {
   return candidate;
 }
 
+// Soft-suggestion prompt (Stage4.5 Addendum §C6): offered, never forced; no
+// stored link back to this litter. If exactly one roster puppy is still at
+// life-stage `puppy` (i.e. not yet placed with a buyer), prefill its boarding
+// event directly; otherwise point the user at the roster below to pick one.
+async function maybePromptGrowOut(litter) {
+  const label = descriptor(LITTER_STATUS, litter.status).label;
+  if (!confirmAction(`This litter is now "${label}". Log grow-out boarding for a puppy that isn't going straight to a buyer?`)) return;
+  const puppies = await dogRepo.getByLitter(litter.id);
+  const candidates = puppies.filter((p) => !p.is_archived && p.status === 'puppy');
+  if (candidates.length === 1) {
+    openEventForm({
+      subjectType: 'dog', subjectId: candidates[0].id,
+      prefill: { event_type: 'boarding', title: 'Grow-out boarding', details: { boarding_reason: 'Grow-out' } }
+    });
+  } else {
+    window.alert('Pick the puppy from the roster below, then use its own "+ Add Event" to log the boarding stay.');
+  }
+}
+
 async function save() {
   clearError();
   const candidate = normalizeCounts(readForm());
@@ -306,12 +329,16 @@ async function save() {
       location.href = `litter.html?id=${encodeURIComponent(saved.id)}`;
       return;
     }
+    const prevStatus = ctx.original.status;
     const saved = await litterRepo.update(ctx.original.id, candidate);
     ctx.original = saved;
     ctx.mode = 'view';
     await loadRefs();
     ctx.original = await litterRepo.getById(saved.id);
     renderAll();
+    if (GROW_OUT_STATUSES.includes(saved.status) && prevStatus !== saved.status) {
+      await maybePromptGrowOut(saved);
+    }
   } catch (e) {
     showError(e.message || String(e));
   }

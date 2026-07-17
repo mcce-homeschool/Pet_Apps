@@ -1,7 +1,7 @@
 # Stage 1 & 2 Build Brief — v2
 ### Foundation + Core Dogs
 
-**How to use this doc:** hand this to Claude Code alongside `Data_Model_Architecture_Proposal_v2.md`. That doc defines *what the data looks like*; this one defines *how the app should behave* — validation rules, screens, and conventions — so implementation decisions get made once, deliberately, instead of invented fresh each session. Scope is deliberately limited to Stages 1–2. Stage 3 onward gets its own brief once these are built and the shape of the app is real rather than theoretical.
+**How to use this doc:** hand this to Claude Code alongside `Data_Model_Architecture_Proposal_v3.md` (the canonical model now; supersedes the v2 this brief originally shipped against). That doc defines *what the data looks like*; this one defines *how the app should behave* — validation rules, screens, and conventions — so implementation decisions get made once, deliberately, instead of invented fresh each session. Scope is deliberately limited to Stages 1–2. Stage 3 onward gets its own brief once these are built and the shape of the app is real rather than theoretical; see `Stage4_As_Built_v1.md` and `Stage4.5_Reconciliation_and_Logistics_Addendum_v1.md` for what's shipped since.
 
 Architecture is a **true multi-page static app** — separate `.html` files per section (`dogs.html`, `contacts.html`, etc.), not a single-page app with client-side routing. There's no need for a router when every page load is instant and local. Navigation and DB initialization are shared across pages via common JS files (see below), keeping pages decoupled per the "minimal coupling" principle.
 

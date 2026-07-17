@@ -1,6 +1,12 @@
 // ui.js — small shared rendering helpers used across pages. No framework;
 // just functions that return safe HTML strings or build DOM.
 import { descriptor } from '../data/vocab.js';
+import { todayYMD } from '../data/dateUtils.js';
+
+// Re-exported so pages keep importing todayYMD from here alongside the rest
+// of the shared rendering helpers — the one implementation lives in
+// data/dateUtils.js so repos and assets never drift apart on "what is today."
+export { todayYMD };
 
 // Escape untrusted text for safe interpolation into innerHTML.
 export function esc(s) {
@@ -30,13 +36,6 @@ export function fmtDate(ymd) {
   const [y, m, d] = ymd.split('-').map(Number);
   if (!y || !m || !d) return ymd;
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { dateStyle: 'medium' });
-}
-
-// Today's local date as YYYY-MM-DD (for <input type=date max> and comparisons).
-export function todayYMD() {
-  const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 // Read ?id= (or any param) from the current URL.
