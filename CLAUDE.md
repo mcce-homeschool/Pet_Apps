@@ -6,7 +6,8 @@ Local-first, static, multi-page records app for a dog breeding program. No backe
 - `docs/Data_Model_Architecture_Proposal_v3.md` — canonical data model, entities, storage, integrity rules (supersedes v2-1, folds in the Stage 4 schema)
 - `docs/Stage1_Stage2_Build_Brief_v2.md` — validation, screens, conventions, build order (Stages 1–2)
 - `docs/Stage3_Build_Brief_v1-1.md` — Pairings & Litters schema, validation, screens, build order (Stage 3)
-- `docs/Stage4_Revision_v2.md` — Sales, Contracts, Stud Services: schema, reference registry, linking rules (Stage 4)
+- `docs/Stage4_Revision_v2.md` — Sales, Contracts, Stud Services: the Stage 4 *plan* — schema, reference registry, linking rules
+- `docs/Stage4_As_Built_v1.md` — Stage 4 *as-built*: what actually shipped, reconciled against the plan (file-by-file index + the two known gaps). Read alongside the plan for Stage 4.
 - `docs/Code_Orientation_Where_To_Fix.md` — symptom → file map across the whole built app; use this before searching blind
 - `docs/Sample_Data_and_Reset_Brief_v2.md` — sample data packet + reset/clear behavior across all Stage 1–4 tables
 - `docs/Test_Planning_and_Vocabulary_Addendum_v1.md` — `planned_tests`/`preferred_tests` fields, independent of stage sequencing
