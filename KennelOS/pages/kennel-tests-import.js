@@ -9,8 +9,8 @@
 // stay prunable free text. Nothing ships inside the app; the breeder imports
 // a file (bundled under /resources or their own), and only their own kennel-
 // scoped, backup-riding vocabulary is written.
-import Papa from '../vendor/papaparse.min.mjs';
 import { kennelRepo } from '../data/kennelRepo.js';
+import { ci, groupsFromFile, applySeedToKennel } from '../data/seedImport.js';
 import { esc } from '../assets/ui.js';
 
 const root = document.getElementById('import-root');
@@ -24,8 +24,6 @@ const state = {
   result: null          // { breedsAdded, testsAdded } after a commit
 };
 
-const ci = (s) => String(s ?? '').trim().toLowerCase();
-
 async function init() {
   const kennels = await kennelRepo.getAll();
   state.ownKennels = kennels.filter((k) => k.is_own_kennel);
@@ -35,42 +33,6 @@ async function init() {
 
 function targetKennel() {
   return state.ownKennels.find((k) => k.id === state.targetId) || null;
-}
-
-// --- CSV parse -----------------------------------------------------------
-// `comments: '#'` skips the disclaimer/how-to header lines the shipped file
-// carries; header row is `breed,test_name`.
-function parseFile(file) {
-  return new Promise((resolve, reject) => {
-    Papa.parse(file, {
-      header: true,
-      comments: '#',
-      skipEmptyLines: 'greedy',
-      transformHeader: (h) => h.trim().toLowerCase().replace(/\s+/g, '_'),
-      transform: (v) => (typeof v === 'string' ? v.trim() : v),
-      complete: (res) => resolve(res.data || []),
-      error: reject
-    });
-  });
-}
-
-// Group rows by breed, preserving first-seen display casing for both breed and
-// test, and de-duplicating tests within a breed (case-insensitive).
-function buildGroups(rows) {
-  const byBreed = new Map();
-  for (const row of rows) {
-    const breed = String(row.breed ?? '').trim();
-    const test = String(row.test_name ?? row.test ?? '').trim();
-    if (!breed || !test) continue;
-    const bKey = ci(breed);
-    if (!byBreed.has(bKey)) byBreed.set(bKey, { key: bKey, display: breed, tests: new Map() });
-    const g = byBreed.get(bKey);
-    const tKey = ci(test);
-    if (!g.tests.has(tKey)) g.tests.set(tKey, { key: tKey, display: test });
-  }
-  return [...byBreed.values()]
-    .map((g) => ({ key: g.key, display: g.display, tests: [...g.tests.values()] }))
-    .sort((a, b) => a.display.localeCompare(b.display));
 }
 
 // --- Preview math --------------------------------------------------------
@@ -140,8 +102,7 @@ async function onFile(e) {
   if (!file) return;
   state.result = null;
   try {
-    const rows = await parseFile(file);
-    state.groups = buildGroups(rows);
+    state.groups = await groupsFromFile(file);
     state.selected = new Set(state.groups.map((g) => g.key)); // default: all breeds checked
     state.fileName = file.name;
     if (!state.groups.length) {
@@ -224,24 +185,7 @@ async function doCommit() {
   btn.disabled = true;
   btn.textContent = 'Importing…';
   try {
-    // Re-read the kennel so new-vs-present counts reflect the actual writes
-    // (dedupe lives in the repo; here we just tally what was genuinely added).
-    const before = await kennelRepo.getById(kennelId);
-    const haveTests = new Set((before?.preferred_tests || []).map(ci));
-    const haveBreeds = new Set((before?.preferred_breeds || []).map(ci));
-
-    let breedsAdded = 0, testsAdded = 0;
-    const countedTests = new Set();
-    for (const g of state.groups) {
-      if (!state.selected.has(g.key)) continue;
-      await kennelRepo.addPreferredBreed(kennelId, g.display);
-      if (!haveBreeds.has(g.key)) { haveBreeds.add(g.key); breedsAdded++; }
-      for (const t of g.tests) {
-        await kennelRepo.addPreferredTest(kennelId, t.display);
-        if (!haveTests.has(t.key) && !countedTests.has(t.key)) { countedTests.add(t.key); testsAdded++; }
-      }
-    }
-    state.result = { breedsAdded, testsAdded };
+    state.result = await applySeedToKennel(kennelId, state.groups, state.selected);
     renderBody();
   } catch (err) {
     msg.innerHTML = `<div class="inline-error">${esc(err.message || String(err))}</div>`;
