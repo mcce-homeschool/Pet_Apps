@@ -70,6 +70,32 @@ body {
 .nav-link:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 .nav-link.active { background: rgba(255, 255, 255, 0.18); color: #fff; }
 
+/* --- "More" corner menu -------------------------------------------------- */
+.nav-more { position: relative; margin-left: auto; }
+.nav-more-btn {
+  background: none;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.nav-more-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 168px;
+  background: var(--accent-dark);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: none;
+  z-index: 40;
+}
+.nav-more.open .nav-more-menu { display: block; }
+.nav-more-menu .nav-link { display: block; padding: 8px 10px; }
+
 /* --- Sample data banner -------------------------------------------------- */
 .sample-banner {
   background: var(--warn-soft);

@@ -1,30 +1,25 @@
 // nav.js — single source of truth for the top navigation, injected into the
-// <div id="app-nav"></div> that every page includes. Adding a section in a later
-// stage means adding one entry to NAV_ITEMS — no per-page HTML edits.
+// <div id="app-nav"></div> that every page includes.
 //
-// Entries carry `stageIntroduced` so it's trivial to see what belongs to which
-// stage and to gate future sections. Only Stages 1–2 sections appear now:
-// Dogs, Contacts, Import/Export, Settings.
-
+// The bar is organized by JOB, not by table (Navigation Consolidation Plan v1):
+// five workflow hubs in the main bar, and the back-of-house utilities (Reports,
+// Import/Export) tucked behind a "More" corner menu. Detail, edit, and import
+// pages are NOT nav entries — they're reached by clicking into a hub. Retired
+// entities (Pairings, Litters, Roster, Board, Upcoming, Reminders, …) still exist
+// as pages and keep their URLs; the bar simply consolidates the doors to them.
 export const NAV_ITEMS = [
-  { label: 'Dashboard',     path: 'pages/dashboard.html',     stageIntroduced: 5 },
-  { label: 'Dogs',          path: 'pages/dogs.html',          stageIntroduced: 2 },
-  { label: 'Pairings',      path: 'pages/pairings.html',      stageIntroduced: 3 },
-  { label: 'Litters',       path: 'pages/litters.html',       stageIntroduced: 3 },
-  { label: 'Contacts',      path: 'pages/contacts.html',      stageIntroduced: 2 },
-  { label: 'Waitlist / Buyers', path: 'pages/contacts.html?buyer=1', stageIntroduced: '4.5' },
-  { label: 'Sales',         path: 'pages/sales.html',         stageIntroduced: 4 },
-  { label: 'Stud Services', path: 'pages/stud-services.html', stageIntroduced: 4 },
-  { label: 'Contracts',     path: 'pages/contracts.html',     stageIntroduced: 4 },
-  { label: 'Pedigree',      path: 'pages/pedigree.html',      stageIntroduced: 2 },
-  { label: 'Roster',        path: 'pages/roster.html',        stageIntroduced: 2 },
-  { label: 'Active Breeding', path: 'pages/active-breeding.html', stageIntroduced: 3 },
-  { label: 'Location Board', path: 'pages/board.html',        stageIntroduced: '4.5' },
-  { label: 'Upcoming',      path: 'pages/upcoming.html',       stageIntroduced: '4.5' },
-  { label: 'Scheduled Placements', path: 'pages/scheduled-placements.html', stageIntroduced: '4.5' },
-  { label: 'Reminders',     path: 'pages/reminders.html',      stageIntroduced: 5 },
-  { label: 'Reports',       path: 'pages/reports.html',        stageIntroduced: 5 },
-  { label: 'Import/Export', path: 'pages/import-export.html', stageIntroduced: 1 }
+  { label: 'Today',    path: 'pages/today.html' },    // dashboard + reminders + upcoming + board
+  { label: 'Dogs',     path: 'pages/dogs.html' },
+  { label: 'Breeding', path: 'pages/breeding.html' }, // pairings + litters + resulting puppies
+  { label: 'People',   path: 'pages/contacts.html' }, // contacts + waitlist / buyers
+  { label: 'Placements & Contracts', path: 'pages/sales.html' } // sales + stud services + contracts
+];
+
+// Back-of-house utilities — rarely opened, so they live behind a corner menu
+// rather than costing a slot in the main bar.
+export const MORE_ITEMS = [
+  { label: 'Reports',       path: 'pages/reports.html' },
+  { label: 'Import/Export', path: 'pages/import-export.html' }
 ];
 
 // Pages live one directory deep (/pages/*.html); index.html sits at the app root.
@@ -39,6 +34,22 @@ function currentFile() {
   return parts[parts.length - 1] || 'index.html';
 }
 
+// Child pages that belong to a hub but aren't nav entries — used only to light
+// up the right tab when the user is deep inside a consolidated workflow.
+const HUB_CHILDREN = {
+  'pages/today.html': ['dashboard.html', 'reminders.html', 'upcoming.html', 'board.html', 'scheduled-placements.html'],
+  'pages/dogs.html': ['dog.html', 'roster.html', 'pedigree.html'],
+  'pages/breeding.html': ['pairings.html', 'pairing.html', 'litters.html', 'litter.html', 'active-breeding.html', 'live-births.html'],
+  'pages/contacts.html': ['contact.html'],
+  'pages/sales.html': ['sale.html', 'stud-services.html', 'stud-service.html', 'contracts.html', 'contract.html']
+};
+
+function isActive(item, here) {
+  const file = item.path.split('/').pop().split('?')[0];
+  if (file === here) return true;
+  return (HUB_CHILDREN[item.path] || []).includes(here);
+}
+
 export function renderNav(targetId = 'app-nav') {
   const host = document.getElementById(targetId);
   if (!host) return;
@@ -46,8 +57,13 @@ export function renderNav(targetId = 'app-nav') {
   const here = currentFile();
 
   const links = NAV_ITEMS.map((item) => {
-    const file = item.path.split('/').pop();
-    const active = file === here ? ' active' : '';
+    const active = isActive(item, here) ? ' active' : '';
+    return `<a class="nav-link${active}" href="${prefix}${item.path}">${item.label}</a>`;
+  }).join('');
+
+  const moreActive = MORE_ITEMS.some((item) => isActive(item, here)) ? ' active' : '';
+  const moreLinks = MORE_ITEMS.map((item) => {
+    const active = isActive(item, here) ? ' active' : '';
     return `<a class="nav-link${active}" href="${prefix}${item.path}">${item.label}</a>`;
   }).join('');
 
@@ -55,5 +71,27 @@ export function renderNav(targetId = 'app-nav') {
     <nav class="nav-inner">
       <a class="nav-brand" href="${prefix}index.html"><span class="paw">🐾</span> KennelOS</a>
       ${links}
+      <div class="nav-more">
+        <button type="button" class="nav-link nav-more-btn${moreActive}" aria-haspopup="true" aria-expanded="false">More ▾</button>
+        <div class="nav-more-menu">${moreLinks}</div>
+      </div>
     </nav>`;
+
+  wireMoreMenu(host);
+}
+
+// The corner menu opens on click and closes on outside-click or Escape. Kept to
+// vanilla listeners so nav.js stays dependency-free.
+function wireMoreMenu(host) {
+  const wrap = host.querySelector('.nav-more');
+  const btn = host.querySelector('.nav-more-btn');
+  if (!wrap || !btn) return;
+  const close = () => { wrap.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = wrap.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
 }

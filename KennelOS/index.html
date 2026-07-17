@@ -3,122 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>KennelOS — Breeding Records</title>
-  <link rel="stylesheet" href="assets/app.css">
+  <title>KennelOS</title>
+  <!-- The app opens on Today (Navigation Consolidation Plan v1 §2). This root
+       page is a thin redirect so the PWA start_url and any old bookmark to the
+       app root land on the Today hub. -->
+  <meta http-equiv="refresh" content="0; url=pages/today.html">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32">
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#122138">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="KennelOS">
+  <script>location.replace('pages/today.html');</script>
 </head>
 <body>
-  <div id="app-nav"></div>
-  <main>
-    <div class="page-header">
-      <div>
-        <h1>🐾 KennelOS</h1>
-        <p class="page-subtitle">Local breeding records — everything lives in this browser.</p>
-      </div>
-    </div>
-
-    <div class="grid-links">
-      <a class="tile" href="pages/dashboard.html">
-        <span class="tile-icon">📊</span>
-        <h3>Dashboard</h3>
-        <p>Your kennel at a glance — counts by status, this year's activity, and what needs attention.</p>
-      </a>
-      <a class="tile" href="pages/dogs.html">
-        <span class="tile-icon">🐕</span>
-        <h3>Dogs</h3>
-        <p>Breeding stock, puppies, and external dogs — profiles, health timelines, pedigree.</p>
-      </a>
-      <a class="tile" href="pages/contacts.html">
-        <span class="tile-icon">👤</span>
-        <h3>Contacts</h3>
-        <p>Vets, co-owners, other breeders, and referral sources.</p>
-      </a>
-      <a class="tile" href="pages/contacts.html?buyer=1">
-        <span class="tile-icon">📋</span>
-        <h3>Waitlist / Buyers</h3>
-        <p>Contacts with a buyer role or a waitlist status — a filtered view of Contacts.</p>
-      </a>
-      <a class="tile" href="pages/sales.html">
-        <span class="tile-icon">🐾</span>
-        <h3>Sales</h3>
-        <p>Placements — pet, show, breeding rights, and co-own.</p>
-      </a>
-      <a class="tile" href="pages/stud-services.html">
-        <span class="tile-icon">🧬</span>
-        <h3>Stud Services</h3>
-        <p>Outgoing and incoming arrangements, linked to their pairing.</p>
-      </a>
-      <a class="tile" href="pages/contracts.html">
-        <span class="tile-icon">📄</span>
-        <h3>Contracts</h3>
-        <p>Sale, stud service, co-own, and lease agreements.</p>
-      </a>
-      <a class="tile" href="pages/board.html">
-        <span class="tile-icon">🏠</span>
-        <h3>Location / Status Board</h3>
-        <p>Every dog currently away from home — boarding stays at a glance.</p>
-      </a>
-      <a class="tile" href="pages/upcoming.html">
-        <span class="tile-icon">📅</span>
-        <h3>Upcoming</h3>
-        <p>Scheduled drop-offs, vet visits, and everything else coming up.</p>
-      </a>
-      <a class="tile" href="pages/reminders.html">
-        <span class="tile-icon">⏰</span>
-        <h3>Reminders</h3>
-        <p>Every event with a reminder date — overdue, due soon, and upcoming.</p>
-      </a>
-      <a class="tile" href="pages/reports.html">
-        <span class="tile-icon">📈</span>
-        <h3>Reports</h3>
-        <p>Litters, births, placements, stud services, and health-test analytics.</p>
-      </a>
-      <a class="tile" href="pages/pedigree.html">
-        <span class="tile-icon">🌳</span>
-        <h3>Pedigree</h3>
-        <p>Explore family trees built from sire/dam links.</p>
-      </a>
-      <a class="tile" href="pages/import-export.html">
-        <span class="tile-icon">💾</span>
-        <h3>Import / Export</h3>
-        <p>JSON backup &amp; restore, CSV import for dogs and contacts.</p>
-      </a>
-    </div>
-
-    <div class="card" style="margin-top:24px;">
-      <div class="row-between">
-        <div>
-          <strong>Last backup</strong>
-          <div class="muted" id="last-backup">Checking…</div>
-        </div>
-        <a class="btn" href="pages/import-export.html">Back up now →</a>
-      </div>
-    </div>
-
-    <p class="faint" style="margin-top:24px; font-size:13px;">
-      Data is stored only in this browser. Use <em>Export</em> regularly and before switching
-      devices or browsers — it is also the migration path if this app ever moves to a new address.
-    </p>
-  </main>
-
-  <script type="module" src="app.js"></script>
-  <script type="module">
-    import { getLastBackupDate } from './data/settings.js';
-    const el = document.getElementById('last-backup');
-    const iso = getLastBackupDate();
-    if (!iso) {
-      el.textContent = 'Never — export a backup to protect your records.';
-      el.classList.add('faint');
-    } else {
-      const d = new Date(iso);
-      el.textContent = d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-    }
-  </script>
+  <p style="font-family:system-ui,sans-serif; padding:24px;">
+    Opening <a href="pages/today.html">Today</a>…
+  </p>
 </body>
 </html>
