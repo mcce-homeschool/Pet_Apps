@@ -135,6 +135,7 @@ Edges worth calling out:
 | litter_id | FK → Litter | | set only if born in-house |
 | kennel_id | FK → Kennel | | Which of the user's own kennels this dog belongs to. Nullable — missing means "unassigned," not an error; never blocks a save. Only meaningful for owned/co-owned dogs (external/leased-in dogs carry someone else's kennel identity via `owner_contact_id`). Indexed for kennel-scoped queries. |
 | planned_tests | string[] | | **Built (§5.11).** Unindexed. This dog's intended health/genetic tests. Plain strings, not FKs — never enter the reference registry. |
+| recorded_coi | object `{value, method, source, as_of_date}` | | **Built (Stage 5, brief §2).** Nullable, unindexed. An optional, **user-attested** coefficient of inbreeding recorded from a lab/registry — the app stores it, never computes it (this **replaces** the computed-COI plan in §7). `value` is a percent number; the rest are strings/date; any subset may be null. Not an FK — never enters the reference registry. Named `recorded_coi` (not `coi`) so a future `computed_coi` can sit beside it. |
 | status | enum: puppy / active_breeding / retired_breeding / pet_home / deceased / external_reference | ✓ | drives which lists a dog appears in |
 | status_date | date (`YYYY-MM-DD`) | | when status last changed |
 | notes | text | | |
@@ -159,7 +160,8 @@ Edges worth calling out:
 | event_end_date | date (`YYYY-MM-DD`) | | **Unindexed nullable field.** Null for instants; the (optional, open-ended) end for spans. Only meaningful on `duration: span` types; a non-null value on an instant type soft-warns and is dropped by the CSV importer, and the event form hides the field for instant types. |
 | title | string | ✓ | short summary shown in timeline |
 | details | object | | shape varies by event_type — see catalog |
-| reminder_date | date (`YYYY-MM-DD`) | | powers the future reminder engine (Stage 5) |
+| reminder_date | date (`YYYY-MM-DD`) | | **Indexed (Stage 5, brief §3).** Powers the reminder engine: any event with a non-null `reminder_date` that is not archived and not dismissed is a pending reminder (`eventRepo.getReminders`). This is the app's **single** future-dated mechanism — there is no Reminder table and no recurrence rule (recurrence is the log-the-next workflow). |
+| reminder_dismissed | boolean | | **Built (Stage 5, brief §3).** Unindexed; absent/false = pending. Dismissing a reminder sets this true — the event stays on its timeline (dismissal is not archiving and not a status). |
 | cost | decimal | | powers the future financial-tracking feature |
 | notes | text | | |
 | is_archived | boolean | ✓ | |
@@ -386,7 +388,7 @@ No separate pedigree table is needed — it's entirely derivable from `Dog.sire_
 - **Multi-generation pedigree / ancestor lookup:** recursive walk up `sire_id`/`dam_id` from a given dog, N generations deep.
 - **Descendant lookup:** both `sire_id` and `dam_id` are indexed, so a dog's direct children are two cheap indexed queries (`where('sire_id').equals(id)` / `where('dam_id').equals(id)`, merged) run live per call — no session-level cache needed. Cheap at kennel-scale record counts.
 - **Shared ancestor / intersection analysis:** walk both dogs' ancestor trees to a chosen depth and intersect the sets of ancestor IDs.
-- **COI (coefficient of inbreeding):** once shared ancestors are found, apply Wright's path-counting formula over the two dogs' pedigree trees. Pure computation over existing data — no schema impact, deferred to Stage 5.
+- **COI (coefficient of inbreeding):** ~~once shared ancestors are found, apply Wright's path-counting formula over the two dogs' pedigree trees.~~ **Superseded in Stage 5 (brief §1/§11).** App-computed COI, shared-ancestor intersection, and pairing/offspring relatedness were **not** built; Stage 5 records an optional user-attested value on the Dog instead (`Dog.recorded_coi`, §5.1). Computed COI remains a clean future re-entry — it would return as a `computed_coi` value beside `recorded_coi` (name already reserved), bringing back the ancestor walk above (cycle-safe via a visited-set) with a stated depth and pedigree-completeness metric. The ancestor/descendant lookup and pedigree render described here are unaffected and stay.
 
 ---
 
@@ -405,8 +407,9 @@ General pattern, applied consistently across entities by a single generic engine
 
 **Registered mappings (`MAPPINGS`):** `dog, contact, pairing, litter, sale, event, stud_service`. Each has its own import page under `/pages` built on the shared `importView`. **Contract is deliberately excluded** — it's a mostly-free-text leaf whose links resolve poorly by name, so it has no CSV path.
 
+- **Dog** — beyond the fields above, the mapping accepts recorded-COI columns (Stage 5, brief §2.3): `coi_value, coi_method, coi_source, coi_as_of` populate `Dog.recorded_coi`. Gated on a numeric `coi_value` — value-only stores the number with the rest null; a non-numeric `coi_value` soft-warns and drops the stray value (row kept); no `coi_value` stores no COI.
 - **Sale** — natural key `dog + buyer + sale_date` (a dateless sale routes to needs-review). The `buyer_name` column resolves against Contacts, **inline-creating a Contact** (not a Buyer) when unmatched.
-- **Event** — dog-subject only. Columns: `dog_registered_name, event_type, event_date, event_end_date, title, related_contact_name, details_json, notes`. Natural key `dog + event_type + event_date` (title breaks collisions). Unmatched dog → needs-review (never auto-created). `related_contact_name` resolves to an existing Contact; unmatched → needs-review (**deliberately not** inline-created — a boarding contact is optional and may be a facility). Malformed `details_json` → per-row error, never a silent drop. Pairing/litter-subject events are out of scope for this importer.
+- **Event** — dog-subject only. Columns: `dog_registered_name, event_type, event_date, event_end_date, title, related_contact_name, reminder_date, details_json, notes`. Natural key `dog + event_type + event_date` (title breaks collisions). `reminder_date` (Stage 5, brief §3.6) is soft-warned and dropped if unparseable, same posture as `event_end_date`. Unmatched dog → needs-review (never auto-created). `related_contact_name` resolves to an existing Contact; unmatched → needs-review (**deliberately not** inline-created — a boarding contact is optional and may be a facility). Malformed `details_json` → per-row error, never a silent drop. Pairing/litter-subject events are out of scope for this importer.
 - **StudService** — columns: `direction, our_dog_registered_name, partner_dog_registered_name, partner_contact_name, fee_amount, fee_structure, status, result_notes`. StudService has no date field, so its natural key is `our_dog + partner_dog + direction` — which collapses repeat arrangements between the same pair, so a second service for an existing pair surfaces in the preview as an **ambiguous match** the user resolves, never a silent overwrite. `partner_contact_name` **inline-creates a Contact** (`contact_type: ['breeder']`) when unmatched (mirroring Sale's buyer exception); unmatched dogs → needs-review. `pairing_id` is not set via CSV — link it in the UI.
 
 ---
@@ -528,7 +531,7 @@ Each entity gets a thin repository module that owns all Dexie access for that ta
   db.js                (single version(1) schema — all nine tables/indexes)
   referenceRegistry.js (FK registry driving §10 delete-guards)
   dogRepo.js
-  eventRepo.js         (owns the board / upcoming / scheduled-placements reads)
+  eventRepo.js         (owns the board / upcoming / scheduled-placements / reminders reads)
   pairingRepo.js
   litterRepo.js
   saleRepo.js
@@ -544,6 +547,10 @@ Each entity gets a thin repository module that owns all Dexie access for that ta
   sales / sale, contracts / contract,
   stud-services / stud-service        → the Stage 4 repos
   board, upcoming, scheduled-placements → derived read views over eventRepo (Stage 4.5)
+  reminders                           → eventRepo.getReminders (Stage 5)
+  dashboard                           → derived reads over every repo (Stage 5)
+  reports (+ litters-report, live-births, placements-report,
+    stud-services-report, health-tests-report) → reporting framework (Stage 5)
   *-import (dog/contact/pairing/litter/sale/event/stud-service) → csvImport via importView
   ...
 ```
@@ -557,6 +564,15 @@ These are read-only views over the `events` table — **no schema of their own**
 - **Location / Status Board** (`board.js`, `eventRepo.getBoardRows`): one row per dog away from home. Filters on `event_type ∈ {boarding}` — **deliberately not on `duration`** — and on `event_end_date == null || event_end_date >= today`, sorted soonest-return-first. Active medications/heat cycles are spans but not whereabouts, so they never appear here. Past stays fall off automatically and remain on the dog's own timeline.
 - **Upcoming Deliverables** (`upcoming.js`, `eventRepo.getUpcoming`): a sibling read — `event_date >= today` and `duration === 'instant'`, across every subject type. A type filter narrows it to `placement` for the glanceable "all scheduled puppy drop-offs." The board's query is left byte-for-byte untouched; the two never fuse.
 - **Scheduled Placements report** (`scheduled-placements.js`, `eventRepo.getScheduledPlacements`): future-dated `placement` events through the Stage-1 reporting framework (columns, search, CSV export).
+
+### 11.2 Derived Stage 5 views (dashboard, reminders, analytics)
+
+Same discipline as §11.1 — read-only views over existing repos, **no schema of their own**, no stored aggregates (Stage 5 brief §4.1). Full spec in `Stage5_Build_Brief_v1.md`:
+
+- **Reminders** (`reminders.js`, `eventRepo.getReminders` / `getDismissedReminders`): every non-archived, non-dismissed event with a `reminder_date`, bucketed **on the display side** into overdue / due-soon / upcoming (the read just returns them sorted). Dismiss sets `reminder_dismissed`; snooze edits `reminder_date`. A **sibling** read to the board/upcoming/placements reads — never fused with them.
+- **Dashboard** (`dashboard.js`): pure derived counts computed on load — dogs by status, this-year litters/pairings/sales, overdue/due-soon reminders, upcoming placements, dogs away, active waitlist. **Archive ≠ status ≠ deceased** are three distinct reads; no denormalized counter is ever stored.
+- **Analytics reports** (`reports.js` hub + `litters-report` / `live-births` / `placements-report` / `stud-services-report` / `health-tests-report`): each a derived read on the Stage-1 reporting framework (columns, filters, search, CSV export). No new schema, no stored rate. `recorded_coi` is never averaged across mixed methods (brief §5).
+- **Health-Test Summary** (on Dog Detail): a read-only per-dog list of `genetic_test` / `ofa_pennhip` / `breed_specific_test` events — presentation only, no carrier-risk or genotype inference (brief §6).
 
 ---
 
