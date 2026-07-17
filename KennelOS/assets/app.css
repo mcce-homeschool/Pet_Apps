@@ -96,6 +96,82 @@ body {
 .nav-more.open .nav-more-menu { display: block; }
 .nav-more-menu .nav-link { display: block; padding: 8px 10px; }
 
+/* Wide screens: links inline, hamburger hidden. */
+.nav-links { display: flex; align-items: center; gap: 4px; flex: 1; }
+.nav-toggle {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: 0;
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* Phone: collapse the links behind the hamburger. */
+@media (max-width: 860px) {
+  /* brand + hamburger share row 1; the links (flex-basis:100%) wrap to row 2. */
+  .nav-toggle { display: inline-flex; }
+  .nav-toggle:hover { background: rgba(255, 255, 255, 0.12); }
+  .nav-links {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    flex-basis: 100%;
+    gap: 2px;
+    padding-bottom: 8px;
+  }
+  .nav-inner.nav-open .nav-links { display: flex; }
+  .nav-links .nav-link { padding: 11px 12px; border-radius: var(--radius-sm); }
+  /* The "More" group flattens into the stack — its two links show inline, no
+     nested dropdown to fish for on a touch screen. */
+  .nav-more { position: static; margin-left: 0; width: 100%; }
+  .nav-more-btn { display: none; }
+  .nav-more-menu {
+    position: static;
+    display: block;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+    min-width: 0;
+  }
+  .nav-more-menu::before {
+    content: "";
+    display: block;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.14);
+    margin: 4px 0;
+  }
+}
+
+/* --- Expandable table rows ---------------------------------------------- */
+/* Key columns stay in the row; a tap opens the rest as label/value pairs
+   below (phone-first pattern). Used by the Today board and reusable elsewhere. */
+.expand-summary { cursor: pointer; }
+.expand-summary > td { vertical-align: middle; }
+.expand-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  color: var(--text-muted);
+  width: 1em;
+  text-align: center;
+}
+.expand-summary.open .expand-chevron { transform: rotate(90deg); }
+.expand-panel > td { background: var(--surface-2); padding: 0; }
+.expand-detail {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  padding: 12px 14px;
+}
+.expand-detail .k { color: var(--text-muted); font-size: 13px; }
+.expand-detail .v { font-size: 14px; }
+.expand-actions { grid-column: 1 / -1; margin-top: 8px; }
+
 /* --- Sample data banner -------------------------------------------------- */
 .sample-banner {
   background: var(--warn-soft);

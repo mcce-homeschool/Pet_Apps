@@ -146,6 +146,9 @@ function renderUpcoming(rows) {
 
 // --- 3. Who's away (Location / Status Board) --------------------------------
 
+// Expandable-row table (phone-first): Dog · Reason · Location stay in the row;
+// Contact / Drop-off / Return collapse into a panel a tap opens. Each away-dog is
+// a summary <tr> plus a hidden panel <tr>; clicking the summary toggles both.
 function renderBoard(rows) {
   if (!rows.length) {
     boardEl.innerHTML = `<section class="card" style="margin-top:16px;">
@@ -154,29 +157,48 @@ function renderBoard(rows) {
     return;
   }
   const today = todayYMD();
-  const body = rows.map((ev) => {
+  const body = rows.map((ev, i) => {
     const dog = ctx.dogsById.get(ev.subject_id);
     const contact = ev.related_contact_id ? ctx.contactsById.get(ev.related_contact_id) : null;
     const d = ev.details || {};
     const ret = ev.event_end_date
       ? `${esc(fmtDate(ev.event_end_date))}${ev.event_end_date < today ? ' <span class="badge badge-amber">Overdue?</span>' : ''}`
       : '<span class="badge badge-blue">Ongoing</span>';
-    return `<tr class="clickable" data-dog="${esc(ev.subject_id)}">
-      <td><strong>${esc(dog ? dog.call_name : '—')}</strong></td>
-      <td>${esc(d.location || '')}</td>
-      <td>${esc(d.boarding_reason || '')}</td>
-      <td>${contact ? esc(contact.name) : '<span class="faint">—</span>'}</td>
-      <td>${esc(fmtDate(ev.event_date))}</td>
-      <td>${ret}</td>
-    </tr>`;
+    const drop = `${esc(fmtDate(ev.event_date))}${d.dropoff_time ? ` <span class="faint">${esc(d.dropoff_time)}</span>` : ''}`;
+    return `<tbody class="expand-group">
+      <tr class="expand-summary" data-panel="board-${i}">
+        <td><strong>${esc(dog ? dog.call_name : '—')}</strong></td>
+        <td>${esc(d.boarding_reason || '—')}</td>
+        <td>${esc(d.location || '—')}</td>
+        <td style="text-align:right; width:1em;"><span class="expand-chevron">▸</span></td>
+      </tr>
+      <tr class="expand-panel" id="board-${i}" hidden>
+        <td colspan="4">
+          <div class="expand-detail">
+            <div class="k">Contact</div><div class="v">${contact ? esc(contact.name) : '—'}</div>
+            <div class="k">Drop-off</div><div class="v">${drop}</div>
+            <div class="k">Return</div><div class="v">${ret}</div>
+            <div class="expand-actions"><a class="btn btn-sm" href="dog.html?id=${encodeURIComponent(ev.subject_id)}">Open dog →</a></div>
+          </div>
+        </td>
+      </tr>
+    </tbody>`;
   }).join('');
   boardEl.innerHTML = `<section class="card" style="margin-top:16px;">
       <h2 style="margin:0;">Away from home <span class="muted" style="font-size:14px;">(${rows.length})</span></h2>
-      <p class="field-hint">Boarding stays only — medications and heat cycles don't appear here.</p>
-      <table class="data"><thead><tr><th>Dog</th><th>Location</th><th>Reason</th><th>Contact</th><th>Drop-off</th><th>Return</th></tr></thead>
-      <tbody>${body}</tbody></table></section>`;
-  boardEl.querySelectorAll('tr[data-dog]').forEach((tr) => {
-    tr.addEventListener('click', () => { location.href = `dog.html?id=${encodeURIComponent(tr.dataset.dog)}`; });
+      <p class="field-hint">Boarding stays only — medications and heat cycles don't appear here. Tap a row for contact, drop-off, and return.</p>
+      <table class="data expand-table">
+        <thead><tr><th>Dog</th><th>Reason</th><th>Location</th><th></th></tr></thead>
+        ${body}
+      </table></section>`;
+  boardEl.querySelectorAll('.expand-summary').forEach((tr) => {
+    tr.addEventListener('click', () => {
+      const panel = document.getElementById(tr.dataset.panel);
+      if (!panel) return;
+      const open = panel.hidden;
+      panel.hidden = !open;
+      tr.classList.toggle('open', open); // CSS rotates the ▸ chevron to point down
+    });
   });
 }
 

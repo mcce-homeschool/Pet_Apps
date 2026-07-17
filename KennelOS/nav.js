@@ -70,14 +70,31 @@ export function renderNav(targetId = 'app-nav') {
   host.innerHTML = `
     <nav class="nav-inner">
       <a class="nav-brand" href="${prefix}index.html"><span class="paw">🐾</span> KennelOS</a>
-      ${links}
-      <div class="nav-more">
-        <button type="button" class="nav-link nav-more-btn${moreActive}" aria-haspopup="true" aria-expanded="false">More ▾</button>
-        <div class="nav-more-menu">${moreLinks}</div>
+      <button type="button" class="nav-toggle" aria-label="Menu" aria-expanded="false">☰</button>
+      <div class="nav-links">
+        ${links}
+        <div class="nav-more">
+          <button type="button" class="nav-link nav-more-btn${moreActive}" aria-haspopup="true" aria-expanded="false">More ▾</button>
+          <div class="nav-more-menu">${moreLinks}</div>
+        </div>
       </div>
     </nav>`;
 
+  wireToggle(host);
   wireMoreMenu(host);
+}
+
+// Hamburger toggle for narrow (phone) widths: reveals the stacked links. On wide
+// screens the button is hidden by CSS and the links show inline, so this listener
+// is simply never triggered there.
+function wireToggle(host) {
+  const inner = host.querySelector('.nav-inner');
+  const btn = host.querySelector('.nav-toggle');
+  if (!inner || !btn) return;
+  btn.addEventListener('click', () => {
+    const open = inner.classList.toggle('nav-open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
 }
 
 // The corner menu opens on click and closes on outside-click or Escape. Kept to
