@@ -1,7 +1,7 @@
 # Test Planning & Shared Vocabulary Addendum — v1
 ### Per-dog health-test plans, a kennel-authored preferred panel, and an advisory completeness view
 
-**Status: built.** Everything specced below shipped as designed, with no deviations — zero-migration, no reference-registry or backup-format change. See `Data_Model_Architecture_Proposal_v3.md` §5.11 for the as-built field summary and §16 for the changelog entry.
+**Status: built.** The planning/vocabulary/completeness core shipped as designed, zero-migration, no reference-registry or backup-format change. The **optional seed import (§8–9)** — originally deferred out of the shipped scope — was subsequently restored: it adds one more plain unindexed field (`Kennel.preferred_breeds`, exact parallel to `preferred_tests`) plus a small dedicated import view, still zero-migration and still no reference-registry/backup-format change. See `Data_Model_Architecture_Proposal_v3.md` §5.11 for the as-built field summary and §16 for the changelog entry.
 
 **How to use this doc:** hand this to Claude Code alongside `Data_Model_Architecture_Proposal_v3.md` (the canonical model now; supersedes the v2 this addendum originally shipped against), `Stage1_Stage2_Build_Brief_v2.md`, `Stage3_Build_Brief_v1-1.md`, `Stage4_As_Built_v1.md`, `Sample_Data_and_Reset_Brief_v2.md`, and `Stage4.5_Reconciliation_and_Logistics_Addendum_v1.md`. Those define the entities and conventions this builds on — this doc only adds what's new: two unindexed array fields, a suggestion-vocabulary read, a kennel-level authoring screen, and an advisory completeness panel. It is **Stage-5-adjacent** (it serves the discovery doc's "data quality auditing" candidate feature and leans on the existing future-reminder groundwork), but it depends on nothing in Stage 5 and can land independently. Nothing here changes the schema version, the reference registry, or the JSON backup format.
 
@@ -19,6 +19,7 @@ This delivers both as the thinnest possible layer on the existing model:
 - **`Dog.planned_tests`** — an intent checklist per dog (the denominator).
 - **`Kennel.preferred_tests`** — a kennel-authored panel that seeds new dogs' plans *and* doubles as the shared suggestion vocabulary (the join anchor).
 - **An advisory completeness view** — "planned, no matching event found — verify," never a hard fraction.
+- **An optional prefill import (§8–9)** — nothing ships in-app; a breeder who wants help imports a shipped file that carries a breed name *and* its common tests together, both landing in their own kennel-scoped vocabulary (`Kennel.preferred_tests` + `Kennel.preferred_breeds`). A breeder who doesn't want help never touches it and stays fully blank.
 
 **What it is not:** it is **not** a new entity, not an FK relationship, not a test-definition table dogs point at. Tests are captured as plain strings on both the plan side and the event side. Nothing references a canonical "test" record, so nothing enters the reference registry, nothing blocks a delete, and an off-panel test name typed during a messy CSV import is *saved*, not *rejected* — consistent with the warn-don't-block / import-resilience posture in every prior brief (data model §8, Stage 2 B1, Stage 3 §3). The tests list is a *suggestion source*, and the string it produces is inert data the list can never orphan.
 
@@ -112,13 +113,52 @@ These read as subtle but each is load-bearing:
 
 ---
 
-## 8. Sample Data — Follow-Up Needed (not built here)
+## 8. Optional Import: Breed + Tests, One Act (as-built)
+
+A breeder who wants prefilling can pull a shipped `breed, test_name` CSV. The import is **one optional act that carries two payloads together**: the breed name and its common tests. Choosing to import accepts both; declining leaves the app blank — no breeds, no tests, autocomplete empty, author-it-yourself. This maps onto the two real user types: the breeder who wants no help never triggers it, the breeder who wants everything gets breed + tests in a single gesture.
+
+**Both payloads land in kennel-scoped, user-owned vocabulary — nothing ships inside the app:**
+- Each imported `test_name` is **appended** to `Kennel.preferred_tests` (the checklist, §3), dedupe on write.
+- Each imported breed is **appended** to `Kennel.preferred_breeds` — a plain unindexed `string[]`, exact parallel to `preferred_tests`, that feeds the free-text `breed` autocomplete alongside the distinct-breeds-already-on-dogs read (`dogRepo.getBreeds`). This is the payload that lets breed suggestions exist *before the first dog is entered*: a breeder who imports "Boston Terrier" now sees it offered (consistently spelled) on dog #1.
+
+The breeder then **unchecks** any tests they don't want; breed stays a suggestion, never a lock.
+
+**As-built specifics (where it departs from the original plan's "same generic CSV engine" wording):**
+- **Its own thin write path, not the generic `csvImport.js` engine.** That engine is record match-or-create against an entity repo; this import appends to two kennel *vocabularies* and creates no records — a genuinely different shape. The parse/group/apply logic lives in one shared module (`data/seedImport.js`), reusing the vendored PapaParse (with `comments: '#'` to skip the file's disclaimer header) but not the entity mapping machinery. Forcing vocabulary-append through the record engine would have distorted it.
+- **Two entry points, one shared implementation.** (1) A standalone view (`pages/kennel-tests-import.{html,js}`, linked from Import/Export) with a file picker + per-breed checkboxes + dry-run preview. (2) The **first-run kennel-setup wizard** (`assets/kennelSetupUI.js`): right where a new breeder names their kennel, an optional "Prefill common health tests" section lists the bundled file's breeds as checkboxes (fetched directly — no download/pick step, since the app may load its own bundled resource). Breeds default **unchecked** (opt-in, matching the empty-until-authored posture); checking one and saving seeds its tests + breed name onto the just-created own-kennel. If the bundled file can't be reached the section simply doesn't appear and setup is unchanged.
+- **Suggests, never locks** — for both. An imported breed pre-populates autocomplete but `breed` stays free text (crossbreeds/variants type freely, data model §5.1); an imported test pre-populates the checklist but is prunable and the event form stays free text (§3).
+- **Append, dedupe, never wipe** — `kennelRepo.addPreferredTest` / `addPreferredBreed` are both dedupe-on-write (case-insensitive, trimmed); import only adds.
+- **Which kennel?** Targets the current own-kennel; if more than one, the view asks (same posture as seeding, §4).
+- **Breed-selective, per-breed checkboxes + a dry-run preview** of new-vs-already-present breed and test tokens before commit, consistent with every other import.
+- **Not part of the JSON backup path** — `preferred_tests` and `preferred_breeds` already ride the backup as Kennel record fields (§2). Import is purely an ingestion convenience.
+
+> **A dedicated per-dog plan import** (migrating an existing per-animal test history from another system) stays deferred — addable later at zero engine cost if a real migration need surfaces.
+
+---
+
+## 9. The Shipped Resource (external, optional, by breed)
+
+The prefill data lives as a **shipped CSV in the §8 import format** — hosted alongside the app (`KennelOS/resources/common_tests_by_breed_seed.csv`, downloadable from the import view) but **not loaded into the app's data**. A breeder who wants help downloads/edits/imports; a breeder who doesn't never touches it and stays fully blank.
+
+Why this placement holds up:
+
+- **Nothing is seeded in-app, for breeds or tests.** Both arrive only through the optional import, so §3's "empty until authored *or imported*" is uniform.
+- **Staleness stays outside the app.** The file updates on its own cadence with no release; the app never claims currency because it doesn't hold the data.
+- **Breed-matching never becomes a fuzzy-string problem.** The breeder picks their breed (a per-breed checkbox) at import; the app never fuzzy-matches free-text `breed` against a canonical list.
+- **Right-sized per kennel.** Import is breed-selective and tests are prunable, so a breeder loads only what's relevant.
+- **Zero storage/registry/backup footprint.** Static file. Never enters Dexie, the backup, or the reference registry.
+
+**Provenance and honesty.** The resource carries a plain disclaimer, surfaced verbatim at the top of the import view: it is an **illustrative starting point, not veterinary guidance**; current recommendations should be verified against the authoritative source for the breed — typically the OFA CHIC requirements and the breed parent club. The advisory (never-a-hard-number) completeness posture (§6.2) is consistent with this: the tool nudges, it doesn't certify.
+
+---
+
+## 10. Sample Data — Follow-Up Needed (not built here)
 
 Consistent with how Stage 3 and Stage 4 flagged their own sample-data follow-ups rather than folding them in: a short extension to `Sample_Data_and_Reset_Brief_v2.md` would give Thornfield a `preferred_tests` panel (a small Boston Terrier set) and seed two or three sample dogs' `planned_tests` from it, with at least one planned test that **has** a matching event (shows a satisfied checklist row) and one that **doesn't** (shows the advisory "verify" flag). Fern already carries an `evaluation` and health events, so she's the natural dog to demonstrate a partially-satisfied plan. Neither field needs manifest tracking — they're attributes on already-manifested Dog/Kennel records, cleared with them.
 
 ---
 
-## 9. Build Order
+## 11. Build Order
 
 1. Add `Dog.planned_tests` / `Kennel.preferred_tests` handling to `dogRepo` / `kennelRepo` (plain array read/write/dedupe — no schema version bump).
 2. Shared-vocabulary read: union of `Kennel.preferred_tests` + distinct seen-in-events test tokens; wire it as the suggestion source on the `genetic_test` / `breed_specific_test` / `ofa_pennhip` event forms (free-text fallback preserved).
@@ -126,5 +166,7 @@ Consistent with how Stage 3 and Stage 4 flagged their own sample-data follow-ups
 4. Seeding-on-create (owned/co-owned, kennel-resolution rules, null/multi-kennel fallback).
 5. Dog Detail Planned Tests panel + advisory completeness view.
 6. Copy-forward actions ("Apply to dogs" on the kennel editor; "Copy plan from…" on Dog Detail).
+7. **(Seed import)** `Kennel.preferred_breeds` plain array + `kennelRepo.addPreferredBreed` / `getBreedVocabulary` (dedupe-on-write, own-kennel union); union the breed pool into the dog-form breed datalist alongside `dogRepo.getBreeds`.
+8. **(Seed import)** Dedicated `kennel-tests-import` view: parse the `breed, test_name` file, per-breed checkboxes, dry-run preview, commit = append tests + breeds to the target own-kennel; publish the shipped `resources/common_tests_by_breed_seed.csv` with the illustrative/verify-against-source disclaimer.
 
-Steps 1–3 make the vocabulary and panel usable; 4–6 connect them to dogs and deliver the advisory completeness nudge. Zero-migration throughout — the only genuinely new code is the authoring UI and the union-read; the rest is fields and a copy action.
+Steps 1–3 make the vocabulary and panel usable; 4–6 connect them to dogs and deliver the advisory completeness nudge; 7–8 add the optional breed+test prefill. Zero-migration throughout — the genuinely new code is the authoring UI, the union-reads, and the one import view; the rest is fields and copy actions.

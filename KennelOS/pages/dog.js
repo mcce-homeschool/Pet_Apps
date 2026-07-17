@@ -84,18 +84,23 @@ const ctx = {
 
 // --- Data loading --------------------------------------------------------
 async function loadRefs() {
-  const [dogs, contacts, litters, kennels, breeds] = await Promise.all([
+  const [dogs, contacts, litters, kennels, breeds, breedPool] = await Promise.all([
     dogRepo.getAll({ includeArchived: true }),
     contactRepo.getAll({ includeArchived: true }),
     litterRepo.getAll({ includeArchived: true }),
     kennelRepo.getAll({ includeArchived: true }),
-    dogRepo.getBreeds()
+    dogRepo.getBreeds(),
+    kennelRepo.getBreedVocabulary()
   ]);
   ctx.allDogs = dogs;
   ctx.allContacts = contacts;
   ctx.allLitters = litters;
   ctx.allKennels = kennels;
-  ctx.breeds = breeds;
+  // Breed autocomplete = breeds already on dogs UNION the kennel breed pool
+  // (Test Planning Addendum §8) — the pool is what lets a seeded breed suggest
+  // before the first dog exists. Case-insensitive dedupe, dog-derived wins.
+  const breedSeen = new Set(breeds.map((b) => b.toLowerCase()));
+  ctx.breeds = [...breeds, ...breedPool.filter((b) => !breedSeen.has(b.toLowerCase()))].sort();
   ctx.dogsById = new Map(dogs.map((d) => [d.id, d]));
   ctx.contactsById = new Map(contacts.map((c) => [c.id, c]));
   ctx.littersById = new Map(litters.map((l) => [l.id, l]));
@@ -233,7 +238,7 @@ function renderEdit() {
       ${field('Call name', `<input id="f-call_name" type="text" value="${esc(d.call_name)}">`, { required: true })}
       ${field('Registered name', `<input id="f-registered_name" type="text" value="${esc(d.registered_name)}">`)}
       ${field('Sex', `<select id="f-sex">${vocabOptions(SEX, d.sex, 'Select…')}</select>`, { required: true })}
-      ${field('Breed', `<input id="f-breed" type="text" list="breed-list" value="${esc(d.breed)}"><datalist id="breed-list">${breedList}</datalist>`, { required: true, hint: 'Type freely; suggestions come from breeds already entered.' })}
+      ${field('Breed', `<input id="f-breed" type="text" list="breed-list" value="${esc(d.breed)}"><datalist id="breed-list">${breedList}</datalist>`, { required: true, hint: 'Type freely; suggestions come from breeds already entered or seeded from a kennel test import.' })}
       ${field('Date of birth', `<input id="f-date_of_birth" type="date" max="${todayYMD()}" value="${esc(d.date_of_birth)}">`)}
       ${field('DOB estimated', `<label class="check-inline"><input id="f-dob_is_estimated" type="checkbox"${d.dob_is_estimated ? ' checked' : ''}> approximate</label>`)}
       ${field('Date of death', `<input id="f-date_of_death" type="date" value="${esc(d.date_of_death)}">`)}

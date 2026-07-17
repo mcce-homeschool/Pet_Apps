@@ -6,7 +6,7 @@
 // never re-fetches a stale precached file on its own; only a CACHE_NAME change
 // (which changes these bytes, so the browser detects a new service worker,
 // installs it, and purges the old cache in `activate`) rolls it over.
-const CACHE_NAME = 'kennelos-shell-v5';
+const CACHE_NAME = 'kennelos-shell-v6';
 
 const PRECACHE_URLS = [
   './',
@@ -78,6 +78,8 @@ const PRECACHE_URLS = [
   'pages/health-tests-report.js',
   'pages/import-export.html',
   'pages/import-export.js',
+  'pages/kennel-tests-import.html',
+  'pages/kennel-tests-import.js',
   'pages/kennels.html',
   'pages/kennels.js',
   'pages/litter-import.html',
@@ -124,7 +126,8 @@ const PRECACHE_URLS = [
   'pages/upcoming.html',
   'pages/upcoming.js',
   'vendor/dexie.min.mjs',
-  'vendor/papaparse.min.mjs'
+  'vendor/papaparse.min.mjs',
+  'resources/common_tests_by_breed_seed.csv'
 ];
 
 self.addEventListener('install', (event) => {

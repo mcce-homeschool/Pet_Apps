@@ -6,6 +6,7 @@ import {
   shouldOfferKennelSetupPrompt, skipKennelSetup, completeKennelSetup, getMyKennelName,
   getKennelSetupState
 } from '../data/kennelSetup.js';
+import { fetchBundledSeedGroups, applySeedToKennel } from '../data/seedImport.js';
 import { esc } from './ui.js';
 
 export function maybeShowKennelSetupPrompt() {
@@ -24,10 +25,16 @@ export function maybeShowKennelSetupPrompt() {
 export async function showKennelSetupModal({ skippable, onDone } = {}) {
   const initial = await getKennelSetupState();
 
+  // The optional breed+test prefill (Test Planning Addendum §8–9). Populated
+  // async from the bundled starter file after the modal is on screen; if the
+  // file can't be reached the section stays hidden and setup is unchanged.
+  let seedGroups = [];
+  const selectedBreeds = new Set();
+
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" style="max-width:440px;">
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:460px;">
       <h2 style="margin-top:0;">🏡 Set up your kennel</h2>
       <p class="muted">This names your kennel in the header and lets new dogs prefill their
         owner automatically.</p>
@@ -37,6 +44,7 @@ export async function showKennelSetupModal({ skippable, onDone } = {}) {
         <div class="field field-wide"><label>Your name (as owner)</label>
           <input id="ks-owner" type="text" placeholder="Used to prefill Owner on dogs you own" value="${esc(initial.ownerName)}"></div>
       </div>
+      <div id="ks-seed"></div>
       <div id="ks-error"></div>
       <div class="form-actions">
         <button class="btn btn-primary" data-act="save">Save</button>
@@ -44,6 +52,32 @@ export async function showKennelSetupModal({ skippable, onDone } = {}) {
       </div>
     </div>`;
   document.body.appendChild(overlay);
+
+  // Fill the prefill section once the bundled file loads. Breeds default to
+  // UNCHECKED — this is an opt-in "I want help" gesture, matching the app's
+  // "empty until authored or imported" posture. Picking a breed here seeds its
+  // common tests into the kennel checklist and its name into breed autocomplete.
+  fetchBundledSeedGroups().then((groups) => {
+    seedGroups = groups;
+    const host = overlay.querySelector('#ks-seed');
+    if (!host || !groups.length) return;
+    const breedRows = groups.map((g) => `
+      <label class="check-inline" style="display:block; margin:4px 0;">
+        <input type="checkbox" data-seed-breed="${esc(g.key)}"> ${esc(g.display)}
+        <span class="faint">— ${g.tests.length} test${g.tests.length === 1 ? '' : 's'}</span>
+      </label>`).join('');
+    host.innerHTML = `
+      <div style="border-top:1px solid var(--border); margin-top:12px; padding-top:12px;">
+        <label style="font-weight:600;">Prefill common health tests <span class="faint" style="font-weight:normal;">— optional</span></label>
+        <p class="field-hint" style="margin:4px 0 8px;">Check the breed(s) you work with to seed their commonly-cited tests into your kennel checklist (prunable later). Illustrative starter, not veterinary guidance — verify against your breed's OFA CHIC / parent-club requirements.</p>
+        ${breedRows}
+      </div>`;
+    host.querySelectorAll('[data-seed-breed]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        cb.checked ? selectedBreeds.add(cb.dataset.seedBreed) : selectedBreeds.delete(cb.dataset.seedBreed);
+      });
+    });
+  });
 
   const errorBox = overlay.querySelector('#ks-error');
   overlay.querySelector('[data-act="save"]').addEventListener('click', async () => {
@@ -54,7 +88,8 @@ export async function showKennelSetupModal({ skippable, onDone } = {}) {
       return;
     }
     try {
-      await completeKennelSetup({ kennelName, ownerName });
+      const { kennel } = await completeKennelSetup({ kennelName, ownerName });
+      if (selectedBreeds.size) await applySeedToKennel(kennel.id, seedGroups, selectedBreeds);
       location.reload();
     } catch (e) {
       errorBox.innerHTML = `<div class="inline-error">${esc(e.message || String(e))}</div>`;
