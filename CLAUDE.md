@@ -5,7 +5,7 @@ Local-first, static, multi-page records app for a dog breeding program. No backe
 ## Read first, every session
 Canonical model = v3. Stage 4 (Sales, Contracts, Stud Services) built. Stage 4.5 (this doc list's last two entries) reconciles Stage 4's gaps and adds scheduling/logistics. Stage 5 next.
 
-- `docs/Data_Model_Architecture_Proposal_v3.md` — canonical data model, entities, storage, integrity rules (supersedes v2-1, folds in the Stage 4 schema)
+- `docs/Data_Model_Architecture_Proposal_v3.md` — canonical data model, entities, storage, integrity rules. Current-state through Stage 4.5 (folds in Stage 4 + the Stage 4.5 additive fields/types/views); test-planning fields (§5.11) are marked designed-but-not-yet-built. Changelog in §16.
 - `docs/Stage1_Stage2_Build_Brief_v2.md` — validation, screens, conventions, build order (Stages 1–2)
 - `docs/Stage3_Build_Brief_v1-1.md` — Pairings & Litters schema, validation, screens, build order (Stage 3)
 - `docs/Stage4_Revision_v2.md` — Sales, Contracts, Stud Services: the Stage 4 *plan* — schema, reference registry, linking rules
