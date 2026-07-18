@@ -117,7 +117,7 @@ export async function renderPedigree({ mount, rootId, generations = 3, onNavigat
   }).join('');
 
   // Build offspring section
-  const offspring = dogs.filter((d) => d.sire_id === rootId || d.dam_id === rootId).sort((a, b) => (b.date_of_birth || '') - (a.date_of_birth || ''));
+  const offspring = dogs.filter((d) => d.sire_id === rootId || d.dam_id === rootId);
   const offspringByLitter = new Map();
   for (const pup of offspring) {
     const litterId = pup.litter_id || 'no-litter';
@@ -125,10 +125,39 @@ export async function renderPedigree({ mount, rootId, generations = 3, onNavigat
     offspringByLitter.get(litterId).push(pup);
   }
 
+  // Sort each litter: males first, then females, then unknown
+  for (const pups of offspringByLitter.values()) {
+    pups.sort((a, b) => {
+      const sexOrder = { male: 0, female: 1, unknown: 2 };
+      return (sexOrder[a.sex] ?? 2) - (sexOrder[b.sex] ?? 2);
+    });
+  }
+
+  // Sort litters: by oldest pup date_of_birth, litters with no dates last
+  const sortedLitters = Array.from(offspringByLitter.entries()).sort((a, b) => {
+    const [, pupsA] = a;
+    const [, pupsB] = b;
+    const oldestA = pupsA.reduce((oldest, pup) => {
+      if (!pup.date_of_birth) return oldest;
+      if (!oldest) return pup.date_of_birth;
+      return pup.date_of_birth < oldest ? pup.date_of_birth : oldest;
+    }, null);
+    const oldestB = pupsB.reduce((oldest, pup) => {
+      if (!pup.date_of_birth) return oldest;
+      if (!oldest) return pup.date_of_birth;
+      return pup.date_of_birth < oldest ? pup.date_of_birth : oldest;
+    }, null);
+
+    if (oldestA === null && oldestB === null) return 0;
+    if (oldestA === null) return 1;
+    if (oldestB === null) return -1;
+    return oldestA.localeCompare(oldestB);
+  });
+
   let offspringHtml = '';
   if (offspring.length > 0) {
     offspringHtml = '<div style="margin-top: 24px; border-top: 1px solid var(--border); padding-top: 16px;"><h3 style="margin: 0 0 12px 0;">Offspring</h3>';
-    for (const [litterId, pups] of offspringByLitter) {
+    for (const [litterId, pups] of sortedLitters) {
       offspringHtml += '<div style="margin-bottom: 12px;">';
       for (const pup of pups) {
         const otherParentId = pup.sire_id === rootId ? pup.dam_id : pup.sire_id;
@@ -136,9 +165,10 @@ export async function renderPedigree({ mount, rootId, generations = 3, onNavigat
         const role = pup.sire_id === rootId ? 'Sire' : 'Dam';
         const otherParentName = otherParent ? esc(otherParent.call_name || '(unnamed)') : '[Unknown parent]';
         const dob = pup.date_of_birth ? fmtDate(pup.date_of_birth) : '';
+        const genderIndicator = pup.sex === 'male' ? 'M' : pup.sex === 'female' ? 'F' : '?';
         offspringHtml += `<div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
           <span style="font-size: 14px; color: var(--text-muted);">× ${otherParentName} (${role})</span>
-          <a href="#" class="ped-pup-nav" data-pup-id="${esc(pup.id)}" style="font-weight: 500; color: var(--link-color); text-decoration: none; cursor: pointer;">${esc(pup.call_name || '(unnamed)')}</a>
+          <a href="#" class="ped-pup-nav" data-pup-id="${esc(pup.id)}" style="font-weight: 500; color: var(--link-color); text-decoration: none; cursor: pointer;">${esc(pup.call_name || '(unnamed)')} ${genderIndicator}</a>
           ${dob ? `<span style="font-size: 14px; color: var(--text-muted); margin-left: auto;">${esc(dob)}</span>` : ''}
         </div>`;
       }
