@@ -107,8 +107,8 @@ function renderView() {
       ${c.contract_type === 'lease' ? row('Lease start', c.lease_start_date ? esc(fmtDate(c.lease_start_date)) : '') : ''}
       ${c.contract_type === 'lease' ? row('Lease end', c.lease_end_date ? esc(fmtDate(c.lease_end_date)) : '') : ''}
       ${DOG_LINK_TYPES.includes(c.contract_type) ? row('Related dog', dog ? `<a href="dog.html?id=${encodeURIComponent(dog.id)}">${esc(dogName(dog.id))}</a>` : '') : ''}
-      ${row('Related sale', sale ? `<a href="sale.html?id=${encodeURIComponent(sale.id)}">${esc(saleLabel(sale))}</a>` : '')}
-      ${row('Related stud service', ss ? `<a href="stud-service.html?id=${encodeURIComponent(ss.id)}">${esc(studServiceLabel(ss))}</a>` : '')}
+      ${c.contract_type !== 'lease' ? row('Related sale', sale ? `<a href="sale.html?id=${encodeURIComponent(sale.id)}">${esc(saleLabel(sale))}</a>` : '') : ''}
+      ${c.contract_type !== 'lease' ? row('Related stud service', ss ? `<a href="stud-service.html?id=${encodeURIComponent(ss.id)}">${esc(studServiceLabel(ss))}</a>` : '') : ''}
       ${row('Terms summary', c.terms_summary ? esc(c.terms_summary).replace(/\n/g, '<br>') : '')}
       ${row('Notes', c.notes ? esc(c.notes).replace(/\n/g, '<br>') : '')}
     </dl>`;
@@ -134,8 +134,8 @@ function renderEdit() {
       ${c.contract_type === 'lease' ? field('Lease start', `<input id="f-lease_start_date" type="date" value="${esc(c.lease_start_date)}">`) : ''}
       ${c.contract_type === 'lease' ? field('Lease end', `<input id="f-lease_end_date" type="date" value="${esc(c.lease_end_date)}">`) : ''}
       ${DOG_LINK_TYPES.includes(c.contract_type) ? field('Related dog', `<select id="f-related_dog_id">${dogOptions(c.related_dog_id)}</select>`, { hint: 'The dog this contract is about.' }) : ''}
-      ${field('Related sale', `<select id="f-related_sale_id">${saleOptions(c.related_sale_id)}</select>`)}
-      ${field('Related stud service', `<select id="f-related_stud_service_id">${studServiceOptions(c.related_stud_service_id)}</select>`)}
+      ${c.contract_type !== 'lease' ? field('Related sale', `<select id="f-related_sale_id">${saleOptions(c.related_sale_id)}</select>`) : ''}
+      ${c.contract_type !== 'lease' ? field('Related stud service', `<select id="f-related_stud_service_id">${studServiceOptions(c.related_stud_service_id)}</select>`) : ''}
       ${field('Terms summary', `<textarea id="f-terms_summary">${esc(c.terms_summary)}</textarea>`, { wide: true })}
       ${field('Notes', `<textarea id="f-notes">${esc(c.notes)}</textarea>`, { wide: true })}
     </div>
@@ -175,8 +175,9 @@ function readForm() {
     // selection. contractRepo normalizes it to null on save if the final type
     // doesn't call for it.
     related_dog_id: document.getElementById('f-related_dog_id') ? (val('f-related_dog_id') || null) : (ctx.draft.related_dog_id || null),
-    related_sale_id: val('f-related_sale_id') || null,
-    related_stud_service_id: val('f-related_stud_service_id') || null,
+    // Related sale and stud service fields are hidden for lease contracts
+    related_sale_id: document.getElementById('f-related_sale_id') ? (val('f-related_sale_id') || null) : (ctx.draft.related_sale_id || null),
+    related_stud_service_id: document.getElementById('f-related_stud_service_id') ? (val('f-related_stud_service_id') || null) : (ctx.draft.related_stud_service_id || null),
     terms_summary: val('f-terms_summary'),
     notes: val('f-notes')
   };
