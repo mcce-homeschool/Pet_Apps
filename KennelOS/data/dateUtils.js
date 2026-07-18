@@ -30,6 +30,18 @@ export function monthsFromToday(n) {
   return formatYMD(d);
 }
 
+// n days after a given YYYY-MM-DD date string (negative = before) — used to
+// prefill a derived date field from an anchor date the user already entered
+// (e.g. a litter's estimated ready date from its whelp date, or a pairing's
+// expected due date from its planned first date). Parses as local calendar
+// components, not UTC, matching todayYMD's local-time convention above.
+export function addDaysToYMD(ymd, n) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + n);
+  return formatYMD(date);
+}
+
 // Whole months between two YYYY-MM-DD strings (fromYMD earlier, toYMD later),
 // day-of-month aware — used by the promote-lifecycle nudge (Data Integrity
 // Brief §4.3) to turn date_of_birth into an age threshold can compare against.
