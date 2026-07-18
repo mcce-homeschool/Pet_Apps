@@ -115,7 +115,7 @@ and commonly blank at entry time.
 | **Pairing** | `sire_id`, `dam_id`, `pairing_type`, `status` | `method`, `planned_date`, `expected_due_date`, `notes`. Sire ≠ dam (hard block). |
 | **Litter** | `dam_id`, `sire_id`, `status` | `pairing_id`, `whelp_date`, `litter_registration_number`, `puppies_born_total/alive/deceased`, `notes`. Litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
 | **Sale** | `dog_id`, `buyer_contact_id`, `placement_type`, `status` | `sale_date`, `price`, `deposit_amount`, `deposit_date`, `balance_paid_date`, `lead_source`, `notes`. Its own table (not a Dog field) so reserve/return/re-place stay distinct facts. |
-| **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `signed_date`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf entity. |
+| **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `related_dog_id` (canonical Dog link, used only for `lease`/`co_own`/`other` types — where no linked Sale/StudService already reaches a dog; forced `null` for other types via `contractRepo.DOG_LINK_TYPES`/`normalizeDogLink`), `signed_date`, `lease_start_date`/`lease_end_date` (lease type; UI shows them and hides Related sale/stud fields when `contract_type='lease'`), `title`, `terms_summary`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf for referential integrity (nothing points *at* a contract), but a contract itself points *at* its Dog via `related_dog_id` — that FK is guarded under `DOG_REFERENCES`, not `CONTRACT_REFERENCES`. |
 | **StudService** | `direction`, `our_dog_id`, `partner_dog_id`, `partner_contact_id`, `status` | `pairing_id`, `fee_amount`, `fee_structure`, `result_notes`, `type` (`in_person`/`ai` — coarse physical-travel flag; `in_person` + `sent_date`/`returned_date` window feeds the away-board, §19), plus optional logistics dates. Covers both `incoming` and `outgoing`. |
 | **Event** | `subject_type`, `subject_id`, `event_type`, `event_date`, `title` | `event_end_date`, `reminder_date`, `reminder_dismissed`, `related_dog_id`, `related_contact_id`, `details{}`, `cost`, `notes`. See §8. |
 
@@ -129,9 +129,11 @@ derived query, never a second stored pointer.** This is why:
 - StudService→Pairing is stored as `StudService.pairing_id` (mirrors the litter
   link); `studServiceRepo.getByPairing` is the reverse. There is no
   `Pairing.stud_service_id`.
-- Contract→Sale / Contract→StudService are stored on the Contract
-  (`related_sale_id`, `related_stud_service_id`). Sales/stud-services carry no
-  contract pointer; `contractRepo.getBySale`/`getByStudService` are the reverse.
+- Contract→Sale / Contract→StudService / Contract→Dog are stored on the Contract
+  (`related_sale_id`, `related_stud_service_id`, `related_dog_id` — the last for
+  `lease`/`co_own`/`other` contracts, the types with no linked Sale/StudService to
+  reach a dog through). Sales/stud-services/dogs carry no contract pointer;
+  `contractRepo.getBySale`/`getByStudService`/`getByDog` are the reverse.
 - A Dog's children, a Contact's dogs, a Kennel's contacts — all derived queries over
   the indexed FK, never stored back-pointers.
 
@@ -163,7 +165,7 @@ pairings:      id, sire_id, dam_id, status, pairing_type, is_archived
 litters:       id, pairing_id, sire_id, dam_id, status, whelp_date, is_archived
 sales:         id, dog_id, buyer_contact_id, status, placement_type, is_archived
 contracts:     id, contract_type, status, related_sale_id,
-               related_stud_service_id, is_archived
+               related_stud_service_id, related_dog_id, is_archived
 stud_services: id, our_dog_id, partner_dog_id, partner_contact_id, direction,
                status, pairing_id, is_archived
 ```
@@ -425,7 +427,9 @@ one implementation lives in `data/dateUtils.js`.
   as a date range; escapes all values.
 - **pedigree.js** — derived ancestor tree from `sire_id`/`dam_id`; SVG connectors over
   positioned nodes. Bounded by a `generations` depth cap (default 3), which makes it
-  cycle-safe regardless of data.
+  cycle-safe regardless of data. Below the tree it also renders a derived **Offspring**
+  section — dogs whose `sire_id`/`dam_id` is the root — grouped by litter, sorted, with
+  per-pup sex indicators.
 - **eventForm.js** — add/edit-event modal; renders the type's `fields` into `details`,
   handles spans/reminders, persists empty optional dates as `null` (important: keeps
   them out of the reminder index). Supports applying one payload to multiple subjects.
