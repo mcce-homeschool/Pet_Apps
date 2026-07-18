@@ -51,7 +51,7 @@ db.version(1).stores({
   pairings:      'id, sire_id, dam_id, status, pairing_type, is_archived',
   litters:       'id, pairing_id, sire_id, dam_id, status, whelp_date, is_archived',
   sales:         'id, dog_id, buyer_contact_id, status, placement_type, is_archived',
-  contracts:     'id, contract_type, status, related_sale_id, related_stud_service_id, is_archived',
+  contracts:     'id, contract_type, status, related_sale_id, related_stud_service_id, related_dog_id, is_archived',
   stud_services: 'id, our_dog_id, partner_dog_id, partner_contact_id, direction, status, pairing_id, is_archived'
 });
 

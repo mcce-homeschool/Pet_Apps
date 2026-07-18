@@ -11,11 +11,12 @@ import { kennelRepo } from '../data/kennelRepo.js';
 import { eventRepo, testTokensOf } from '../data/eventRepo.js';
 import { saleRepo } from '../data/saleRepo.js';
 import { studServiceRepo } from '../data/studServiceRepo.js';
+import { contractRepo } from '../data/contractRepo.js';
 import { getMyContactId } from '../data/kennelSetup.js';
 import {
   SEX, DOG_STATUS, DISPOSITION, OWNERSHIP_TYPE, PAIRING_TYPE, PAIRING_STATUS,
   PLACEMENT_TYPE, SALE_STATUS, STUD_SERVICE_DIRECTION, STUD_SERVICE_STATUS,
-  EVENT_TYPES, descriptor, COI_METHOD_SUGGESTIONS
+  EVENT_TYPES, descriptor, COI_METHOD_SUGGESTIONS, CONTRACT_TYPE, CONTRACT_STATUS
 } from '../data/vocab.js';
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { renderTimeline } from '../assets/timeline.js';
@@ -40,6 +41,7 @@ const els = {
   pairings: document.getElementById('pairings-section'),
   sales: document.getElementById('sales-section'),
   studServices: document.getElementById('stud-services-section'),
+  contracts: document.getElementById('contracts-section'),
   pedigree: document.getElementById('pedigree-section')
 };
 
@@ -389,6 +391,7 @@ function enterEdit() {
   renderPairingsSection(); // hide pairings while editing too
   renderSalesSection();
   renderStudServicesSection();
+  renderContractsSection();
   renderPedigreeSection(); // hide pedigree while editing too
 }
 
@@ -405,6 +408,7 @@ function cancel() {
   renderPairingsSection();
   renderSalesSection();
   renderStudServicesSection();
+  renderContractsSection();
   renderPedigreeSection();
 }
 
@@ -834,6 +838,37 @@ async function renderStudServicesSection() {
     </section>`;
 }
 
+// Derived "Contracts" panel: contracts that name this dog directly via
+// Contract.related_dog_id — lease/co_own/other only (sale/stud_service
+// contracts reach their dog through the linked Sale/StudService, and show up
+// in the Sales/Stud Services panels above instead). Shown for leased-in/out
+// dogs or a dog with existing linked contracts.
+async function renderContractsSection() {
+  if (!els.contracts) return;
+  if (ctx.mode !== 'view' || !ctx.original) { els.contracts.innerHTML = ''; return; }
+  const d = ctx.original;
+  const contracts = await contractRepo.getByDog(d.id);
+  if (!contracts.length && !['leased_in', 'leased_out'].includes(d.ownership_type)) { els.contracts.innerHTML = ''; return; }
+  contracts.sort((a, b) => (b.signed_date || b.created_at || '').localeCompare(a.signed_date || a.created_at || ''));
+
+  const rowsHtml = contracts.length
+    ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + contracts.map((c) => `
+        <li class="row-between" style="padding:8px 0; border-top:1px solid var(--border);">
+          <span>${badge(CONTRACT_TYPE, c.contract_type)} <strong>${esc(c.title || 'Contract')}</strong> ${badge(CONTRACT_STATUS, c.status)}${c.signed_date ? ` <span class="faint">signed ${esc(fmtDate(c.signed_date))}</span>` : ''}</span>
+          <a class="btn btn-sm" href="contract.html?id=${encodeURIComponent(c.id)}">Open →</a>
+        </li>`).join('') + `</ul>`
+    : `<p class="muted" style="margin:14px 0 0;">No contracts naming this dog directly yet.</p>`;
+
+  els.contracts.innerHTML = `
+    <section class="card" style="margin-top:16px;">
+      <div class="row-between">
+        <h2 style="margin:0;">Contracts</h2>
+        <a class="btn btn-sm" href="contract.html?new=1&dog=${encodeURIComponent(d.id)}">+ Add Contract</a>
+      </div>
+      ${rowsHtml}
+    </section>`;
+}
+
 // Pedigree centered on this dog (only for a saved dog in view mode). Clicking a
 // node opens the full Pedigree page re-centered there.
 function renderPedigreeSection() {
@@ -871,6 +906,7 @@ function renderAll() {
   renderPairingsSection();
   renderSalesSection();
   renderStudServicesSection();
+  renderContractsSection();
   renderPedigreeSection();
 }
 

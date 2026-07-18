@@ -40,7 +40,8 @@ export const DOG_REFERENCES = [
   { table: 'litters',       field: 'dam_id',         label: 'dam of a litter' },
   { table: 'sales',         field: 'dog_id',         label: 'placed via a sale' },
   { table: 'stud_services', field: 'our_dog_id',     label: 'our dog in a stud service' },
-  { table: 'stud_services', field: 'partner_dog_id', label: 'partner dog in a stud service' }
+  { table: 'stud_services', field: 'partner_dog_id', label: 'partner dog in a stud service' },
+  { table: 'contracts',     field: 'related_dog_id', label: 'subject of a contract' }
 ];
 
 // --- Litter: what can point at a Litter (Data Model v3 §10) -----------------
