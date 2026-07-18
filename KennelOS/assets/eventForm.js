@@ -10,7 +10,7 @@ import { HistoryEvent } from '../data/eventRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import { kennelRepo } from '../data/kennelRepo.js';
 import { eventTypesFor, descriptor, EVENT_TYPES } from '../data/vocab.js';
-import { esc, todayYMD } from './ui.js';
+import { esc, todayYMD, param } from './ui.js';
 import { attachNewContactButton } from './contactPicker.js';
 
 // Which combobox field on each test-bearing type draws from the shared test
@@ -298,4 +298,24 @@ export async function openEventForm(opts) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) { close(); onCancel?.(); } });
   document.addEventListener('keydown', onKey);
   render();
+}
+
+// Today's due-out/reminder rows deep-link here via two query params (no
+// standalone event page exists — Event is polymorphic, so it's always opened
+// from its subject's own page): `openEvent=<id>` opens that exact event in
+// edit mode (a due-out — the row IS the event); `logEvent=<event_type>` opens
+// a fresh event of that type (a reminder — nudging the NEXT occurrence, not
+// re-editing the one that fired it). Call once, after the subject page has
+// loaded its record; a no-op if neither param is present.
+export async function openEventFromQuery(subjectType, subjectId, onSaved) {
+  const openId = param('openEvent');
+  if (openId) {
+    const event = await HistoryEvent.getById(openId);
+    if (event) openEventForm({ subjectType, subjectId, event, onSaved });
+    return;
+  }
+  const logType = param('logEvent');
+  if (logType) {
+    openEventForm({ subjectType, subjectId, prefill: { event_type: logType }, onSaved });
+  }
 }

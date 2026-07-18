@@ -10,6 +10,7 @@ import { studServiceRepo } from '../data/studServiceRepo.js';
 import { PAIRING_TYPE, PAIRING_METHOD, PAIRING_STATUS, LITTER_STATUS, STUD_SERVICE_DIRECTION, STUD_SERVICE_STATUS } from '../data/vocab.js';
 import { esc, badge, fmtDate, param, confirmAction } from '../assets/ui.js';
 import { renderTimeline } from '../assets/timeline.js';
+import { openEventFromQuery } from '../assets/eventForm.js';
 
 const els = {
   title: document.getElementById('pairing-title'),
@@ -400,6 +401,7 @@ async function main() {
   ctx.original = p;
   ctx.mode = 'view';
   renderAll();
+  openEventFromQuery('pairing', p.id, renderTimelineSection);
 }
 
 main();

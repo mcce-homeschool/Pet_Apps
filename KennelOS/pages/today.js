@@ -51,22 +51,31 @@ function subjectLabel(ev) {
   return `Litter (${ctx.dogsById.get(l.dam_id)?.call_name || '—'} × ${ctx.dogsById.get(l.sire_id)?.call_name || '—'})`;
 }
 
-function subjectHref(ev) {
-  if (ev.subject_type === 'dog') return `dog.html?id=${encodeURIComponent(ev.subject_id)}`;
-  if (ev.subject_type === 'pairing') return `pairing.html?id=${encodeURIComponent(ev.subject_id)}`;
-  return `litter.html?id=${encodeURIComponent(ev.subject_id)}`;
+// `extra` appends a raw query-string fragment (e.g. "&openEvent=<id>") so
+// callers can deep-link straight to an event on the subject's own page —
+// there is no standalone event page, since Event is polymorphic (CLAUDE.md).
+function subjectHref(ev, extra = '') {
+  if (ev.subject_type === 'dog') return `dog.html?id=${encodeURIComponent(ev.subject_id)}${extra}`;
+  if (ev.subject_type === 'pairing') return `pairing.html?id=${encodeURIComponent(ev.subject_id)}${extra}`;
+  return `litter.html?id=${encodeURIComponent(ev.subject_id)}${extra}`;
 }
 
 // --- 1. Reminders (interactive; re-renders in place on dismiss/snooze) ------
 
 function reminderRow(ev, bucketBadge) {
   const contact = ev.related_contact_id ? ctx.contactsById.get(ev.related_contact_id)?.name : '';
+  // A reminder is nudging toward logging the NEXT occurrence, not editing the
+  // one that fired it — so this deep-links to a fresh event of the same
+  // event_type on the subject's page, prefilled like the app's other
+  // soft-suggestion prompts (eventForm.js `prefill`).
+  const logHref = subjectHref(ev, `&logEvent=${encodeURIComponent(ev.event_type)}`);
   return `<li class="row-between" style="padding:10px 0; border-top:1px solid var(--border); align-items:flex-start;">
       <div>
         <div>${bucketBadge}<a href="${subjectHref(ev)}"><strong>${esc(subjectLabel(ev))}</strong></a> — ${badge(EVENT_TYPES, ev.event_type)} ${esc(ev.title)}</div>
         <div class="muted" style="font-size:13px;">⏰ ${esc(fmtDate(ev.reminder_date))}${contact ? ` · ${esc(contact)}` : ''}</div>
       </div>
       <div class="pill-row" data-row="${esc(ev.id)}">
+        <a class="btn btn-sm" href="${esc(logHref)}">Log new →</a>
         <button class="btn btn-sm" data-act="snooze" data-id="${esc(ev.id)}">Snooze</button>
         <button class="btn btn-sm" data-act="dismiss" data-id="${esc(ev.id)}">Dismiss</button>
       </div>
@@ -178,9 +187,15 @@ function renderUpcoming(rows) {
     ? `<ul class="linked-list" style="margin:6px 0 0; padding:0; list-style:none;">
         ${rows.map((ev) => {
           const contact = ev.related_contact_id ? ctx.contactsById.get(ev.related_contact_id)?.name : '';
+          // A due-out is THIS event, not a next one — deep-links to open it
+          // directly (edit mode) on the subject's page.
+          const openHref = subjectHref(ev, `&openEvent=${encodeURIComponent(ev.id)}`);
           return `<li class="row-between" style="padding:9px 0; border-top:1px solid var(--border);">
             <div><a href="${subjectHref(ev)}"><strong>${esc(subjectLabel(ev))}</strong></a> — ${badge(EVENT_TYPES, ev.event_type)} ${esc(ev.title || '')}${contact ? ` <span class="muted">· ${esc(contact)}</span>` : ''}</div>
-            <div class="muted" style="font-size:13px; white-space:nowrap;">${esc(fmtDate(ev.event_date))}</div>
+            <div class="pill-row" style="align-items:center;">
+              <span class="muted" style="font-size:13px; white-space:nowrap;">${esc(fmtDate(ev.event_date))}</span>
+              <a class="btn btn-sm" href="${esc(openHref)}">Open →</a>
+            </div>
           </li>`;
         }).join('')}
       </ul>`
