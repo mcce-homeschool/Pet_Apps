@@ -5,6 +5,7 @@ import { saleRepo, ReferenceBlockedError } from '../data/saleRepo.js';
 import { contractRepo } from '../data/contractRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
+import { litterRepo } from '../data/litterRepo.js';
 import { PLACEMENT_TYPE, SALE_STATUS, CONTRACT_TYPE, CONTRACT_STATUS } from '../data/vocab.js';
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { openEventForm } from '../assets/eventForm.js';
@@ -32,20 +33,40 @@ const blankSale = () => ({
 const ctx = {
   mode: 'view', original: null, draft: null, pickerArchived: false,
   allDogs: [], allContacts: [], leadSources: [],
-  dogsById: new Map(), contactsById: new Map()
+  dogsById: new Map(), contactsById: new Map(), littersById: new Map()
 };
 
 async function loadRefs() {
-  const [dogs, contacts, leadSources] = await Promise.all([
+  const [dogs, contacts, leadSources, litters] = await Promise.all([
     dogRepo.getAll({ includeArchived: true }),
     contactRepo.getAll({ includeArchived: true }),
-    saleRepo.getLeadSources()
+    saleRepo.getLeadSources(),
+    litterRepo.getAll({ includeArchived: true })
   ]);
   ctx.allDogs = dogs;
   ctx.allContacts = contacts;
   ctx.leadSources = leadSources;
   ctx.dogsById = new Map(dogs.map((d) => [d.id, d]));
   ctx.contactsById = new Map(contacts.map((c) => [c.id, c]));
+  ctx.littersById = new Map(litters.map((l) => [l.id, l]));
+}
+
+// Prefills price/deposit_amount from the dog's litter (Litter.expected_price_male/
+// _female by the dog's sex, Litter.expected_deposit_amount either way) — only into
+// fields still empty, so it never clobbers a value already entered (same pattern as
+// the buyer's first_contact_source -> lead_source prefill below).
+function applyExpectedPricing() {
+  const dog = ctx.dogsById.get(ctx.draft.dog_id);
+  const litter = dog && dog.litter_id ? ctx.littersById.get(dog.litter_id) : null;
+  if (!litter) return;
+  if (!ctx.draft.price) {
+    const expected = dog.sex === 'male' ? litter.expected_price_male
+      : dog.sex === 'female' ? litter.expected_price_female : null;
+    if (expected != null) ctx.draft.price = expected;
+  }
+  if (!ctx.draft.deposit_amount && litter.expected_deposit_amount != null) {
+    ctx.draft.deposit_amount = litter.expected_deposit_amount;
+  }
 }
 
 function dogName(id) {
@@ -139,6 +160,13 @@ function renderEdit() {
   document.getElementById('picker-archived').addEventListener('change', (e) => {
     ctx.draft = readForm();
     ctx.pickerArchived = e.target.checked;
+    renderEdit();
+  });
+  // Prefilling price/deposit_amount from the selected dog's litter (only when
+  // those fields are still empty, so it never clobbers a deliberate entry).
+  document.getElementById('f-dog_id').addEventListener('change', () => {
+    ctx.draft = readForm();
+    applyExpectedPricing();
     renderEdit();
   });
   // Prefilling lead_source from the buyer's first_contact_source (only when
@@ -438,7 +466,10 @@ async function main() {
     ctx.mode = 'new';
     ctx.draft = blankSale();
     const dogId = param('dog');
-    if (dogId && ctx.dogsById.has(dogId)) ctx.draft.dog_id = dogId;
+    if (dogId && ctx.dogsById.has(dogId)) {
+      ctx.draft.dog_id = dogId;
+      applyExpectedPricing();
+    }
     renderTitle();
     renderEdit();
     renderProfileActions();

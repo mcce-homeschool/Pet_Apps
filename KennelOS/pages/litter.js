@@ -31,7 +31,8 @@ const els = {
 
 const blankLitter = () => ({
   pairing_id: '', dam_id: '', sire_id: '', whelp_date: '', litter_registration_number: '',
-  puppies_born_total: '', puppies_born_alive: '', puppies_born_deceased: '', status: '', notes: ''
+  puppies_born_total: '', puppies_born_alive: '', puppies_born_deceased: '', status: '', notes: '',
+  expected_price_male: '', expected_price_female: '', expected_deposit_amount: ''
 });
 
 const ctx = {
@@ -95,6 +96,10 @@ function row(label, valueHtml) {
   return `<dt>${esc(label)}</dt><dd>${valueHtml || '<span class="faint">—</span>'}</dd>`;
 }
 
+function money(v) {
+  return v != null && v !== '' ? `$${Number(v).toFixed(2)}` : '';
+}
+
 function countsDisplay(l) {
   const has = (v) => v != null && v !== '';
   if (!has(l.puppies_born_total) && !has(l.puppies_born_alive) && !has(l.puppies_born_deceased)) return '';
@@ -121,6 +126,9 @@ function renderView() {
       ${row('Litter registration #', esc(l.litter_registration_number))}
       ${row('Puppies born', countsDisplay(l))}
       ${row('Status', badge(LITTER_STATUS, l.status))}
+      ${row('Expected price (male)', esc(money(l.expected_price_male)))}
+      ${row('Expected price (female)', esc(money(l.expected_price_female)))}
+      ${row('Expected deposit', esc(money(l.expected_deposit_amount)))}
       ${row('Notes', l.notes ? esc(l.notes).replace(/\n/g, '<br>') : '')}
     </dl>`;
 }
@@ -167,6 +175,9 @@ function renderEdit() {
       ${field('Puppies born (total)', `<input id="f-puppies_born_total" type="number" min="0" value="${esc(l.puppies_born_total)}">`)}
       ${field('Born alive', `<input id="f-puppies_born_alive" type="number" min="0" value="${esc(l.puppies_born_alive)}">`)}
       ${field('Born deceased', `<input id="f-puppies_born_deceased" type="number" min="0" value="${esc(l.puppies_born_deceased)}">`)}
+      ${field('Expected price (male)', `<input id="f-expected_price_male" type="number" min="0" step="0.01" value="${esc(l.expected_price_male)}">`, { hint: 'Prefills a new sale\'s price when the puppy sold is male. Still editable per sale.' })}
+      ${field('Expected price (female)', `<input id="f-expected_price_female" type="number" min="0" step="0.01" value="${esc(l.expected_price_female)}">`, { hint: 'Prefills a new sale\'s price when the puppy sold is female. Still editable per sale.' })}
+      ${field('Expected deposit', `<input id="f-expected_deposit_amount" type="number" min="0" step="0.01" value="${esc(l.expected_deposit_amount)}">`, { hint: 'Prefills a new sale\'s deposit amount for any puppy from this litter.' })}
       <div class="field field-wide">
         <label class="check-inline"><input id="picker-archived" type="checkbox"${ctx.pickerArchived ? ' checked' : ''}> Include archived dogs/pairings in the pickers above</label>
       </div>
@@ -209,6 +220,9 @@ function readForm() {
     puppies_born_total: val('f-puppies_born_total'),
     puppies_born_alive: val('f-puppies_born_alive'),
     puppies_born_deceased: val('f-puppies_born_deceased'),
+    expected_price_male: val('f-expected_price_male'),
+    expected_price_female: val('f-expected_price_female'),
+    expected_deposit_amount: val('f-expected_deposit_amount'),
     notes: val('f-notes')
   };
 }
@@ -294,7 +308,10 @@ function cancel() {
 
 // Empty numeric strings become null so we don't persist '' where a number belongs.
 function normalizeCounts(candidate) {
-  for (const k of ['puppies_born_total', 'puppies_born_alive', 'puppies_born_deceased']) {
+  for (const k of [
+    'puppies_born_total', 'puppies_born_alive', 'puppies_born_deceased',
+    'expected_price_male', 'expected_price_female', 'expected_deposit_amount'
+  ]) {
     candidate[k] = candidate[k] === '' || candidate[k] == null ? null : Number(candidate[k]);
   }
   candidate.pairing_id = candidate.pairing_id || null;
