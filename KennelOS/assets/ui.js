@@ -66,3 +66,34 @@ export function fillSelect(selectEl, vocab, current, placeholder) {
 export function confirmAction(message) {
   return window.confirm(message);
 }
+
+// Collapsible card chrome (Today home cards). `title` is the header HTML
+// (may already include a trailing count span); `bodyHtml` is everything
+// below the header. `isEmpty` starts the card collapsed — the caller
+// decides what "empty" means for that card. `headerExtra` renders inline
+// actions (e.g. a link/button) next to the toggle, before it.
+export function cardShell(title, bodyHtml, { key = '', isEmpty = false, headerExtra = '', marginTop = false } = {}) {
+  return `<section class="card card-collapsible"${marginTop ? ' style="margin-top:16px;"' : ''} data-card="${esc(key)}">
+      <div class="card-head">
+        <h2 style="margin:0;">${title}</h2>
+        <div class="card-head-actions">
+          ${headerExtra}
+          <button type="button" class="card-toggle-btn" aria-expanded="${isEmpty ? 'false' : 'true'}" aria-label="${isEmpty ? 'Expand' : 'Collapse'} card">▾</button>
+        </div>
+      </div>
+      <div class="card-body"${isEmpty ? ' hidden' : ''}>${bodyHtml}</div>
+    </section>`;
+}
+
+// Delegated once for every page that renders a cardShell — toggles the
+// nearest card body and flips the button's expanded state/label.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.card-toggle-btn');
+  if (!btn) return;
+  const body = btn.closest('.card-collapsible')?.querySelector('.card-body');
+  if (!body) return;
+  const wasOpen = !body.hidden;
+  body.hidden = wasOpen;
+  btn.setAttribute('aria-expanded', String(!wasOpen));
+  btn.setAttribute('aria-label', wasOpen ? 'Expand card' : 'Collapse card');
+});

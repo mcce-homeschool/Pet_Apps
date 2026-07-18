@@ -202,6 +202,24 @@ h2 { font-size: 18px; margin: 28px 0 12px; }
 }
 .card + .card { margin-top: 16px; }
 
+/* --- Collapsible home cards (Today page) --------------------------------- */
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.card-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.card-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px;
+  transition: transform 0.15s ease;
+}
+.card-toggle-btn:hover { color: var(--text); }
+.card-toggle-btn[aria-expanded="false"] { transform: rotate(-90deg); }
+.card-body { margin-top: 12px; }
+.card-body[hidden] { display: none; }
+
 .grid-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .tile {
   display: block;

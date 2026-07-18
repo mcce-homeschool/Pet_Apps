@@ -1,11 +1,16 @@
 // today.js — the consolidated "Today" home (Navigation Consolidation Plan v1 §4).
-// Action-first ordering, top → bottom: (1) reminders, (2) due-outs / upcoming,
-// (3) who's away, (4) the slow-changing kennel overview. This page is the single
-// home for what used to be four separate nav destinations (dashboard, reminders,
-// upcoming, board), so it shows their real content — not teaser counts.
+// Action-first ordering, top → bottom: (1) reminders, (2) available puppies,
+// (3) due-outs / upcoming, (4) who's away, (5) the slow-changing kennel
+// overview. This page is the single home for what used to be four separate
+// nav destinations (dashboard, reminders, upcoming, board), so it shows their
+// real content — not teaser counts.
 //
 // Every read here is DERIVED over the existing repos, exactly as the dashboard/
 // reminders/upcoming/board pages each do — no stored aggregates, no new schema.
+//
+// Every card is collapsible (cardShell in assets/ui.js): a chevron button in
+// the header toggles its body, and a card with no rows to show starts
+// collapsed (isEmpty) instead of an expanded empty-state message.
 import { eventRepo } from '../data/eventRepo.js';
 import { getAwayBoardRows } from '../data/awayBoard.js';
 import { computeNudges } from '../data/nudges.js';
@@ -16,7 +21,7 @@ import { pairingRepo } from '../data/pairingRepo.js';
 import { saleRepo } from '../data/saleRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import { EVENT_TYPES, DOG_STATUS } from '../data/vocab.js';
-import { esc, badge, fmtDate } from '../assets/ui.js';
+import { esc, badge, fmtDate, cardShell } from '../assets/ui.js';
 import { todayYMD, daysFromToday } from '../data/dateUtils.js';
 
 const DUE_SOON_DAYS = 30; // shared window with the reminder buckets (§3.3)
@@ -78,23 +83,22 @@ function reminderBucket(title, rows, bucketBadge) {
 
 async function renderReminders() {
   const reminders = await eventRepo.getReminders();
-  if (!reminders.length) {
-    remindersEl.innerHTML = `<section class="card"><h2 style="margin:0;">Reminders</h2>
-      <div class="empty-state">Nothing pending. Add a reminder date to any event to see it here.</div></section>`;
-    return;
+  const isEmpty = !reminders.length;
+  const title = `Reminders${reminders.length ? ` <span class="muted" style="font-size:14px;">(${reminders.length})</span>` : ''}`;
+  let body;
+  if (isEmpty) {
+    body = `<div class="empty-state">Nothing pending. Add a reminder date to any event to see it here.</div>`;
+  } else {
+    const today = todayYMD();
+    const horizon = daysFromToday(DUE_SOON_DAYS);
+    const overdue = reminders.filter((e) => e.reminder_date < today);
+    const dueSoon = reminders.filter((e) => e.reminder_date >= today && e.reminder_date <= horizon);
+    const upcoming = reminders.filter((e) => e.reminder_date > horizon);
+    body = reminderBucket('Overdue', overdue, '<span class="badge badge-red">Overdue</span> ')
+      + reminderBucket('Due soon', dueSoon, '<span class="badge badge-amber">Due soon</span> ')
+      + reminderBucket('Upcoming', upcoming, '<span class="badge badge-blue">Upcoming</span> ');
   }
-  const today = todayYMD();
-  const horizon = daysFromToday(DUE_SOON_DAYS);
-  const overdue = reminders.filter((e) => e.reminder_date < today);
-  const dueSoon = reminders.filter((e) => e.reminder_date >= today && e.reminder_date <= horizon);
-  const upcoming = reminders.filter((e) => e.reminder_date > horizon);
-
-  remindersEl.innerHTML = `<section class="card">
-      <div class="row-between"><h2 style="margin:0;">Reminders <span class="muted" style="font-size:14px;">(${reminders.length})</span></h2></div>
-      ${reminderBucket('Overdue', overdue, '<span class="badge badge-red">Overdue</span> ')}
-      ${reminderBucket('Due soon', dueSoon, '<span class="badge badge-amber">Due soon</span> ')}
-      ${reminderBucket('Upcoming', upcoming, '<span class="badge badge-blue">Upcoming</span> ')}
-    </section>`;
+  remindersEl.innerHTML = cardShell(title, body, { key: 'reminders', isEmpty });
   wireReminderActions();
 }
 
@@ -135,9 +139,8 @@ async function renderNudges() {
   const all = await computeNudges();
   const rows = all.filter((n) => !isDismissed(n.key));
   if (!rows.length) { nudgesEl.innerHTML = ''; return; }
-  nudgesEl.innerHTML = `<section class="card">
-      <h2 style="margin:0;">Nudges <span class="muted" style="font-size:14px;">(${rows.length})</span></h2>
-      <p class="field-hint">Suggestions computed from your data — nothing here changes a record until you act on it.</p>
+  const title = `Nudges <span class="muted" style="font-size:14px;">(${rows.length})</span>`;
+  const body = `<p class="field-hint">Suggestions computed from your data — nothing here changes a record until you act on it.</p>
       <ul class="linked-list" style="margin:6px 0 0; padding:0; list-style:none;">
         ${rows.map((n) => `
           <li class="row-between" style="padding:10px 0; border-top:1px solid var(--border); align-items:flex-start;">
@@ -150,8 +153,8 @@ async function renderNudges() {
               <button class="btn btn-sm" data-nudge-dismiss>Dismiss</button>
             </div>
           </li>`).join('')}
-      </ul>
-    </section>`;
+      </ul>`;
+  nudgesEl.innerHTML = cardShell(title, body, { key: 'nudges', isEmpty: false });
 
   nudgesEl.querySelectorAll('[data-nudge]').forEach((holder) => {
     const key = holder.dataset.nudge;
@@ -170,6 +173,7 @@ async function renderNudges() {
 // --- 2. Due outs / Upcoming -------------------------------------------------
 
 function renderUpcoming(rows) {
+  const isEmpty = !rows.length;
   const inner = rows.length
     ? `<ul class="linked-list" style="margin:6px 0 0; padding:0; list-style:none;">
         ${rows.map((ev) => {
@@ -181,10 +185,9 @@ function renderUpcoming(rows) {
         }).join('')}
       </ul>`
     : `<div class="empty-state">Nothing scheduled from today onward.</div>`;
-  upcomingEl.innerHTML = `<section class="card" style="margin-top:16px;">
-      <h2 style="margin:0;">Due outs &amp; upcoming ${rows.length ? `<span class="muted" style="font-size:14px;">(${rows.length})</span>` : ''}</h2>
-      <p class="field-hint">Everything scheduled from today onward — drop-offs, vet visits, surgeries.</p>
-      ${inner}</section>`;
+  const title = `Due outs &amp; upcoming${rows.length ? ` <span class="muted" style="font-size:14px;">(${rows.length})</span>` : ''}`;
+  const body = `<p class="field-hint">Everything scheduled from today onward — drop-offs, vet visits, surgeries.</p>${inner}`;
+  upcomingEl.innerHTML = cardShell(title, body, { key: 'upcoming', isEmpty, marginTop: true });
 }
 
 // --- 3. Who's away (Location / Status Board) --------------------------------
@@ -194,9 +197,7 @@ function renderUpcoming(rows) {
 // a summary <tr> plus a hidden panel <tr>; clicking the summary toggles both.
 function renderBoard(rows) {
   if (!rows.length) {
-    boardEl.innerHTML = `<section class="card" style="margin-top:16px;">
-      <h2 style="margin:0;">Away from home</h2>
-      <div class="empty-state">No dogs are currently away.</div></section>`;
+    boardEl.innerHTML = cardShell('Away from home', `<div class="empty-state">No dogs are currently away.</div>`, { key: 'board', isEmpty: true, marginTop: true });
     return;
   }
   const today = todayYMD();
@@ -226,13 +227,13 @@ function renderBoard(rows) {
       </tr>
     </tbody>`;
   }).join('');
-  boardEl.innerHTML = `<section class="card" style="margin-top:16px;">
-      <h2 style="margin:0;">Away from home <span class="muted" style="font-size:14px;">(${rows.length})</span></h2>
-      <p class="field-hint">Boarding stays and in-person stud services — medications and heat cycles don't appear here. Tap a row for contact, drop-off, and return.</p>
+  const title = `Away from home <span class="muted" style="font-size:14px;">(${rows.length})</span>`;
+  const cardBody = `<p class="field-hint">Boarding stays and in-person stud services — medications and heat cycles don't appear here. Tap a row for contact, drop-off, and return.</p>
       <table class="data expand-table">
         <thead><tr><th>Dog</th><th>Reason</th><th>Location</th><th></th></tr></thead>
         ${body}
-      </table></section>`;
+      </table>`;
+  boardEl.innerHTML = cardShell(title, cardBody, { key: 'board', isEmpty: false, marginTop: true });
   boardEl.querySelectorAll('.expand-summary').forEach((tr) => {
     tr.addEventListener('click', () => {
       const panel = document.getElementById(tr.dataset.panel);
@@ -250,6 +251,7 @@ function renderBoard(rows) {
 // is the life-stage badge, not the breeder's placement intent.
 function renderAvailable(dogs) {
   const rows = dogs.filter((d) => !d.is_archived && d.disposition === 'available');
+  const isEmpty = !rows.length;
   const inner = rows.length
     ? `<ul class="linked-list" style="margin:6px 0 0; padding:0; list-style:none;">
         ${rows.map((d) => `
@@ -259,12 +261,9 @@ function renderAvailable(dogs) {
           </li>`).join('')}
       </ul>`
     : `<div class="empty-state">No dogs currently marked available.</div>`;
-  availableEl.innerHTML = `<section class="card" style="margin-top:16px;">
-      <div class="row-between">
-        <h2 style="margin:0;">Available puppies ${rows.length ? `<span class="muted" style="font-size:14px;">(${rows.length})</span>` : ''}</h2>
-        <a class="btn btn-sm" href="sale.html?new=1">+ Add sale</a>
-      </div>
-      ${inner}</section>`;
+  const title = `Available puppies${rows.length ? ` <span class="muted" style="font-size:14px;">(${rows.length})</span>` : ''}`;
+  const headerExtra = `<a class="btn btn-sm" href="sale.html?new=1">+ Add sale</a>`;
+  availableEl.innerHTML = cardShell(title, inner, { key: 'available', isEmpty, headerExtra, marginTop: true });
 }
 
 // --- 4. Kennel overview (slow-changing; sits last) --------------------------
@@ -287,20 +286,21 @@ function renderOverview({ allDogs, litters, pairings, sales }) {
 
   const year = String(new Date().getFullYear());
   const inYear = (ymd) => (ymd || '').startsWith(year);
+  const yearLitters = litters.filter((l) => inYear(l.whelp_date)).length;
+  const yearPairings = pairings.filter((p) => inYear(p.planned_date)).length;
+  const yearSales = sales.filter((s) => inYear(s.sale_date)).length;
 
-  overviewEl.innerHTML = `<section class="card" style="margin-top:16px;">
-      <h2 style="margin:0;">Kennel overview</h2>
-      <p class="field-hint">Active dogs by status. Rarely changes, so it sits at the bottom.</p>
-      <div class="stat-grid">${statusTiles}</div>
-    </section>
-    <section class="card" style="margin-top:16px;">
-      <h2 style="margin:0;">This year (${year})</h2>
-      <div class="stat-grid">
-        ${stat(litters.filter((l) => inYear(l.whelp_date)).length, 'Litters whelped', 'breeding.html')}
-        ${stat(pairings.filter((p) => inYear(p.planned_date)).length, 'Pairings', 'breeding.html')}
-        ${stat(sales.filter((s) => inYear(s.sale_date)).length, 'Sales', 'sales.html')}
-      </div>
-    </section>`;
+  overviewEl.innerHTML =
+    cardShell('Kennel overview',
+      `<p class="field-hint">Active dogs by status. Rarely changes, so it sits at the bottom.</p><div class="stat-grid">${statusTiles}</div>`,
+      { key: 'overview', isEmpty: allDogs.length === 0, marginTop: true })
+    + cardShell(`This year (${year})`,
+      `<div class="stat-grid">
+        ${stat(yearLitters, 'Litters whelped', 'breeding.html')}
+        ${stat(yearPairings, 'Pairings', 'breeding.html')}
+        ${stat(yearSales, 'Sales', 'sales.html')}
+      </div>`,
+      { key: 'this-year', isEmpty: yearLitters === 0 && yearPairings === 0 && yearSales === 0, marginTop: true });
 }
 
 async function main() {
@@ -320,9 +320,9 @@ async function main() {
 
   await renderNudges();
   await renderReminders();
+  renderAvailable(allDogs);
   renderUpcoming(upcoming);
   renderBoard(boardRows);
-  renderAvailable(allDogs);
   renderOverview({ allDogs, litters, pairings, sales });
 }
 
