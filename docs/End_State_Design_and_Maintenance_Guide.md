@@ -598,7 +598,7 @@ awareness) and returns zero or more:
 ```
 { key, title, detail, subjectHref, actions: [{ label, run: async () => {} }] }
 ```
-Four rules, each producing its own stable `key` so a dismissal survives re-computation:
+Five rules, each producing its own stable `key` so a dismissal survives re-computation:
 - **Stud-service status** — `sent_date` passed + `status='arranged'` → suggest
   `in_progress`; `returned_date` passed + `status ∈ {arranged, in_progress}` → suggest
   `completed` (never both; completed wins if both conditions hold).
@@ -616,6 +616,11 @@ Four rules, each producing its own stable `key` so a dismissal survives re-compu
   no live pairing recorded for that dam since the heat started suggests creating one
   via `pairing.html?new=1&dam=<dogId>` (`pairing.js` new-mode gained the `dam` query
   param alongside its existing `stud_service` one).
+- **Overdue pairing** — a pairing in a pre-whelp status (`planned`/`bred`/
+  `confirmed_pregnant`) whose `expected_due_date` has passed, with no litter recorded
+  against it yet (`litterRepo.getForPairing`), suggests either fix: mark the pairing
+  `whelped` directly, or deep-link to `litter.html?new=1&pairing=<id>` (the same
+  prefill the pairing page's own "Create Litter" button uses).
 
 The stud→pairing and heat→pairing rules share one dedup helper
 (`pairingExistsForDam`): a pairing counts as "already handled" if it's for the same

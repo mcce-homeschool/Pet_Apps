@@ -11,16 +11,22 @@
 // Nothing here mutates a record on its own; every action is a user-confirmed
 // button click.
 //
-// Four rules (§4.2, §4.3, §4.5, §4.7), each producing zero or more nudges:
+// Five rules (§4.2, §4.3, §4.5, §4.7, plus the overdue-pairing rule below),
+// each producing zero or more nudges:
 //   { key, title, detail, subjectHref, actions: [{ label, run: async () => {} }] }
 import { studServiceRepo } from './studServiceRepo.js';
 import { dogRepo } from './dogRepo.js';
 import { kennelRepo } from './kennelRepo.js';
 import { pairingRepo } from './pairingRepo.js';
+import { litterRepo } from './litterRepo.js';
 import { eventRepo } from './eventRepo.js';
 import { todayYMD, monthsBetween } from './dateUtils.js';
+import { descriptor, PAIRING_STATUS } from './vocab.js';
 
 const TERMINAL_PAIRING_STATUSES = ['cancelled', 'failed'];
+
+// Pre-whelp: still expecting a litter, not yet resolved one way or the other.
+const PRE_WHELP_STATUSES = ['planned', 'bred', 'confirmed_pregnant'];
 
 // Shared dedup (§4.5/§4.7): is there already a live pairing for this dam,
 // opened on/after `sinceYMD`? "Opened" prefers planned_date, falling back to
@@ -37,6 +43,10 @@ function pairingExistsForDam(pairings, damId, sinceYMD) {
 
 function studPartnerLabel(s, dogsById) {
   return `${dogsById.get(s.our_dog_id)?.call_name || 'Our dog'} × ${dogsById.get(s.partner_dog_id)?.call_name || 'partner'}`;
+}
+
+function pairingLabel(p, dogsById) {
+  return `${dogsById.get(p.dam_id)?.call_name || 'Dam'} × ${dogsById.get(p.sire_id)?.call_name || 'Sire'}`;
 }
 
 // §4.2 — stud-service status nudges. Never both at once for the same record:
@@ -150,6 +160,27 @@ export async function computeNudges() {
       subjectHref: `dog.html?id=${encodeURIComponent(damId)}`,
       actions: [
         { label: 'Create pairing', run: async () => { location.href = `pairing.html?new=1&dam=${encodeURIComponent(damId)}`; } }
+      ]
+    });
+  }
+
+  // Overdue pairing — still pre-whelp status past its own expected due date,
+  // with no litter recorded against it yet. Suggests both fixes: sync the
+  // status, or go record the litter (deep-links to the same
+  // litter.html?new=1&pairing=<id> prefill the pairing page's own "Create
+  // Litter" button uses).
+  for (const p of pairings) {
+    if (!PRE_WHELP_STATUSES.includes(p.status) || !p.expected_due_date || p.expected_due_date >= today) continue;
+    const litter = await litterRepo.getForPairing(p.id);
+    if (litter) continue;
+    nudges.push({
+      key: `pairingoverdue:${p.id}`,
+      title: `${pairingLabel(p, dogsById)} is past its expected due date`,
+      detail: `Expected ${p.expected_due_date} — still marked "${descriptor(PAIRING_STATUS, p.status).label}".`,
+      subjectHref: `pairing.html?id=${encodeURIComponent(p.id)}`,
+      actions: [
+        { label: 'Mark whelped', run: async () => { await pairingRepo.update(p.id, { status: 'whelped' }); } },
+        { label: 'Create litter', run: async () => { location.href = `litter.html?new=1&pairing=${encodeURIComponent(p.id)}`; } }
       ]
     });
   }

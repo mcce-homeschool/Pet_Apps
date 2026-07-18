@@ -347,6 +347,49 @@ async function maybePromptGrowOut(litter) {
   }
 }
 
+// Soft-suggestion prompt: the first time a litter crosses into a whelped-or-
+// later status, offer to sync its linked pairing's status to match (prefilled
+// "Whelped", but editable — the pairing's real state might be something else
+// entirely by then). Skipped silently when there's no linked pairing, or the
+// pairing is already "Whelped".
+function maybePromptPairingWhelped(litter) {
+  if (!litter.pairing_id) return Promise.resolve();
+  const pairing = ctx.pairingsById.get(litter.pairing_id);
+  if (!pairing || pairing.status === 'whelped') return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+      <h2 style="margin-top:0;">Update the linked pairing's status?</h2>
+      <p class="muted">This litter is now "${esc(descriptor(LITTER_STATUS, litter.status).label)}" — the linked pairing is still "${esc(descriptor(PAIRING_STATUS, pairing.status).label)}".</p>
+      <div class="field">
+        <label>Pairing status</label>
+        <select id="pw-status">${vocabOptions(PAIRING_STATUS, 'whelped')}</select>
+      </div>
+      <div id="pw-error"></div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="pw-confirm">Confirm</button>
+        <button class="btn" id="pw-skip">Skip</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const close = () => { overlay.remove(); resolve(); };
+    overlay.querySelector('#pw-skip').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#pw-confirm').addEventListener('click', async () => {
+      const status = overlay.querySelector('#pw-status').value;
+      if (!status) { close(); return; }
+      try {
+        await pairingRepo.update(pairing.id, { status });
+        close();
+      } catch (e) {
+        overlay.querySelector('#pw-error').innerHTML = `<div class="inline-error">${esc(e.message || String(e))}</div>`;
+      }
+    });
+  });
+}
+
 async function save() {
   clearError();
   const candidate = normalizeCounts(readForm());
@@ -363,6 +406,10 @@ async function save() {
     await loadRefs();
     ctx.original = await litterRepo.getById(saved.id);
     renderAll();
+    const enteringWhelpBand = WHELPED_OR_LATER.includes(saved.status) && !WHELPED_OR_LATER.includes(prevStatus);
+    if (enteringWhelpBand) {
+      await maybePromptPairingWhelped(saved);
+    }
     if (GROW_OUT_STATUSES.includes(saved.status) && prevStatus !== saved.status) {
       await maybePromptGrowOut(saved);
     }
