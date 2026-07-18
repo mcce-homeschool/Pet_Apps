@@ -31,8 +31,8 @@ const els = {
 
 const blankLitter = () => ({
   pairing_id: '', dam_id: '', sire_id: '', nickname: '', whelp_date: '', litter_registration_number: '',
-  puppies_born_total: '', puppies_born_alive: '', puppies_born_deceased: '', status: '', notes: '',
-  expected_price_male: '', expected_price_female: '', expected_deposit_amount: ''
+  puppies_born_total: '', puppies_born_alive: '', puppies_born_deceased: '', puppies_born_abnormalities: '', status: '', notes: '',
+  expected_price_male: '', expected_price_female: '', expected_deposit_male: '', expected_deposit_female: ''
 });
 
 const ctx = {
@@ -109,11 +109,12 @@ function money(v) {
 
 function countsDisplay(l) {
   const has = (v) => v != null && v !== '';
-  if (!has(l.puppies_born_total) && !has(l.puppies_born_alive) && !has(l.puppies_born_deceased)) return '';
+  if (!has(l.puppies_born_total) && !has(l.puppies_born_alive) && !has(l.puppies_born_deceased) && !has(l.puppies_born_abnormalities)) return '';
   const parts = [];
   if (has(l.puppies_born_total)) parts.push(`${esc(String(l.puppies_born_total))} total`);
   if (has(l.puppies_born_alive)) parts.push(`${esc(String(l.puppies_born_alive))} alive`);
   if (has(l.puppies_born_deceased)) parts.push(`${esc(String(l.puppies_born_deceased))} deceased`);
+  if (has(l.puppies_born_abnormalities)) parts.push(`${esc(String(l.puppies_born_abnormalities))} with abnormalities`);
   return parts.join(' · ');
 }
 
@@ -135,8 +136,9 @@ function renderView() {
       ${row('Puppies born', countsDisplay(l))}
       ${row('Status', badge(LITTER_STATUS, l.status))}
       ${row('Expected price (male)', esc(money(l.expected_price_male)))}
+      ${row('Expected deposit (male)', esc(money(l.expected_deposit_male)))}
       ${row('Expected price (female)', esc(money(l.expected_price_female)))}
-      ${row('Expected deposit', esc(money(l.expected_deposit_amount)))}
+      ${row('Expected deposit (female)', esc(money(l.expected_deposit_female)))}
       ${row('Notes', l.notes ? esc(l.notes).replace(/\n/g, '<br>') : '')}
     </dl>`;
 }
@@ -184,9 +186,13 @@ function renderEdit() {
       ${field('Puppies born (total)', `<input id="f-puppies_born_total" type="number" min="0" value="${esc(l.puppies_born_total)}">`)}
       ${field('Born alive', `<input id="f-puppies_born_alive" type="number" min="0" value="${esc(l.puppies_born_alive)}">`)}
       ${field('Born deceased', `<input id="f-puppies_born_deceased" type="number" min="0" value="${esc(l.puppies_born_deceased)}">`)}
+      ${field('Born with abnormalities', `<input id="f-puppies_born_abnormalities" type="number" min="0" value="${esc(l.puppies_born_abnormalities)}">`)}
+      <div class="field field-wide"><h3 style="margin:8px 0 0;">Males — expected price &amp; deposit</h3></div>
       ${field('Expected price (male)', `<input id="f-expected_price_male" type="number" min="0" step="0.01" value="${esc(l.expected_price_male)}">`, { hint: 'Prefills a new sale\'s price when the puppy sold is male. Still editable per sale.' })}
+      ${field('Expected deposit (male)', `<input id="f-expected_deposit_male" type="number" min="0" step="0.01" value="${esc(l.expected_deposit_male)}">`, { hint: 'Prefills a new sale\'s deposit amount when the puppy sold is male. Still editable per sale.' })}
+      <div class="field field-wide"><h3 style="margin:8px 0 0;">Females — expected price &amp; deposit</h3></div>
       ${field('Expected price (female)', `<input id="f-expected_price_female" type="number" min="0" step="0.01" value="${esc(l.expected_price_female)}">`, { hint: 'Prefills a new sale\'s price when the puppy sold is female. Still editable per sale.' })}
-      ${field('Expected deposit', `<input id="f-expected_deposit_amount" type="number" min="0" step="0.01" value="${esc(l.expected_deposit_amount)}">`, { hint: 'Prefills a new sale\'s deposit amount for any puppy from this litter.' })}
+      ${field('Expected deposit (female)', `<input id="f-expected_deposit_female" type="number" min="0" step="0.01" value="${esc(l.expected_deposit_female)}">`, { hint: 'Prefills a new sale\'s deposit amount when the puppy sold is female. Still editable per sale.' })}
       <div class="field field-wide">
         <label class="check-inline"><input id="picker-archived" type="checkbox"${ctx.pickerArchived ? ' checked' : ''}> Include archived dogs/pairings in the pickers above</label>
       </div>
@@ -230,9 +236,11 @@ function readForm() {
     puppies_born_total: val('f-puppies_born_total'),
     puppies_born_alive: val('f-puppies_born_alive'),
     puppies_born_deceased: val('f-puppies_born_deceased'),
+    puppies_born_abnormalities: val('f-puppies_born_abnormalities'),
     expected_price_male: val('f-expected_price_male'),
     expected_price_female: val('f-expected_price_female'),
-    expected_deposit_amount: val('f-expected_deposit_amount'),
+    expected_deposit_male: val('f-expected_deposit_male'),
+    expected_deposit_female: val('f-expected_deposit_female'),
     notes: val('f-notes')
   };
 }
@@ -319,8 +327,8 @@ function cancel() {
 // Empty numeric strings become null so we don't persist '' where a number belongs.
 function normalizeCounts(candidate) {
   for (const k of [
-    'puppies_born_total', 'puppies_born_alive', 'puppies_born_deceased',
-    'expected_price_male', 'expected_price_female', 'expected_deposit_amount'
+    'puppies_born_total', 'puppies_born_alive', 'puppies_born_deceased', 'puppies_born_abnormalities',
+    'expected_price_male', 'expected_price_female', 'expected_deposit_male', 'expected_deposit_female'
   ]) {
     candidate[k] = candidate[k] === '' || candidate[k] == null ? null : Number(candidate[k]);
   }

@@ -76,10 +76,10 @@ async function init() {
     columns: [
       { header: 'Name', sortable: true, sortFn: nameAsc, cell: (c) => `<strong>${esc(c.name)}</strong>` },
       { header: 'Type', cell: (c) => badges(CONTACT_TYPE, c.contact_type) },
-      { header: 'Waitlist', sortable: true, sortFn: waitlistAsc, collapse: true, cell: (c) => c.waitlist_status && c.waitlist_status !== 'none' ? badge(WAITLIST_STATUS, c.waitlist_status) : '<span class=”faint”>—</span>' },
-      { header: 'Kennel', sortable: true, sortFn: kennelAsc, collapse: true, cell: (c) => c.kennel_id ? esc(kennelName(c.kennel_id)) : '<span class=”faint”>—</span>' },
-      { header: 'Phone', sortable: true, sortFn: phoneAsc, collapse: true, cell: (c) => c.phone ? esc(c.phone) : '<span class=”faint”>—</span>' },
-      { header: 'Email', sortable: true, sortFn: emailAsc, collapse: true, cell: (c) => c.email ? esc(c.email) : '<span class=”faint”>—</span>' }
+      { header: 'Waitlist', sortable: true, sortFn: waitlistAsc, collapse: true, cell: (c) => c.waitlist_status && c.waitlist_status !== 'none' ? badge(WAITLIST_STATUS, c.waitlist_status) : '<span class="faint">—</span>' },
+      { header: 'Kennel', sortable: true, sortFn: kennelAsc, collapse: true, cell: (c) => c.kennel_id ? esc(kennelName(c.kennel_id)) : '<span class="faint">—</span>' },
+      { header: 'Phone', sortable: true, sortFn: phoneAsc, collapse: true, cell: (c) => c.phone ? esc(c.phone) : '<span class="faint">—</span>' },
+      { header: 'Email', sortable: true, sortFn: emailAsc, collapse: true, cell: (c) => c.email ? esc(c.email) : '<span class="faint">—</span>' }
     ],
     onRowClick: (c) => { location.href = `contact.html?id=${encodeURIComponent(c.id)}`; },
     load: (o) => contactRepo.getAll(o),

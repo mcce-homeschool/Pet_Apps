@@ -117,7 +117,7 @@ and commonly blank at entry time.
 | **Contact** | `name` | `contact_type[]` (multi), `email`, `phone`, `address`, `kennel_id`, `waitlist_status`, `first_contact_source`, `notes`, `companion_note` (plain, unindexed — a per-recipient message **meant for the recipient's eyes**, shown on their companion share page; deliberately distinct from the private `notes`; the Companion feature's Layer-2 override of the per-type announcement, §20). Buyers are Contacts — **there is no Buyer table**. `address` also resolves an in-person stud service's away-board location (§19). |
 | **Kennel** | `kennel_name` | `is_own_kennel`, `preferred_tests[]`, `preferred_breeds[]`, `promote_nudge_enabled` (bool, default off), `promote_age_male_months`/`promote_age_female_months` (numbers — the promote-lifecycle nudge's per-kennel thresholds, §19). Lightweight; added inline from Contact form. |
 | **Pairing** | `sire_id`, `dam_id`, `pairing_type`, `status` | `method`, `planned_date`, `expected_due_date`, `notes`. Sire ≠ dam (hard block). |
-| **Litter** | `dam_id`, `sire_id`, `status` | `nickname` (plain, unindexed — optional friendly label for the litter, e.g. “Party of Five”; when set it leads the detail-page title and shows as its own column on the Litters list and report, searchable across all three; falls back to `dam × sire` when blank), `pairing_id`, `whelp_date`, `litter_registration_number`, `puppies_born_total/alive/deceased`, `expected_price_male`/`expected_price_female`/`expected_deposit_amount` (plain, unindexed — per-litter defaults; `sale.js` prefills a new Sale's `price` by the puppy's `sex` and its `deposit_amount` from these when the sale's dog has this `litter_id`, only into fields still empty, never clobbering a value already entered), `notes`. Litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
+| **Litter** | `dam_id`, `sire_id`, `status` | `nickname` (plain, unindexed — optional friendly label for the litter, e.g. “Party of Five”; when set it leads the detail-page title and shows as its own column on the Litters list and report, searchable across all three; falls back to `dam × sire` when blank), `pairing_id`, `whelp_date`, `litter_registration_number`, `puppies_born_total/alive/deceased/abnormalities` (the last a count, not mutually exclusive with alive/deceased — an alive or deceased puppy may also count here), `expected_price_male`/`expected_price_female`/`expected_deposit_male`/`expected_deposit_female` (plain, unindexed — per-litter defaults, grouped by sex on the detail page; `sale.js` prefills a new Sale's `price` and `deposit_amount` from the matching-sex pair by the puppy's `sex`, only into fields still empty, never clobbering a value already entered), `notes`. Litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
 | **Sale** | `dog_id`, `buyer_contact_id`, `placement_type`, `status` | `sale_date`, `price`, `deposit_amount`, `deposit_date`, `balance_paid_date`, `lead_source`, `notes`. Its own table (not a Dog field) so reserve/return/re-place stay distinct facts. |
 | **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `related_dog_id` (canonical Dog link, used only for `lease`/`co_own`/`other` types — where no linked Sale/StudService already reaches a dog; forced `null` for other types via `contractRepo.DOG_LINK_TYPES`/`normalizeLinks`), `related_contact_id` (canonical counterparty link — lessee/co-owner/partner — for the same `lease`/`co_own`/`other` types via `CONTACT_LINK_TYPES`; sale/stud contracts reach their counterparty through the linked Sale/StudService, so it stays `null` there and never double-sources; scopes a contract into the **partner** companion bundle, §20), `document_url` (plain, unindexed — a share link to the signed document, e.g. a Drive "anyone with the link" URL; carried as a *pointer* into the buyer bundle, §20), `signed_date`, `lease_start_date`/`lease_end_date` (lease type; UI shows them and hides Related sale/stud fields when `contract_type='lease'`), `title`, `terms_summary`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf for its own hard-delete (nothing points *at* a contract), but a contract itself points *at* its Dog via `related_dog_id` (guarded under `DOG_REFERENCES`) and its counterparty via `related_contact_id` (guarded under `CONTACT_REFERENCES`) — neither under `CONTRACT_REFERENCES`. |
 | **StudService** | `direction`, `our_dog_id`, `partner_dog_id`, `partner_contact_id`, `status` | `pairing_id`, `fee_amount`, `fee_structure`, `pick_status` (plain, unindexed — suggested `pending`/`claimed`, free text allowed; meaningful **only** when `fee_structure ∈ {pick_of_litter, flat_plus_pick}`, forced `null` otherwise so a `flat_fee`/`other` arrangement never shows a stray pick; feeds the partner companion bundle's compensation, §20), `result_notes`, `type` (`in_person`/`ai` — coarse physical-travel flag; `in_person` + `sent_date`/`returned_date` window feeds the away-board, §19), plus optional logistics dates. Covers both `incoming` and `outgoing`. |
@@ -272,12 +272,20 @@ One polymorphic table for all dated history. `subject_type ∈ {dog, pairing, li
   optional `event_end_date` end). Spans today: `medication`, `heat_cycle`, `boarding`.
 - `badge` — colour class.
 - `fields[]` — the small type-specific form written into `details{}`. Field types:
-  `text`, `textarea`, `number`, `date`, `combobox` (suggest-not-enforce).
+  `text`, `textarea`, `number` (optional `step`, e.g. for a decimal-accepting field),
+  `date`, `combobox` (suggest-not-enforce), `select` (enforced, options[] only).
 - `relatedContact: true` — surfaces the top-level `related_contact_id` FK (boarding,
   placement). Contacts on events are the canonical FK, never a `details` value.
 
 Test-bearing types (`genetic_test`, `breed_specific_test`, `ofa_pennhip`) feed the
 shared test vocabulary; `testTokensOf(event)` derives the test-name token(s).
+
+**Litter-wide cascade** (`litter.js`'s "Log event for whole litter" → `openEventForm`'s
+`cascadeTargets`): normally every checked puppy gets one Event with the *same*
+`details{}`. `weight_check` is the one exception — `eventForm.js`'s
+`PER_TARGET_CASCADE_FIELDS` names `weight_lbs`/`weight_oz` as per-target, so each
+checked puppy gets its own weight inputs while `time_of_day` stays a single shared
+field. Add a type to that map to give any other field the same per-puppy treatment.
 
 ### eventRepo reads (all siblings — deliberately never fused)
 
@@ -395,7 +403,7 @@ declined (or after sample data is later cleared), offer kennel setup.
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v21`) + a `PRECACHE_URLS` list of **every**
+- `CACHE_NAME` (currently `kennelos-shell-v33`) + a `PRECACHE_URLS` list of **every**
   app file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed
   file fails the whole install). `activate` deletes old caches. Fetch is

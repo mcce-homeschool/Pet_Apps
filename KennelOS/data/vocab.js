@@ -176,6 +176,15 @@ export const BOARDING_REASON_SUGGESTIONS = [
 // the app owns. No new event types come with it.
 export const COI_METHOD_SUGGESTIONS = ['genomic', 'pedigree', 'registry', 'other'];
 
+// Enforced choice list for the `abnormalities` event type's `Type` field —
+// common canine birth defects a breeder would record at whelping.
+export const ABNORMALITY_TYPES = [
+  'Cleft palate', 'Cleft lip', 'Umbilical hernia', 'Inguinal hernia',
+  'Anasarca (walrus puppy)', 'Swimmer puppy syndrome', 'Hydrocephalus',
+  'Heart murmur', 'Limb deformity', 'Atresia ani (imperforate anus)',
+  'Open fontanelle', 'Cryptorchidism', 'Other'
+];
+
 // --- Event type catalog (Data Model doc §5.2; Stage4.5 Addendum §C3/D1) ----
 // Each type carries a badge color and the type-specific `details` fields shown
 // as a short form (Build Brief B1: one small form per event_type, not a generic
@@ -195,8 +204,9 @@ export const COI_METHOD_SUGGESTIONS = ['genomic', 'pedigree', 'registry', 'other
 // field inside `details` (details.location stays a plain string; only a real
 // FK belongs at the top level).
 //
-// Field `type` is one of: text | textarea | date | number | combobox (a free-text
-// input with suggestions — suggest-not-enforce, never a validated enum).
+// Field `type` is one of: text | textarea | date | number (optional `step`) |
+// combobox (a free-text input with suggestions — suggest-not-enforce, never a
+// validated enum) | select (enforced choice from `options[]`).
 export const EVENT_TYPES = [
   { value: 'vaccination',        label: 'Vaccination',        badge: 'badge-blue',    subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'vaccine', label: 'Vaccine', type: 'text' }, { key: 'lot_number', label: 'Lot #', type: 'text' }, { key: 'next_due', label: 'Next due', type: 'date' }] },
@@ -224,8 +234,14 @@ export const EVENT_TYPES = [
     fields: [{ key: 'reason', label: 'Reason', type: 'text' }, { key: 'vet', label: 'Vet', type: 'text' }, { key: 'findings', label: 'Findings', type: 'textarea' }] },
   { value: 'injury',             label: 'Injury',             badge: 'badge-red',     subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'description', label: 'Description', type: 'textarea' }, { key: 'severity', label: 'Severity', type: 'text' }] },
+  { value: 'abnormalities',      label: 'Abnormalities',      badge: 'badge-red',     subjects: ['dog'], duration: 'instant',
+    fields: [{ key: 'type', label: 'Type', type: 'select', options: ABNORMALITY_TYPES }] },
   { value: 'weight_check',       label: 'Weight check',       badge: 'badge-neutral', subjects: ['dog'], duration: 'instant',
-    fields: [{ key: 'weight_lbs', label: 'Weight (lbs)', type: 'number' }] },
+    fields: [
+      { key: 'weight_lbs', label: 'Weight (lbs)', type: 'number' },
+      { key: 'weight_oz', label: 'Weight (oz)', type: 'number', step: '0.1' },
+      { key: 'time_of_day', label: 'AM/PM', type: 'select', options: ['AM', 'PM'] }
+    ] },
   { value: 'milestone',          label: 'Milestone',          badge: 'badge-green',   subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'description', label: 'Description', type: 'text' }] },
   { value: 'title_earned',       label: 'Title earned',       badge: 'badge-green',   subjects: ['dog'], duration: 'instant',

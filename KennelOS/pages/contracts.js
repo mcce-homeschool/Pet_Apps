@@ -9,7 +9,8 @@ const mount = document.getElementById('contract-list');
 const titleAsc = (a, b) => (a.title || '').localeCompare(b.title || '');
 const typeAsc = (a, b) => (a.contract_type || '').localeCompare(b.contract_type || '');
 const statusAsc = (a, b) => (a.status || '').localeCompare(b.status || '');
-const signedDateDesc = (a, b) => (b.signed_date || b.created_at || '').localeCompare(a.signed_date || a.created_at || '');
+const signedDateAsc = (a, b) => (a.signed_date || a.created_at || '').localeCompare(b.signed_date || b.created_at || '');
+const signedDateDesc = (a, b) => signedDateAsc(b, a);
 
 createListView({
   mount,
@@ -30,7 +31,7 @@ createListView({
     { header: 'Title', sortable: true, sortFn: titleAsc, cell: (c) => `<strong>${esc(c.title || '(untitled)')}</strong>` },
     { header: 'Type', sortable: true, sortFn: typeAsc, cell: (c) => badge(CONTRACT_TYPE, c.contract_type) },
     { header: 'Status', sortable: true, sortFn: statusAsc, cell: (c) => badge(CONTRACT_STATUS, c.status) },
-    { header: 'Signed date', sortable: true, sortFn: signedDateDesc, cell: (c) => c.signed_date ? esc(c.signed_date) : '<span class="faint">—</span>' }
+    { header: 'Signed date', sortable: true, sortFn: signedDateAsc, cell: (c) => c.signed_date ? esc(c.signed_date) : '<span class="faint">—</span>' }
   ],
   onRowClick: (c) => { location.href = `contract.html?id=${encodeURIComponent(c.id)}`; },
   load: (o) => contractRepo.getAll(o),

@@ -168,7 +168,7 @@ export async function seedSampleData() {
   const litter = await litterRepo.create({
     pairing_id: pairingP1.id, dam_id: juniper.id, sire_id: gunnar.id,
     whelp_date: '2025-08-20', litter_registration_number: 'THORN-L-2025-01',
-    puppies_born_total: 3, puppies_born_alive: 3, puppies_born_deceased: 0,
+    puppies_born_total: 3, puppies_born_alive: 3, puppies_born_deceased: 0, puppies_born_abnormalities: 0,
     status: 'closed'
   });
 
@@ -298,7 +298,7 @@ export async function seedSampleData() {
     { subject_id: fern.id, event_type: 'milestone', event_date: '2025-10-15', title: 'Eyes open',
       details: { description: 'Eyes open' } },
     { subject_id: fern.id, event_type: 'weight_check', event_date: '2026-06-01', title: 'Weight check',
-      details: { weight_lbs: 42 } },
+      details: { weight_lbs: 4, weight_oz: 2.5, time_of_day: 'AM' } },
     { subject_id: fern.id, event_type: 'vaccination', event_date: '2026-05-01', title: 'Puppy shots (2nd round)',
       details: { vaccine: 'DHPP', lot_number: 'C1029' } },
     { subject_id: fern.id, event_type: 'evaluation', event_date: '2026-06-15', title: 'Puppy evaluation',
@@ -314,7 +314,7 @@ export async function seedSampleData() {
     { subject_id: birch.id, event_type: 'milestone', event_date: '2025-10-15', title: 'Eyes open',
       details: { description: 'Eyes open' } },
     { subject_id: birch.id, event_type: 'weight_check', event_date: '2026-06-01', title: 'Weight check',
-      details: { weight_lbs: 48 } },
+      details: { weight_lbs: 4, weight_oz: 12.0, time_of_day: 'PM' } },
     { subject_id: birch.id, event_type: 'vaccination', event_date: '2026-05-01', title: 'Puppy shots (2nd round)',
       details: { vaccine: 'DHPP', lot_number: 'C1029' } },
     { subject_id: birch.id, event_type: 'genetic_test', event_date: '2026-06-20', title: 'Panel results',

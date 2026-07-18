@@ -69,7 +69,11 @@ export async function openEventForm(opts) {
     details: { ...(event?.details || prefill?.details || {}) },
     reminder_date: event?.reminder_date || '',
     cost: event?.cost ?? '',
-    notes: event?.notes || ''
+    notes: event?.notes || '',
+    // Cascade-only: per-target overrides keyed by target id (e.g. one weight
+    // per puppy on a litter-wide weight_check, while other detail fields —
+    // like time_of_day — stay shared across every target). Empty otherwise.
+    perTargetDetails: {}
   };
 
   const overlay = document.createElement('div');
@@ -78,22 +82,55 @@ export async function openEventForm(opts) {
   const modal = overlay.querySelector('.modal');
   document.body.appendChild(overlay);
 
+  // Per-litter weight_check cascade (Enhancements Batch — litter-wide weight
+  // logging): weight_lbs/weight_oz are collected once per checked puppy
+  // instead of one shared value applied to all; every other detail field
+  // (currently just time_of_day) stays shared across the whole cascade.
+  const PER_TARGET_CASCADE_FIELDS = { weight_check: ['weight_lbs', 'weight_oz'] };
+
+  function renderField(typeDef, f) {
+    const v = draft.details[f.key] ?? '';
+    if (f.type === 'textarea') {
+      return `<div class="field field-wide"><label>${esc(f.label)}</label><textarea data-detail="${esc(f.key)}">${esc(v)}</textarea></div>`;
+    }
+    if (f.type === 'combobox') {
+      const isTestField = TEST_VOCAB_FIELDS[typeDef.value] === f.key;
+      const dlId = `ef-dl-${f.key}`;
+      const opts = (isTestField ? testVocabulary : (f.options || [])).map((o) => `<option value="${esc(o)}"></option>`).join('');
+      return `<div class="field"><label>${esc(f.label)}</label><input data-detail="${esc(f.key)}" type="text" list="${dlId}" value="${esc(v)}"><datalist id="${dlId}">${opts}</datalist></div>`;
+    }
+    if (f.type === 'select') {
+      const opts = (f.options || []).map((o) => `<option value="${esc(o)}"${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('');
+      return `<div class="field"><label>${esc(f.label)}</label><select data-detail="${esc(f.key)}"><option value="">— select —</option>${opts}</select></div>`;
+    }
+    const inputType = f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text';
+    const stepAttr = f.type === 'number' && f.step ? ` step="${esc(f.step)}"` : '';
+    return `<div class="field"><label>${esc(f.label)}</label><input data-detail="${esc(f.key)}" type="${inputType}"${stepAttr} value="${esc(v)}"></div>`;
+  }
+
+  function perTargetFieldHtml(target, f) {
+    const v = draft.perTargetDetails[target.id]?.[f.key] ?? '';
+    const stepAttr = f.step ? ` step="${esc(f.step)}"` : '';
+    return `<div class="field"><label>${esc(target.label)} — ${esc(f.label)}</label>
+      <input data-cascade-detail="${esc(f.key)}" data-cascade-id="${esc(target.id)}" type="number"${stepAttr} value="${esc(v)}"></div>`;
+  }
+
   function detailFieldsHtml(typeDef) {
+    const perTargetKeys = isCascade ? (PER_TARGET_CASCADE_FIELDS[typeDef.value] || []) : [];
     if (!typeDef.fields.length) return '<p class="faint" style="margin:0;">No extra fields for this type — use the title and notes.</p>';
-    return `<div class="form-grid">` + typeDef.fields.map((f) => {
-      const v = draft.details[f.key] ?? '';
-      if (f.type === 'textarea') {
-        return `<div class="field field-wide"><label>${esc(f.label)}</label><textarea data-detail="${esc(f.key)}">${esc(v)}</textarea></div>`;
-      }
-      if (f.type === 'combobox') {
-        const isTestField = TEST_VOCAB_FIELDS[typeDef.value] === f.key;
-        const dlId = `ef-dl-${f.key}`;
-        const opts = (isTestField ? testVocabulary : (f.options || [])).map((o) => `<option value="${esc(o)}"></option>`).join('');
-        return `<div class="field"><label>${esc(f.label)}</label><input data-detail="${esc(f.key)}" type="text" list="${dlId}" value="${esc(v)}"><datalist id="${dlId}">${opts}</datalist></div>`;
-      }
-      const inputType = f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text';
-      return `<div class="field"><label>${esc(f.label)}</label><input data-detail="${esc(f.key)}" type="${inputType}" value="${esc(v)}"></div>`;
-    }).join('') + `</div>`;
+    if (!perTargetKeys.length) {
+      return `<div class="form-grid">` + typeDef.fields.map((f) => renderField(typeDef, f)).join('') + `</div>`;
+    }
+    const sharedFields = typeDef.fields.filter((f) => !perTargetKeys.includes(f.key));
+    const perTargetFieldDefs = typeDef.fields.filter((f) => perTargetKeys.includes(f.key));
+    const sharedHtml = sharedFields.length
+      ? `<div class="form-grid">` + sharedFields.map((f) => renderField(typeDef, f)).join('') + `</div>` : '';
+    const checkedTargets = cascadeTargets.filter((t) => cascadeChecked.has(t.id));
+    const perTargetHtml = checkedTargets.length
+      ? `<div class="form-grid" style="margin-top:10px;">` + checkedTargets.map((t) =>
+          perTargetFieldDefs.map((f) => perTargetFieldHtml(t, f)).join('')).join('') + `</div>`
+      : '<p class="faint" style="margin-top:10px;">Select at least one puppy above to enter its weight.</p>';
+    return sharedHtml + perTargetHtml;
   }
 
   function contactOptions(current) {
@@ -163,8 +200,13 @@ export async function openEventForm(opts) {
     if (isCascade) {
       modal.querySelectorAll('[data-cascade-target]').forEach((cb) => {
         cb.addEventListener('change', (e) => {
+          captureInputs();
           const id = e.target.dataset.cascadeTarget;
           if (e.target.checked) cascadeChecked.add(id); else cascadeChecked.delete(id);
+          // Only re-render when the current type has per-target fields (their
+          // rows track which puppies are checked); other types' shared fields
+          // don't depend on the checked set, so skip the redraw for those.
+          if (PER_TARGET_CASCADE_FIELDS[draft.event_type]?.length) render();
         });
       });
     }
@@ -186,6 +228,14 @@ export async function openEventForm(opts) {
     modal.querySelectorAll('[data-detail]').forEach((el) => {
       const val = el.value.trim();
       if (val !== '') draft.details[el.dataset.detail] = el.type === 'number' ? Number(val) : val;
+    });
+    modal.querySelectorAll('[data-cascade-detail]').forEach((el) => {
+      const id = el.dataset.cascadeId;
+      const key = el.dataset.cascadeDetail;
+      const val = el.value.trim();
+      draft.perTargetDetails[id] = draft.perTargetDetails[id] || {};
+      if (val !== '') draft.perTargetDetails[id][key] = Number(val);
+      else delete draft.perTargetDetails[id][key];
     });
   }
 
@@ -218,8 +268,13 @@ export async function openEventForm(opts) {
     try {
       let saved;
       if (isCascade) {
+        const perTargetKeys = PER_TARGET_CASCADE_FIELDS[draft.event_type] || [];
         saved = await Promise.all(
-          [...cascadeChecked].map((id) => HistoryEvent.create({ ...basePayload, subject_id: id }))
+          [...cascadeChecked].map((id) => HistoryEvent.create({
+            ...basePayload,
+            subject_id: id,
+            details: perTargetKeys.length ? { ...draft.details, ...(draft.perTargetDetails[id] || {}) } : draft.details
+          }))
         );
       } else {
         const payload = { ...basePayload, subject_id: subjectId };

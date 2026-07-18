@@ -182,7 +182,8 @@ Edges worth calling out:
 | surgery | dog | instant | | `{procedure, vet, outcome}` |
 | vet_visit | dog | instant | | `{reason, vet, findings}` |
 | injury | dog | instant | | `{description, severity}` |
-| weight_check | dog | instant | | `{weight_lbs}` — feeds future growth charts |
+| abnormalities | dog | instant | | `{type}` — enforced choice from `ABNORMALITY_TYPES` (common birth defects) |
+| weight_check | dog | instant | | `{weight_lbs, weight_oz, time_of_day}` — `weight_oz` accepts decimals; feeds future growth charts |
 | milestone | dog | instant | | `{description}` — e.g. eyes open, first steps |
 | evaluation | dog | instant | | `{evaluator, temperament_notes, structure_notes}` — structured temperament/structure assessment |
 | title_earned | dog | instant | | `{title_abbreviation, organization}` |
@@ -233,10 +234,12 @@ Edges worth calling out:
 | puppies_born_total | integer | | point-in-time fact recorded at whelping — kept even if some puppies aren't individually entered as Dog records right away |
 | puppies_born_alive | integer | | |
 | puppies_born_deceased | integer | | |
+| puppies_born_abnormalities | integer | | count of puppies born with an abnormality; overlaps alive/deceased rather than adding to them (an alive or deceased puppy may also be counted here) |
 | status | enum: expected / whelped / weaning / ready / placed / closed | ✓ | |
 | expected_price_male | decimal | | per-litter default; `sale.js` prefills a new Sale's `price` with this when the sold dog's `sex = male` and its `litter_id` points here, only if `price` is still empty |
 | expected_price_female | decimal | | same as above, for `sex = female` |
-| expected_deposit_amount | decimal | | per-litter default; prefills a new Sale's `deposit_amount` for any puppy from this litter, only if still empty |
+| expected_deposit_male | decimal | | per-litter default; prefills a new Sale's `deposit_amount` when the sold dog's `sex = male`, only if still empty |
+| expected_deposit_female | decimal | | same as above, for `sex = female` |
 | notes | text | | |
 | is_archived | boolean | ✓ | |
 
@@ -260,7 +263,7 @@ The puppy roster itself is **not stored on Litter** — it's derived by querying
 | dog_id | FK → Dog | ✓ | |
 | buyer_contact_id | FK → Contact | ✓ | Indexed. |
 | sale_date | date (`YYYY-MM-DD`) | | |
-| price / deposit_amount | decimal | | Prefilled on a new sale from the dog's `Litter.expected_price_male/_female`/`expected_deposit_amount` (§5.4) when `dog_id` names a puppy with a `litter_id`, only into fields still empty — a plain form prefill, not a stored link. |
+| price / deposit_amount | decimal | | Prefilled on a new sale from the dog's `Litter.expected_price_male/_female`/`expected_deposit_male/_female` (§5.4), matched by the dog's `sex`, when `dog_id` names a puppy with a `litter_id`, only into fields still empty — a plain form prefill, not a stored link. |
 | deposit_date / balance_paid_date | date (`YYYY-MM-DD`) | | |
 | placement_type | enum: pet / show / breeding_rights / co_own | ✓ | a `co_own` placement pairs naturally with adding the buyer to the dog's `co_owner_contact_ids` (a confirmed action, written through `dogRepo`) |
 | lead_source | string | | Free text with `<datalist>` autocomplete; how *this specific sale* came in. Prefills from the buyer's `first_contact_source` but may differ (same buyer, two dogs, two channels — which is why it can't live only on the person). Not indexed. |

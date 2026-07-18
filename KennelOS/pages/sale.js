@@ -52,7 +52,7 @@ async function loadRefs() {
 }
 
 // Prefills price/deposit_amount from the dog's litter (Litter.expected_price_male/
-// _female by the dog's sex, Litter.expected_deposit_amount either way) — only into
+// _female and expected_deposit_male/_female, both by the dog's sex) — only into
 // fields still empty, so it never clobbers a value already entered (same pattern as
 // the buyer's first_contact_source -> lead_source prefill below).
 function applyExpectedPricing() {
@@ -64,8 +64,10 @@ function applyExpectedPricing() {
       : dog.sex === 'female' ? litter.expected_price_female : null;
     if (expected != null) ctx.draft.price = expected;
   }
-  if (!ctx.draft.deposit_amount && litter.expected_deposit_amount != null) {
-    ctx.draft.deposit_amount = litter.expected_deposit_amount;
+  if (!ctx.draft.deposit_amount) {
+    const expected = dog.sex === 'male' ? litter.expected_deposit_male
+      : dog.sex === 'female' ? litter.expected_deposit_female : null;
+    if (expected != null) ctx.draft.deposit_amount = expected;
   }
 }
 
