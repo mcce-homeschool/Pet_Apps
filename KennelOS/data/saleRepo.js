@@ -6,6 +6,7 @@
 import { db } from './db.js';
 import { makeRepo } from './repoBase.js';
 import { SALE_REFERENCES } from './referenceRegistry.js';
+import { contactRepo } from './contactRepo.js';
 
 const base = makeRepo('sales', SALE_REFERENCES);
 
@@ -26,14 +27,21 @@ export const saleRepo = {
 
   async create(data) {
     validateSale(data);
-    return base.create(data);
+    const saved = await base.create(data);
+    // Auto-tag the referral source as a Buyer referrer (a stored role on the
+    // Contact — the canonical FK stays sales.referred_by_contact_id, this is just
+    // a convenience label so the contact reads as a referrer at a glance).
+    await contactRepo.ensureType(saved.referred_by_contact_id, 'buyer_referrer');
+    return saved;
   },
 
   async update(id, changes) {
     const existing = await db.sales.get(id);
     if (!existing) throw new Error(`sales: no record with id ${id}`);
     validateSale({ ...existing, ...changes });
-    return base.update(id, changes);
+    const saved = await base.update(id, changes);
+    await contactRepo.ensureType(saved.referred_by_contact_id, 'buyer_referrer');
+    return saved;
   },
 
   // Every Sale ever recorded for a dog — a dog may have several over its life

@@ -20,6 +20,7 @@ import {
 } from '../data/vocab.js';
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { renderTimeline } from '../assets/timeline.js';
+import { renderExpensePanel } from '../assets/expensePanel.js';
 import { openEventFromQuery } from '../assets/eventForm.js';
 import { renderPedigree } from '../assets/pedigree.js';
 
@@ -39,6 +40,7 @@ const els = {
   plannedTests: document.getElementById('planned-tests-section'),
   healthTests: document.getElementById('health-tests-section'),
   timeline: document.getElementById('timeline-section'),
+  expenses: document.getElementById('expenses-section'),
   pairings: document.getElementById('pairings-section'),
   sales: document.getElementById('sales-section'),
   studServices: document.getElementById('stud-services-section'),
@@ -516,6 +518,7 @@ function enterEdit() {
   renderPlannedTestsSection(); // hide while editing the profile too
   renderHealthTestsSection(); // hide while editing the profile
   renderTimelineSection(); // hide timeline while editing the profile
+  renderExpensesSection(); // hide expenses while editing too
   renderPairingsSection(); // hide pairings while editing too
   renderSalesSection();
   renderStudServicesSection();
@@ -535,6 +538,7 @@ function cancel() {
   renderPlannedTestsSection(eventsP);
   renderHealthTestsSection(eventsP);
   renderTimelineSection();
+  renderExpensesSection();
   renderPairingsSection();
   renderSalesSection();
   renderStudServicesSection();
@@ -627,6 +631,18 @@ function renderTimelineSection() {
     renderTimeline({ mount: els.timeline, subjectType: 'dog', subjectId: ctx.original.id });
   } else {
     els.timeline.innerHTML = '';
+  }
+}
+
+// Expenses (Financials ledger) for this dog — costs attached directly, plus any
+// captured from its events (both carry subject_type='dog'). Hidden while editing
+// the profile, same discipline as the timeline.
+function renderExpensesSection() {
+  if (!els.expenses) return;
+  if (ctx.mode === 'view' && ctx.original) {
+    renderExpensePanel({ mount: els.expenses, subjectType: 'dog', subjectId: ctx.original.id });
+  } else {
+    els.expenses.innerHTML = '';
   }
 }
 
@@ -1046,6 +1062,7 @@ function renderAll() {
   renderPlannedTestsSection(eventsP);
   renderHealthTestsSection(eventsP);
   renderTimelineSection();
+  renderExpensesSection();
   renderPairingsSection();
   renderSalesSection();
   renderStudServicesSection();

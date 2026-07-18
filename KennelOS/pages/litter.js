@@ -10,6 +10,7 @@ import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX, descriptor } from '../d
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { addDaysToYMD } from '../data/dateUtils.js';
 import { renderTimeline } from '../assets/timeline.js';
+import { renderExpensePanel } from '../assets/expensePanel.js';
 import { openAddPuppyForm, openAddPuppiesForm } from '../assets/puppyForm.js';
 import { openEventForm, openEventFromQuery } from '../assets/eventForm.js';
 
@@ -30,7 +31,8 @@ const els = {
   body: document.getElementById('profile-body'),
   error: document.getElementById('page-error'),
   roster: document.getElementById('roster-section'),
-  timeline: document.getElementById('timeline-section')
+  timeline: document.getElementById('timeline-section'),
+  expenses: document.getElementById('expenses-section')
 };
 
 const blankLitter = () => ({
@@ -328,6 +330,7 @@ function enterEdit() {
   renderProfileActions();
   renderRosterSection();
   renderTimelineSection();
+  renderExpensesSection();
 }
 
 function cancel() {
@@ -338,6 +341,7 @@ function cancel() {
   renderProfileActions();
   renderRosterSection();
   renderTimelineSection();
+  renderExpensesSection();
 }
 
 // Empty numeric strings become null so we don't persist '' where a number belongs.
@@ -524,6 +528,14 @@ function renderTimelineSection() {
     els.timeline.innerHTML = '';
   }
 }
+function renderExpensesSection() {
+  if (!els.expenses) return;
+  if (ctx.mode === 'view' && ctx.original) {
+    renderExpensePanel({ mount: els.expenses, subjectType: 'litter', subjectId: ctx.original.id });
+  } else {
+    els.expenses.innerHTML = '';
+  }
+}
 
 // --- Top-level render ----------------------------------------------------
 function renderTitle() {
@@ -555,6 +567,7 @@ function renderAll() {
   else renderEdit();
   renderRosterSection();
   renderTimelineSection();
+  renderExpensesSection();
 }
 
 async function main() {

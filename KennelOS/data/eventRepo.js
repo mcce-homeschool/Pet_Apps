@@ -5,14 +5,17 @@
 // NOTE the module/variable naming: we use `eventRepo` / `HistoryEvent`, never a
 // bare `Event`, which would collide with the DOM global (CLAUDE.md).
 //
-// Events are leaf records — nothing points at an Event — so there is no reference
-// registry and hardDelete is always allowed.
+// Events were leaf records until the Financials ledger: now an Expense can point
+// at an event via expenses.event_id (the one canonical event↔cost link). So
+// hardDelete is guarded by EVENT_REFERENCES — an event with a linked expense
+// can't be destroyed out from under its cost (archive it, or clear the cost).
 import { db } from './db.js';
 import { makeRepo } from './repoBase.js';
+import { EVENT_REFERENCES } from './referenceRegistry.js';
 import { EVENT_TYPES, descriptor } from './vocab.js';
 import { todayYMD } from './dateUtils.js';
 
-const base = makeRepo('events', null);
+const base = makeRepo('events', EVENT_REFERENCES);
 
 const REQUIRED_FIELDS = ['subject_type', 'subject_id', 'event_type', 'event_date', 'title'];
 const SUBJECT_TYPES = ['dog', 'pairing', 'litter'];

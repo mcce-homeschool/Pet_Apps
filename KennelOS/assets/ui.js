@@ -38,6 +38,15 @@ export function fmtDate(ymd) {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { dateStyle: 'medium' });
 }
 
+// Money display: a number -> "$1,234.50", untouched if null/blank. Kept here
+// alongside fmtDate so every screen formats currency the same way.
+export function fmtMoney(amount) {
+  if (amount == null || amount === '') return '';
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return '';
+  return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+}
+
 // Read ?id= (or any param) from the current URL.
 export function param(name) {
   return new URLSearchParams(location.search).get(name);

@@ -7,9 +7,10 @@
 // `relatedContact: true` type (boarding, placement) shows a top-level Contact
 // picker — the canonical events.related_contact_id FK, never a `details` field.
 import { HistoryEvent } from '../data/eventRepo.js';
+import { expenseRepo } from '../data/expenseRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import { kennelRepo } from '../data/kennelRepo.js';
-import { eventTypesFor, descriptor, EVENT_TYPES } from '../data/vocab.js';
+import { eventTypesFor, descriptor, EVENT_TYPES, EXPENSE_CATEGORIES, defaultExpenseCategoryFor } from '../data/vocab.js';
 import { esc, todayYMD, param } from './ui.js';
 import { attachNewContactButton } from './contactPicker.js';
 
@@ -41,6 +42,12 @@ export async function openEventForm(opts) {
   // both dog-subject) — loaded once up front so the picker is ready on first render.
   const contacts = await contactRepo.getAll({ includeArchived: true });
 
+  // The Cost field is a convenience writer into the Financials ledger: an event's
+  // cost lives in the `expenses` table (linked by expenses.event_id), not on the
+  // Event itself. When editing, load any existing linked expense so the field
+  // shows/edits the real ledger row instead of a phantom event field.
+  const linkedExpense = isEdit ? await expenseRepo.getOneByEvent(event.id) : null;
+
   // Shared test vocabulary (Test Planning Addendum §3) — union of every active
   // own-kennel's authored panel plus every distinct test token already logged.
   // Loaded once up front like `contacts`; only test-bearing types read it.
@@ -68,7 +75,8 @@ export async function openEventForm(opts) {
     title: event?.title || prefill?.title || '',
     details: { ...(event?.details || prefill?.details || {}) },
     reminder_date: event?.reminder_date || '',
-    cost: event?.cost ?? '',
+    cost: linkedExpense?.amount ?? '',
+    expenseCategory: linkedExpense?.category || defaultExpenseCategoryFor(event?.event_type || prefill?.event_type || types[0].value),
     notes: event?.notes || '',
     // Cascade-only: per-target overrides keyed by target id (e.g. one weight
     // per puppy on a litter-wide weight_check, while other detail fields —
@@ -175,7 +183,10 @@ export async function openEventForm(opts) {
       <div id="ef-details">${detailFieldsHtml(typeDef)}</div>
       <div class="form-grid" style="margin-top:14px;">
         <div class="field"><label>Reminder date</label><input id="ef-reminder" type="date" value="${esc(draft.reminder_date)}"></div>
-        <div class="field"><label>Cost</label><input id="ef-cost" type="number" step="0.01" value="${esc(draft.cost)}"></div>
+        <div class="field"><label>Cost</label><input id="ef-cost" type="number" step="0.01" min="0" value="${esc(draft.cost)}">
+          <span class="field-hint">Logged to Financials against this ${esc(subjectType)}${linkedExpense ? '' : ' (leave blank for none)'}.</span></div>
+        <div class="field"><label>Cost category</label>
+          <select id="ef-cost-category">${EXPENSE_CATEGORIES.map((c) => `<option value="${esc(c.value)}"${c.value === draft.expenseCategory ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select></div>
         <div class="field field-wide"><label>Notes</label><textarea id="ef-notes">${esc(draft.notes)}</textarea></div>
       </div>
       <div id="ef-error"></div>
@@ -223,6 +234,7 @@ export async function openEventForm(opts) {
     draft.title = modal.querySelector('#ef-title').value.trim();
     draft.reminder_date = modal.querySelector('#ef-reminder').value;
     draft.cost = modal.querySelector('#ef-cost').value;
+    draft.expenseCategory = modal.querySelector('#ef-cost-category').value;
     draft.notes = modal.querySelector('#ef-notes').value;
     draft.details = {};
     modal.querySelectorAll('[data-detail]').forEach((el) => {
@@ -262,9 +274,10 @@ export async function openEventForm(opts) {
       title: draft.title,
       details: draft.details,
       reminder_date: draft.reminder_date || null,
-      cost: draft.cost === '' ? null : Number(draft.cost),
       notes: draft.notes
     };
+    const amount = draft.cost === '' ? null : Number(draft.cost);
+    if (amount != null && !Number.isFinite(amount)) { showError('Cost must be a number.'); return; }
     try {
       let saved;
       if (isCascade) {
@@ -276,16 +289,47 @@ export async function openEventForm(opts) {
             details: perTargetKeys.length ? { ...draft.details, ...(draft.perTargetDetails[id] || {}) } : draft.details
           }))
         );
+        // One linked expense per created event when a cost was entered (each
+        // puppy gets its own ledger row for the same amount/category).
+        if (amount != null) {
+          await Promise.all(saved.map((ev) => writeLinkedExpense(ev, subjectType, ev.subject_id, amount, draft)));
+        }
       } else {
         const payload = { ...basePayload, subject_id: subjectId };
         saved = isEdit
           ? await HistoryEvent.update(event.id, payload)
           : await HistoryEvent.create(payload);
+        await syncLinkedExpense(saved, subjectType, subjectId, amount, draft, linkedExpense);
       }
       close();
       onSaved?.(saved);
     } catch (e) {
       showError(e.message || String(e));
+    }
+  }
+
+  // Create a fresh expense linked to a just-created event (cascade path).
+  function writeLinkedExpense(ev, sType, sId, amount, d) {
+    return expenseRepo.create({
+      event_id: ev.id, subject_type: sType, subject_id: sId,
+      amount, category: d.expenseCategory, expense_date: d.event_date, vendor: '', notes: ''
+    });
+  }
+
+  // Reconcile the single-subject event's linked expense with the Cost field:
+  // upsert when a cost is present, remove the linked row when it's cleared.
+  async function syncLinkedExpense(ev, sType, sId, amount, d, existing) {
+    if (amount != null) {
+      if (existing) {
+        await expenseRepo.update(existing.id, {
+          amount, category: d.expenseCategory, expense_date: d.event_date,
+          subject_type: sType, subject_id: sId
+        });
+      } else {
+        await writeLinkedExpense(ev, sType, sId, amount, d);
+      }
+    } else if (existing) {
+      await expenseRepo.hardDelete(existing.id);
     }
   }
 

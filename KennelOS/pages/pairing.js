@@ -12,6 +12,7 @@ import { esc, badge, fmtDate, param, confirmAction } from '../assets/ui.js';
 import { addDaysToYMD } from '../data/dateUtils.js';
 import { renderTimeline } from '../assets/timeline.js';
 import { openEventFromQuery } from '../assets/eventForm.js';
+import { renderExpensePanel } from '../assets/expensePanel.js';
 
 const els = {
   title: document.getElementById('pairing-title'),
@@ -22,7 +23,8 @@ const els = {
   error: document.getElementById('page-error'),
   litter: document.getElementById('litter-section'),
   studService: document.getElementById('stud-service-section'),
-  timeline: document.getElementById('timeline-section')
+  timeline: document.getElementById('timeline-section'),
+  expenses: document.getElementById('expenses-section')
 };
 
 // Set when arriving via "Create Pairing from this Stud Service" — the id of the
@@ -232,6 +234,7 @@ function enterEdit() {
   renderLitterSection();   // hide derived panels while editing the profile
   renderStudServiceSection();
   renderTimelineSection();
+  renderExpensesSection();
 }
 
 function cancel() {
@@ -243,6 +246,7 @@ function cancel() {
   renderLitterSection();
   renderStudServiceSection();
   renderTimelineSection();
+  renderExpensesSection();
 }
 
 async function save() {
@@ -349,6 +353,14 @@ function renderTimelineSection() {
     els.timeline.innerHTML = '';
   }
 }
+function renderExpensesSection() {
+  if (!els.expenses) return;
+  if (ctx.mode === 'view' && ctx.original) {
+    renderExpensePanel({ mount: els.expenses, subjectType: 'pairing', subjectId: ctx.original.id });
+  } else {
+    els.expenses.innerHTML = '';
+  }
+}
 
 // --- Top-level render ----------------------------------------------------
 function renderTitle() {
@@ -372,6 +384,7 @@ function renderAll() {
   renderLitterSection();
   renderStudServiceSection();
   renderTimelineSection();
+  renderExpensesSection();
 }
 
 async function main() {

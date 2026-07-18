@@ -1,9 +1,10 @@
 // timeline.js — renders a subject's Event History (Event list, newest first)
 // with add/edit/archive/delete. Reused for dogs now; pairings/litters later.
 import { HistoryEvent } from '../data/eventRepo.js';
+import { expenseRepo } from '../data/expenseRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import { EVENT_TYPES, descriptor } from '../data/vocab.js';
-import { esc, badge, fmtDate, todayYMD, confirmAction } from './ui.js';
+import { esc, badge, fmtDate, fmtMoney, todayYMD, confirmAction } from './ui.js';
 import { openEventForm } from './eventForm.js';
 
 // Compact "label: value" summary of an event's type-specific details.
@@ -57,11 +58,15 @@ export function renderTimeline(opts) {
   }
 
   async function refresh() {
-    const [events, contacts] = await Promise.all([
+    const [events, contacts, expenses] = await Promise.all([
       HistoryEvent.getForSubject(subjectType, subjectId, { includeArchived: true }),
-      contactRepo.getAll({ includeArchived: true })
+      contactRepo.getAll({ includeArchived: true }),
+      expenseRepo.getForSubject(subjectType, subjectId, { includeArchived: true })
     ]);
     const contactsById = new Map(contacts.map((c) => [c.id, c]));
+    // A cost now lives in the ledger (expenses.event_id), not on the event —
+    // map each event to its linked expense's amount for display.
+    const costByEvent = new Map(expenses.filter((x) => x.event_id && !x.is_archived).map((x) => [x.event_id, x.amount]));
     const visible = showArchived ? events : events.filter((e) => !e.is_archived);
     if (!visible.length) {
       body.innerHTML = `<div class="empty-state">No events logged yet.</div>`;
@@ -77,7 +82,7 @@ export function renderTimeline(opts) {
       return `<li class="timeline-item${upcoming ? ' event-upcoming' : ''}${ev.is_archived ? ' row-archived' : ''}" data-idx="${i}">
         <div class="timeline-date">${dateCell(ev, today)}${upcoming ? ' <span class="badge badge-amber">Upcoming</span>' : ''}</div>
         <div class="timeline-main">
-          <div>${badge(EVENT_TYPES, ev.event_type)} <strong>${esc(ev.title)}</strong>${ev.cost != null ? ` <span class="faint">$${esc(ev.cost)}</span>` : ''}</div>
+          <div>${badge(EVENT_TYPES, ev.event_type)} <strong>${esc(ev.title)}</strong>${costByEvent.has(ev.id) ? ` <span class="faint">${esc(fmtMoney(costByEvent.get(ev.id)))}</span>` : ''}</div>
           ${meta ? `<div class="muted" style="font-size:14px;">${meta}</div>` : ''}
           ${ev.reminder_date ? `<div class="faint" style="font-size:13px;">⏰ reminder ${esc(fmtDate(ev.reminder_date))}</div>` : ''}
         </div>
@@ -102,8 +107,14 @@ export function renderTimeline(opts) {
       refresh();
     } else if (act === 'delete') {
       if (confirmAction(`Permanently delete “${ev.title}”? This cannot be undone.`)) {
-        await HistoryEvent.hardDelete(ev.id);
-        refresh();
+        try {
+          await HistoryEvent.hardDelete(ev.id);
+          refresh();
+        } catch (e) {
+          // Blocked by a linked expense (EVENT_REFERENCES): clear the event's
+          // Cost first (or archive the event) — the message names the blocker.
+          window.alert(e.message || String(e));
+        }
       }
     }
   }

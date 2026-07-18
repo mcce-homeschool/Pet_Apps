@@ -22,6 +22,7 @@ function displayRow(k, blocked) {
     <td class="col-collapse">${k.prefix ? esc(k.prefix) : '<span class="faint">—</span>'}</td>
     <td class="col-collapse">${k.location ? esc(k.location) : '<span class="faint">—</span>'}</td>
     <td class="pill-row" style="justify-content:flex-end;">
+      <a class="btn btn-sm" href="kennel.html?id=${encodeURIComponent(k.id)}">Open →</a>
       ${k.is_own_kennel ? `<button class="btn btn-sm" data-act="toggle-tests" data-id="${esc(k.id)}">${testsOpenId === k.id ? 'Hide tests' : 'Preferred tests'}</button>` : ''}
       <button class="btn btn-sm" data-act="edit" data-id="${esc(k.id)}">Edit</button>
       <button class="btn btn-sm" data-act="archive" data-id="${esc(k.id)}">${k.is_archived ? 'Unarchive' : 'Archive'}</button>

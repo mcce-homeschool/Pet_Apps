@@ -17,6 +17,7 @@ import { litterRepo } from './litterRepo.js';
 import { saleRepo } from './saleRepo.js';
 import { contractRepo } from './contractRepo.js';
 import { studServiceRepo } from './studServiceRepo.js';
+import { expenseRepo } from './expenseRepo.js';
 import { monthsFromToday, daysFromToday } from './dateUtils.js';
 import {
   findBlockingReferences, DOG_REFERENCES, PAIRING_REFERENCES, LITTER_REFERENCES,
@@ -62,7 +63,7 @@ export async function seedSampleData() {
   const manifest = {
     seededAt: new Date().toISOString(),
     dogs: [], events: [], contacts: [], kennels: [], pairings: [], litters: [],
-    sales: [], contracts: [], stud_services: []
+    sales: [], contracts: [], stud_services: [], expenses: []
   };
 
   // Kennels — Thornfield is the user's own kennel; Meadow Ridge is Dana Ruiz's
@@ -243,6 +244,9 @@ export async function seedSampleData() {
     direction: 'outgoing', our_dog_id: birch.id, partner_dog_id: nell.id, partner_contact_id: ellen.id,
     fee_amount: 800, fee_structure: 'flat_plus_pick', pick_status: 'pending',
     pairing_id: pairingP3.id, type: 'in_person', sent_date: daysFromToday(-3),
+    // referred_by (Referral tracking): Dana sent this arrangement our way — the
+    // repo auto-tags her contact as a 'stud_referrer'.
+    referred_by_contact_id: dana.id,
     status: 'completed', result_notes: 'Successful AI breeding; pregnancy confirmed by ultrasound.'
   });
   const studServiceContract = await contractRepo.create({
@@ -262,6 +266,9 @@ export async function seedSampleData() {
     dog_id: hazel.id, buyer_contact_id: priya.id, sale_date: '2025-12-20',
     price: 2500, deposit_amount: 500, deposit_date: '2025-11-01', balance_paid_date: '2025-12-20',
     placement_type: 'pet', status: 'delivered', lead_source: 'Instagram',
+    // referred_by (Referral tracking): Tessa referred Priya — auto-tags Tessa as
+    // a 'buyer_referrer' (she already carries the role in this seed).
+    referred_by_contact_id: tessa.id,
     notes: 'Went home with a family in Concord, NH — regular updates from the family.'
   });
   const hazelContract = await contractRepo.create({
@@ -376,6 +383,34 @@ export async function seedSampleData() {
     manifest.events.push(saved.id);
   }
 
+  // Financials ledger (Expense) — a spread across all four subject types so the
+  // report, the per-subject panels, and the kennel-wide view all have content.
+  // One row is captured FROM an event (the canonical expenses.event_id link) to
+  // demonstrate the 🔗 tag; a fresh vet_visit event is created to hang it on.
+  const vetVisit = await HistoryEvent.create({
+    subject_type: 'dog', subject_id: juniper.id, event_type: 'vet_visit',
+    event_date: daysFromToday(-20), title: 'Sick visit',
+    details: { reason: 'Ear infection', vet: 'Dr. Patricia Nguyen' }
+  });
+  manifest.events.push(vetVisit.id);
+
+  const expenses = [
+    // Kennel-wide overhead (subject_type='kennel') — the whole point of the new table.
+    { subject_type: 'kennel', subject_id: thornfield.id, amount: 1200, category: 'facility', expense_date: daysFromToday(-45), vendor: 'Whelping barn lease', notes: 'Quarterly' },
+    { subject_type: 'kennel', subject_id: thornfield.id, amount: 340.50, category: 'food', expense_date: daysFromToday(-30), vendor: 'Chewy', notes: 'Bulk kibble' },
+    { subject_type: 'kennel', subject_id: thornfield.id, amount: 65, category: 'registration', expense_date: daysFromToday(-60), vendor: 'AKC', notes: 'Kennel name renewal' },
+    { subject_type: 'kennel', subject_id: thornfield.id, amount: 120, category: 'marketing', expense_date: daysFromToday(-15), vendor: 'Website hosting', notes: 'Annual' },
+    // Dog- and litter-level costs.
+    { subject_type: 'dog', subject_id: juniper.id, amount: 199, category: 'testing', expense_date: '2023-03-01', vendor: 'Embark', notes: 'Breeder panel' },
+    { subject_type: 'litter', subject_id: litter.id, amount: 210.75, category: 'supplies', expense_date: '2025-08-25', vendor: 'Whelping supplies', notes: 'Pads, scale, ID collars' },
+    // Captured-from-event row (links back to the vet visit above).
+    { event_id: vetVisit.id, subject_type: 'dog', subject_id: juniper.id, amount: 145, category: 'veterinary', expense_date: daysFromToday(-20), vendor: 'Green Mountain Vet', notes: 'Exam + medication' }
+  ];
+  for (const x of expenses) {
+    const saved = await expenseRepo.create(x);
+    manifest.expenses.push(saved.id);
+  }
+
   // Companion messaging (§20): seed the per-type templates so the demo's share
   // pages have Thornfield branding. These are localStorage config (not manifest
   // records); clearSampleData resets them back to defaults alongside the records.
@@ -452,7 +487,11 @@ async function findContaminatingReferences(manifest) {
     litters: new Set(manifest.litters || []),
     sales: new Set(manifest.sales || []),
     stud_services: new Set(manifest.stud_services || []),
-    contracts: new Set(manifest.contracts || [])
+    contracts: new Set(manifest.contracts || []),
+    // Sample expenses point at manifest dogs/litters/pairings/kennels via
+    // subject_id — list them here so the demo's OWN expenses aren't mistaken for
+    // real (contaminating) references during clear.
+    expenses: new Set(manifest.expenses || [])
   };
 
   // conflicts: Map key `${entityType}:${id}` -> { entityType, id, refs: [{label, row}] }
@@ -497,6 +536,7 @@ export async function clearSampleData({ archiveConflicting = false } = {}) {
   manifest.sales = manifest.sales || [];
   manifest.contracts = manifest.contracts || [];
   manifest.stud_services = manifest.stud_services || [];
+  manifest.expenses = manifest.expenses || [];
 
   const conflicts = await findContaminatingReferences(manifest);
 
@@ -526,6 +566,7 @@ export async function clearSampleData({ archiveConflicting = false } = {}) {
   const studServiceIdsToDelete = manifest.stud_services.filter((id) => !archivedIds.stud_service.includes(id));
 
   const counts = {
+    expenses: manifest.expenses.length,
     events: manifest.events.length,
     litters: litterIdsToDelete.length,
     pairings: pairingIdsToDelete.length,
@@ -548,7 +589,10 @@ export async function clearSampleData({ archiveConflicting = false } = {}) {
   // unreferenced set, so it bypasses the single-record hardDelete guard (which
   // exists to protect one record at a time, not to bulk-clear a whole known
   // set — brief §5).
-  await db.transaction('rw', db.events, db.contracts, db.litters, db.stud_services, db.pairings, db.sales, db.dogs, db.contacts, db.kennels, async () => {
+  await db.transaction('rw', db.expenses, db.events, db.contracts, db.litters, db.stud_services, db.pairings, db.sales, db.dogs, db.contacts, db.kennels, async () => {
+    // Expenses first: they point at events AND dogs/litters/pairings/kennels, so
+    // they must clear before any of those (same dependency discipline as below).
+    if (manifest.expenses.length) await db.expenses.bulkDelete(manifest.expenses);
     if (manifest.events.length) await db.events.bulkDelete(manifest.events);
     if (manifest.contracts.length) await db.contracts.bulkDelete(manifest.contracts);
     if (litterIdsToDelete.length) await db.litters.bulkDelete(litterIdsToDelete);

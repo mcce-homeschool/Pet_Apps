@@ -78,6 +78,7 @@ export const CONTACT_TYPE = [
   { value: 'vet',            label: 'Vet',            badge: 'badge-blue' },
   { value: 'groomer',        label: 'Groomer',        badge: 'badge-purple' },
   { value: 'buyer_referrer', label: 'Buyer referrer', badge: 'badge-amber' },
+  { value: 'stud_referrer',  label: 'Stud referrer',  badge: 'badge-amber' },
   { value: 'co_owner',       label: 'Co-owner',       badge: 'badge-neutral' },
   { value: 'buyer',          label: 'Buyer',          badge: 'badge-blue' },
   { value: 'other',          label: 'Other',          badge: 'badge-gray' }
@@ -294,4 +295,48 @@ export const EVENT_TYPES = [
 // Event types loggable against a given subject_type.
 export function eventTypesFor(subjectType) {
   return EVENT_TYPES.filter((t) => t.subjects.includes(subjectType));
+}
+
+// --- Financials (the Expense ledger) --------------------------------------
+// The controlled category vocabulary for an Expense. Same shape as every other
+// vocab here (value/label/badge) so dropdowns and badges read from one place.
+export const EXPENSE_CATEGORIES = [
+  { value: 'food',         label: 'Food & nutrition',   badge: 'badge-green' },
+  { value: 'veterinary',   label: 'Veterinary',         badge: 'badge-blue' },
+  { value: 'testing',      label: 'Health testing',     badge: 'badge-purple' },
+  { value: 'registration', label: 'Registration',       badge: 'badge-neutral' },
+  { value: 'supplies',     label: 'Supplies',           badge: 'badge-amber' },
+  { value: 'facility',     label: 'Facility',           badge: 'badge-amber' },
+  { value: 'boarding',     label: 'Boarding & travel',  badge: 'badge-amber' },
+  { value: 'stud_fee',     label: 'Stud fee',           badge: 'badge-purple' },
+  { value: 'marketing',    label: 'Marketing',          badge: 'badge-blue' },
+  { value: 'insurance',    label: 'Insurance',          badge: 'badge-neutral' },
+  { value: 'other',        label: 'Other',              badge: 'badge-gray' }
+];
+
+// What an Expense can attach to. Polymorphic like the Event, but its own list:
+// events are dog/pairing/litter history; expenses add `kennel` so kennel-wide
+// overhead has a home. There is no `general` subject — program-wide overhead is
+// logged against your own kennel (single canonical home, no null subject_id).
+export const EXPENSE_SUBJECT_TYPES = [
+  { value: 'dog',     label: 'Dog' },
+  { value: 'litter',  label: 'Litter' },
+  { value: 'pairing', label: 'Pairing' },
+  { value: 'kennel',  label: 'Kennel' }
+];
+
+// Suggested default category when a cost is captured from an event, keyed by
+// event_type. Only a starting point — the event form's category dropdown lets
+// the user override before saving. Anything unmapped defaults to 'other'.
+const EVENT_TYPE_EXPENSE_CATEGORY = {
+  vaccination: 'veterinary', preventative: 'veterinary', illness: 'veterinary',
+  surgery: 'veterinary', vet_visit: 'veterinary', injury: 'veterinary',
+  medication: 'veterinary', abnormalities: 'veterinary',
+  genetic_test: 'testing', ofa_pennhip: 'testing', breed_specific_test: 'testing',
+  progesterone_test: 'testing', ultrasound: 'veterinary',
+  boarding: 'boarding'
+};
+
+export function defaultExpenseCategoryFor(eventType) {
+  return EVENT_TYPE_EXPENSE_CATEGORY[eventType] || 'other';
 }

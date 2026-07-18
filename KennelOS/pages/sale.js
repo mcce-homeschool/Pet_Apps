@@ -27,7 +27,7 @@ const els = {
 const blankSale = () => ({
   dog_id: '', buyer_contact_id: '', sale_date: '', price: '', deposit_amount: '',
   deposit_date: '', balance_paid_date: '', placement_type: '', lead_source: '',
-  status: '', notes: ''
+  referred_by_contact_id: '', status: '', notes: ''
 });
 
 const ctx = {
@@ -125,6 +125,7 @@ function renderView() {
       ${row('Deposit', esc(money(s.deposit_amount)) + (s.deposit_date ? ` <span class="faint">(${esc(fmtDate(s.deposit_date))})</span>` : ''))}
       ${row('Balance paid', s.balance_paid_date ? esc(fmtDate(s.balance_paid_date)) : '')}
       ${row('Lead source', esc(s.lead_source))}
+      ${row('Referred by', s.referred_by_contact_id ? `<a href="contact.html?id=${encodeURIComponent(s.referred_by_contact_id)}">${esc(contactName(s.referred_by_contact_id) || '—')}</a>` : '')}
       ${row('Notes', s.notes ? esc(s.notes).replace(/\n/g, '<br>') : '')}
     </dl>`;
 }
@@ -153,6 +154,7 @@ function renderEdit() {
       ${field('Deposit date', `<input id="f-deposit_date" type="date" value="${esc(s.deposit_date)}">`)}
       ${field('Balance paid date', `<input id="f-balance_paid_date" type="date" value="${esc(s.balance_paid_date)}">`)}
       ${field('Lead source', `<input id="f-lead_source" type="text" list="lead-source-list" value="${esc(s.lead_source)}"><datalist id="lead-source-list">${sourceList}</datalist>`, { hint: 'How this specific sale came in. Prefills from the buyer, but may differ.' })}
+      ${field('Referred by', `<select id="f-referred_by_contact_id">${contactOptions(s.referred_by_contact_id)}</select>`, { hint: 'The contact who referred this buyer. Tags them as a Buyer referrer automatically.' })}
       <div class="field field-wide">
         <label class="check-inline"><input id="picker-archived" type="checkbox"${ctx.pickerArchived ? ' checked' : ''}> Include archived dogs/contacts in the pickers above</label>
       </div>
@@ -182,12 +184,12 @@ function renderEdit() {
     }
     renderEdit();
   });
-  attachNewContactButton(document.getElementById('f-buyer_contact_id'), {
-    onCreated: (contact) => {
-      ctx.allContacts.push(contact);
-      ctx.contactsById.set(contact.id, contact);
-    }
-  });
+  const onNewContact = (contact) => {
+    ctx.allContacts.push(contact);
+    ctx.contactsById.set(contact.id, contact);
+  };
+  attachNewContactButton(document.getElementById('f-buyer_contact_id'), { onCreated: onNewContact });
+  attachNewContactButton(document.getElementById('f-referred_by_contact_id'), { onCreated: onNewContact });
 }
 
 function readForm() {
@@ -204,6 +206,7 @@ function readForm() {
     deposit_date: val('f-deposit_date'),
     balance_paid_date: val('f-balance_paid_date'),
     lead_source: val('f-lead_source').trim(),
+    referred_by_contact_id: val('f-referred_by_contact_id') || null,
     notes: val('f-notes')
   };
 }

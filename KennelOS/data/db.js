@@ -53,16 +53,26 @@ export const db = new Dexie('KennelOSBreedingApp');
 //    to reach a contact through. Indexed like every other canonical Contract FK
 //    (so contractRepo.getByContact is an index probe) and guarded in
 //    CONTACT_REFERENCES. Forced null for other types (contractRepo.normalizeLinks).
+//  - `expenses` (Financials ledger) is the single home for money spent. It is
+//    polymorphic like events — '[subject_type+subject_id]' compound index —
+//    with subject_type ∈ {dog, litter, pairing, kennel}, so a cost can attach to
+//    any of them (kennel-wide overhead lives on subject_type='kennel'). Its
+//    `event_id` is the ONE canonical link between an event and its cost: a cost
+//    entered on the event form is written here carrying the event's id, and the
+//    event/timeline just query it back (expenseRepo.getByEvent) — Event no longer
+//    stores a `cost` field. Indexed on event_id (fast "cost for this event"),
+//    category (report filter), and expense_date (report range).
 db.version(1).stores({
   dogs:          'id, sire_id, dam_id, litter_id, breeder_kennel_id, owner_contact_id, *co_owner_contact_ids, status, ownership_type, sex, breed, kennel_id, is_archived',
   events:        'id, [subject_type+subject_id], event_type, event_date, reminder_date, related_dog_id, related_contact_id, is_archived',
+  expenses:      'id, event_id, [subject_type+subject_id], category, expense_date, is_archived',
   contacts:      'id, kennel_id, waitlist_status, is_archived',
   kennels:       'id, is_archived',
   pairings:      'id, sire_id, dam_id, status, pairing_type, is_archived',
   litters:       'id, pairing_id, sire_id, dam_id, status, whelp_date, is_archived',
-  sales:         'id, dog_id, buyer_contact_id, status, placement_type, is_archived',
+  sales:         'id, dog_id, buyer_contact_id, referred_by_contact_id, status, placement_type, is_archived',
   contracts:     'id, contract_type, status, related_sale_id, related_stud_service_id, related_dog_id, related_contact_id, is_archived',
-  stud_services: 'id, our_dog_id, partner_dog_id, partner_contact_id, direction, status, pairing_id, is_archived'
+  stud_services: 'id, our_dog_id, partner_dog_id, partner_contact_id, referred_by_contact_id, direction, status, pairing_id, is_archived'
 });
 
 // --- First-run storage durability ----------------------------------------

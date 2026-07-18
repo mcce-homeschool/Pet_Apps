@@ -8,6 +8,7 @@
 import { db } from './db.js';
 import { makeRepo } from './repoBase.js';
 import { STUD_SERVICE_REFERENCES } from './referenceRegistry.js';
+import { contactRepo } from './contactRepo.js';
 import { todayYMD } from './dateUtils.js';
 
 const base = makeRepo('stud_services', STUD_SERVICE_REFERENCES);
@@ -27,14 +28,20 @@ export const studServiceRepo = {
 
   async create(data) {
     validateStudService(data);
-    return base.create(data);
+    const saved = await base.create(data);
+    // Auto-tag the referral source as a Stud referrer (canonical FK stays
+    // stud_services.referred_by_contact_id; this is a convenience role label).
+    await contactRepo.ensureType(saved.referred_by_contact_id, 'stud_referrer');
+    return saved;
   },
 
   async update(id, changes) {
     const existing = await db.stud_services.get(id);
     if (!existing) throw new Error(`stud_services: no record with id ${id}`);
     validateStudService({ ...existing, ...changes });
-    return base.update(id, changes);
+    const saved = await base.update(id, changes);
+    await contactRepo.ensureType(saved.referred_by_contact_id, 'stud_referrer');
+    return saved;
   },
 
   // The stud service(s) linked to a pairing — derived, since Pairing carries no

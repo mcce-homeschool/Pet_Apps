@@ -10,7 +10,8 @@ const KEYS = {
   myKennelId: 'kennelOS.myKennelId',
   myContactId: 'kennelOS.myContactId',
   myKennelSetupSkipped: 'kennelOS.myKennelSetupSkipped',
-  companion: 'kennelOS.companion'
+  companion: 'kennelOS.companion',
+  expensesMigrated: 'kennelOS.expensesMigrated'
 };
 
 export function getLastBackupDate() {
@@ -144,6 +145,17 @@ export function setCompanionSettings(type, values) {
   store[type] = { ...(store[type] || {}), ...values };
   localStorage.setItem(KEYS.companion, JSON.stringify(store));
   return getCompanionSettings(type);
+}
+
+// Financials migration flag — set once the one-time Event.cost → Expense fold
+// has run (expenseRepo.migrateEventCosts). Cleared by Reset App along with every
+// other key, after which the migration re-runs harmlessly (no event has a cost).
+export function getExpensesMigrated() {
+  return localStorage.getItem(KEYS.expensesMigrated) === '1';
+}
+
+export function markExpensesMigrated() {
+  localStorage.setItem(KEYS.expensesMigrated, '1');
 }
 
 // Full app reset (Reset App to Start): drop every key this app owns in

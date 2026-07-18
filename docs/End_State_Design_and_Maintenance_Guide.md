@@ -118,10 +118,11 @@ and commonly blank at entry time.
 | **Kennel** | `kennel_name` | `is_own_kennel`, `preferred_tests[]`, `preferred_breeds[]`, `promote_nudge_enabled` (bool, default off), `promote_age_male_months`/`promote_age_female_months` (numbers — the promote-lifecycle nudge's per-kennel thresholds, §19). Lightweight; added inline from Contact form. |
 | **Pairing** | `sire_id`, `dam_id`, `pairing_type`, `status` | `method`, `planned_date` (displayed as "Planned first date" — the first planned/tie date), `last_observed_date` (plain, unindexed — a subsequent observed tie/breeding date), `expected_due_date` (prefilled on the detail page as 63 days after `planned_date` when still empty, never clobbering a deliberate edit), `notes`. Sire ≠ dam (hard block). |
 | **Litter** | `dam_id`, `sire_id`, `status` | `nickname` (plain, unindexed — optional friendly label for the litter, e.g. “Party of Five”; when set it leads the detail-page title and shows as its own column on the Litters list and report, searchable across all three; falls back to `dam × sire` when blank), `pairing_id`, `whelp_date`, `estimated_ready_date` (plain, unindexed — prefilled on the detail page as 8 weeks/56 days after `whelp_date` when still empty, never clobbering a deliberate edit), `litter_registration_number`, `puppies_born_total/alive/deceased/abnormalities` (the last a count, not mutually exclusive with alive/deceased — an alive or deceased puppy may also count here), `expected_price_male`/`expected_price_female`/`expected_deposit_male`/`expected_deposit_female` (plain, unindexed — per-litter defaults, grouped by sex on the detail page; `sale.js` prefills a new Sale's `price` and `deposit_amount` from the matching-sex pair by the puppy's `sex`, only into fields still empty, never clobbering a value already entered), `notes`. Litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
-| **Sale** | `dog_id`, `buyer_contact_id`, `placement_type`, `status` | `sale_date`, `price`, `deposit_amount`, `deposit_date`, `balance_paid_date`, `lead_source`, `notes`. Its own table (not a Dog field) so reserve/return/re-place stay distinct facts. |
+| **Sale** | `dog_id`, `buyer_contact_id`, `placement_type`, `status` | `sale_date`, `price`, `deposit_amount`, `deposit_date`, `balance_paid_date`, `lead_source`, `referred_by_contact_id` (indexed FK → the Contact who referred this buyer; `CONTACT_REFERENCES`; on save `saleRepo` auto-tags that contact with the `buyer_referrer` role via `contactRepo.ensureType`), `notes`. Its own table (not a Dog field) so reserve/return/re-place stay distinct facts. |
 | **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `related_dog_id` (canonical Dog link, used only for `lease`/`co_own`/`other` types — where no linked Sale/StudService already reaches a dog; forced `null` for other types via `contractRepo.DOG_LINK_TYPES`/`normalizeLinks`), `related_contact_id` (canonical counterparty link — lessee/co-owner/partner — for the same `lease`/`co_own`/`other` types via `CONTACT_LINK_TYPES`; sale/stud contracts reach their counterparty through the linked Sale/StudService, so it stays `null` there and never double-sources; scopes a contract into the **partner** companion bundle, §20), `document_url` (plain, unindexed — a share link to the signed document, e.g. a Drive "anyone with the link" URL; carried as a *pointer* into the buyer bundle, §20), `signed_date`, `lease_start_date`/`lease_end_date` (lease type; UI shows them and hides Related sale/stud fields when `contract_type='lease'`), `title`, `terms_summary`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf for its own hard-delete (nothing points *at* a contract), but a contract itself points *at* its Dog via `related_dog_id` (guarded under `DOG_REFERENCES`) and its counterparty via `related_contact_id` (guarded under `CONTACT_REFERENCES`) — neither under `CONTRACT_REFERENCES`. |
-| **StudService** | `direction`, `our_dog_id`, `partner_dog_id`, `partner_contact_id`, `status` | `pairing_id`, `fee_amount`, `fee_structure`, `pick_status` (plain, unindexed — suggested `pending`/`claimed`, free text allowed; meaningful **only** when `fee_structure ∈ {pick_of_litter, flat_plus_pick}`, forced `null` otherwise so a `flat_fee`/`other` arrangement never shows a stray pick; feeds the partner companion bundle's compensation, §20), `result_notes`, `type` (`in_person`/`ai` — coarse physical-travel flag; `in_person` + `sent_date`/`returned_date` window feeds the away-board, §19), plus optional logistics dates. Covers both `incoming` and `outgoing`. |
-| **Event** | `subject_type`, `subject_id`, `event_type`, `event_date`, `title` | `event_end_date`, `reminder_date`, `reminder_dismissed`, `related_dog_id`, `related_contact_id`, `details{}`, `cost`, `notes`. See §8. |
+| **StudService** | `direction`, `our_dog_id`, `partner_dog_id`, `partner_contact_id`, `status` | `pairing_id`, `fee_amount`, `fee_structure`, `pick_status` (plain, unindexed — suggested `pending`/`claimed`, free text allowed; meaningful **only** when `fee_structure ∈ {pick_of_litter, flat_plus_pick}`, forced `null` otherwise so a `flat_fee`/`other` arrangement never shows a stray pick; feeds the partner companion bundle's compensation, §20), `result_notes`, `type` (`in_person`/`ai` — coarse physical-travel flag; `in_person` + `sent_date`/`returned_date` window feeds the away-board, §19), `referred_by_contact_id` (indexed FK → the Contact who referred this arrangement; `CONTACT_REFERENCES`; on save `studServiceRepo` auto-tags that contact with the `stud_referrer` role via `contactRepo.ensureType`), plus optional logistics dates. Covers both `incoming` and `outgoing`. |
+| **Event** | `subject_type`, `subject_id`, `event_type`, `event_date`, `title` | `event_end_date`, `reminder_date`, `reminder_dismissed`, `related_dog_id`, `related_contact_id`, `details{}`, `notes`. See §8. **No `cost` field** — a cost entered on the event form is written to the Expense ledger (`expenses.event_id` = the event) and read back via `expenseRepo.getByEvent`; see the Expense row below and §21. |
+| **Expense** | `subject_type` (`dog`/`litter`/`pairing`/`kennel`), `subject_id`, `amount`, `category`, `expense_date` | `event_id` (nullable FK → the Event a cost was captured from — the one canonical event↔cost link; reverse is `expenseRepo.getByEvent`), `vendor`, `notes`. The Financials ledger: the single home for money spent. Polymorphic like Event; `kennel`-subject rows are kennel-wide overhead. Leaf entity (`EXPENSE_REFERENCES` empty). See §21. |
 
 ### 4.2 Relationship direction — the sixth design principle
 
@@ -141,6 +142,10 @@ derived query, never a second stored pointer.** This is why:
   `contractRepo.getBySale`/`getByStudService`/`getByDog`/`getByContact` are the reverse.
 - A Dog's children, a Contact's dogs, a Kennel's contacts — all derived queries over
   the indexed FK, never stored back-pointers.
+- Expense→Event is stored as `Expense.event_id` (the money owns the link); an event's
+  cost is the query `expenseRepo.getByEvent`. There is no `Event.expense_id`/`Event.cost`.
+  Expense→subject (dog/litter/pairing/kennel) is the polymorphic
+  `[subject_type+subject_id]`; a subject's expenses are `expenseRepo.getForSubject`.
 
 When you need "the reverse of X," write a query. Do not add a mirror field.
 
@@ -155,7 +160,7 @@ When you need "the reverse of X," write a query. Do not add a mirror field.
 
 ## 5. Dexie schema (`data/db.js`)
 
-DB name: `KennelOSBreedingApp`. All nine tables live in a **single collapsed
+DB name: `KennelOSBreedingApp`. All ten tables live in a **single collapsed
 `version(1)` block**. Indexes:
 
 ```
@@ -164,20 +169,29 @@ dogs:          id, sire_id, dam_id, litter_id, breeder_kennel_id,
                sex, breed, kennel_id, is_archived
 events:        id, [subject_type+subject_id], event_type, event_date,
                reminder_date, related_dog_id, related_contact_id, is_archived
+expenses:      id, event_id, [subject_type+subject_id], category,
+               expense_date, is_archived
 contacts:      id, kennel_id, waitlist_status, is_archived
 kennels:       id, is_archived
 pairings:      id, sire_id, dam_id, status, pairing_type, is_archived
 litters:       id, pairing_id, sire_id, dam_id, status, whelp_date, is_archived
-sales:         id, dog_id, buyer_contact_id, status, placement_type, is_archived
+sales:         id, dog_id, buyer_contact_id, referred_by_contact_id, status,
+               placement_type, is_archived
 contracts:     id, contract_type, status, related_sale_id,
                related_stud_service_id, related_dog_id, related_contact_id, is_archived
-stud_services: id, our_dog_id, partner_dog_id, partner_contact_id, direction,
-               status, pairing_id, is_archived
+stud_services: id, our_dog_id, partner_dog_id, partner_contact_id,
+               referred_by_contact_id, direction, status, pairing_id, is_archived
 ```
 
 Index notes:
-- `events.[subject_type+subject_id]` is a **compound** index (fast per-subject
-  timeline). Do not split it.
+- `events.[subject_type+subject_id]` **and** `expenses.[subject_type+subject_id]`
+  are **compound** indexes (fast per-subject timeline / ledger). Do not split them.
+- `expenses.event_id` is indexed so `expenseRepo.getByEvent` (the reverse of the
+  event↔cost link) is an index probe. `expenses.category`/`expense_date` back the
+  Financials report's filters.
+- `sales.referred_by_contact_id` and `stud_services.referred_by_contact_id` are the
+  referral FKs — indexed like every other canonical Contact FK, guarded in
+  `CONTACT_REFERENCES`.
 - `dogs.*co_owner_contact_ids` is a **multi-entry** index ("dogs co-owned by X").
 - `events.reminder_date` is indexed for the reminder engine's range probe. Every
   other canonical FK is indexed so reverse lookups are index probes, not scans.
@@ -230,6 +244,12 @@ Notable repo specifics:
 - **kennelRepo**: `preferred_tests`/`preferred_breeds` authoring (dedupe-on-write;
   remove drops membership only, never purges a token another event may need);
   `getVocabulary`/`getBreedVocabulary` union over own-kennels.
+- **expenseRepo**: `getForSubject`, `getByEvent`/`getOneByEvent`, `total(rows)`, and
+  the one-time `migrateEventCosts()` (folds legacy `Event.cost` into the ledger,
+  guarded by the `expensesMigrated` settings flag; called from `app.js` boot). See §21.
+- **contactRepo.ensureType(id, type)**: adds a `contact_type` role if missing (no-op
+  otherwise). `saleRepo`/`studServiceRepo` call it on save to auto-tag a
+  `referred_by_contact_id` as `buyer_referrer`/`stud_referrer`.
 
 > Module naming trap: the Event repo's JS object is `HistoryEvent`/`eventRepo`,
 > **never a bare `Event`** — that would collide with the DOM global.
@@ -243,10 +263,17 @@ is the normal remove and never cascades**.
 
 - Each entity has a declared array of every FK that can point at it
   (`DOG_REFERENCES`, `CONTACT_REFERENCES`, …). `CONTACT_REFERENCES` now includes
-  `contracts.related_contact_id` (a lease/co_own/other contract's counterparty), so
-  a contact documented on a contract can't be hard-deleted out from under it.
-  `Contract` is itself a leaf (empty `CONTRACT_REFERENCES` — nothing points *at* a
-  contract).
+  `contracts.related_contact_id` (a lease/co_own/other contract's counterparty) plus
+  `sales.referred_by_contact_id` and `stud_services.referred_by_contact_id` (referral
+  sources), so a contact documented on any of those can't be hard-deleted out from
+  under it. `Contract` and `Expense` are leaves (empty `CONTRACT_REFERENCES` /
+  `EXPENSE_REFERENCES` — nothing points *at* them).
+- **`EVENT_REFERENCES`** is new: an Event used to be a leaf, but `expenses.event_id`
+  now points at it, so an event carrying a linked expense is hard-delete-blocked
+  (archive it, or clear the Cost first). `eventRepo` is `makeRepo('events', EVENT_REFERENCES)`.
+- `DOG_/LITTER_/PAIRING_/KENNEL_REFERENCES` each gained an `expenses.subject_id` entry
+  (compound-index + discriminator), so a subject can't be hard-deleted out from under
+  its expenses.
 - `findBlockingReferences(registry, id)` counts matching rows per entry and returns
   human-readable `{label, count}` blockers. `hardDelete` throws
   `ReferenceBlockedError` if any exist.
@@ -267,6 +294,12 @@ silently allow orphaning.
 One polymorphic table for all dated history. `subject_type ∈ {dog, pairing, litter}`
 + `subject_id` say what it's attached to. The type catalog lives in `vocab.js`
 `EVENT_TYPES`; each type carries:
+
+> **Cost lives in the ledger, not on the Event.** The event form still shows a
+> "Cost" (+ "Cost category") field, but on save it upserts an `Expense` carrying
+> `event_id` = this event and the event's own subject; clearing the field removes
+> that linked expense. The timeline reads the amount back via
+> `expenseRepo.getByEvent`. See §21.
 - `subjects[]` — which subject types may log it (`eventTypesFor(subjectType)` filters).
 - `duration` — `'instant'` (single date) or `'span'` (`event_date` start,
   optional `event_end_date` end). Spans today: `medication`, `heat_cycle`, `boarding`.
@@ -403,7 +436,7 @@ declined (or after sample data is later cleared), offer kennel setup.
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v34`) + a `PRECACHE_URLS` list of **every**
+- `CACHE_NAME` (currently `kennelos-shell-v36`) + a `PRECACHE_URLS` list of **every**
   app file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed
   file fails the whole install). `activate` deletes old caches. Fetch is
@@ -490,12 +523,14 @@ Hubs & landing: `today`, `dogs`, `breeding`, `contacts`, `sales`, `reports`,
 `index.html`.
 Dogs: `dog` (detail), `roster`, `pedigree`.
 Breeding: `pairings`/`pairing`, `litters`/`litter`, `active-breeding`, `live-births`.
-People: `contact`.
+People: `contact`, `kennels` (list) / `kennel` (detail — a lean read-only profile
+whose real job is hosting that kennel's Expenses ledger; editing kennels stays on
+the `kennels` list). Both map to the People hub in `HUB_CHILDREN`.
 Placements/contracts: `sale`/`sales`, `stud-service`/`stud-services`,
 `contract`/`contracts`.
 Today cluster: `dashboard`, `reminders`, `upcoming`, `board`, `scheduled-placements`.
 Reports: `litters-report`, `stud-services-report`, `placements-report`,
-`health-tests-report`.
+`health-tests-report`, `financials-report` (the Financials/Expense ledger report, §21).
 Import pages: `dog-import`, `contact-import`, `pairing-import`, `litter-import`,
 `sale-import`, `event-import`, `stud-service-import`, `kennel-tests-import`.
 
@@ -523,7 +558,6 @@ Don't assume these exist; several are explicitly deferred "open doors":
 - Genotype / Mendelian carrier-risk analysis; test-completeness audit.
 - A recurrence-rule engine (recurrence = the "log the next one" workflow on the
   event; `reminder_date` is the only future-dated field).
-- A financial ledger.
 - Photos / attachments (no `attachments` table, no Photos tab, no thumbnails).
 - Pairing/litter-subject events in the CSV importer (dog-subject only).
 
@@ -753,6 +787,64 @@ link is self-evident.
 `Contract.document_url`, `StudService.pick_status`, `Contact.companion_note` — the
 last three plain/unindexed. `companionExport.js` and the console/shell are pure
 composition + projection; no two-way pointers, every reverse stays a query.
+
+---
+
+## 21. Financials — the Expense ledger
+
+The single home for money spent. One `expenses` table (§4/§5), polymorphic like
+Event: `subject_type ∈ {dog, litter, pairing, kennel}` + `subject_id`. Kennel-wide
+overhead (facility, bulk food, registration dues, marketing) lives on
+`subject_type='kennel'`; there is deliberately **no `general` subject** — program
+overhead is logged against your own kennel, so there is never a null `subject_id`.
+Revenue is **not** here (it stays on `Sale.price`/`deposit_amount` and
+`StudService.fee_amount`); this table is costs only.
+
+### The event↔cost link (one canonical direction)
+
+`Expense.event_id` is the **only** stored link between an event and its cost:
+
+- **Event form → ledger.** The event form's "Cost" (+ "Cost category") field is a
+  convenience writer: on save (`assets/eventForm.js`) it upserts an `Expense` carrying
+  `event_id` = the saved event and the event's own subject; clearing the Cost
+  hard-deletes that linked expense. Cascade (litter-wide) events create one linked
+  expense per created event. Event stores **no `cost` field**.
+- **Ledger → event (display).** `timeline.js` reads amounts back via
+  `expenseRepo.getByEvent` and shows a `🔗 event` tag on linked ledger rows.
+- **Ledger → event (create).** In `assets/expensePanel.js`, a dog/litter/pairing
+  expense with no `event_id` offers "Log event →": it opens the event form for that
+  subject and, on save, back-fills the new event's id onto the expense. No mirror
+  field — the reverse is always the `getByEvent` query.
+
+### Surfaces
+
+- **`assets/expensePanel.js`** — the reusable per-subject ledger panel (running total,
+  add/edit/archive/delete, its own add-expense modal). Mounted on the dog, litter,
+  pairing, and **kennel** detail pages (the last via the new lean `pages/kennel.*`,
+  reached from the Kennels list's "Open →").
+- **`pages/financials-report.*`** — the program-wide report (summary card with grand
+  total + per-category breakdown, then the standard `reportView` table with
+  category/subject-type/year filters and CSV export). Linked from `pages/reports.html`.
+
+### Migration & safety
+
+- `expenseRepo.migrateEventCosts()` folds any pre-existing `Event.cost` into linked
+  expenses once (guarded by the `expensesMigrated` settings flag; run from `app.js`
+  boot; idempotent; a no-op after Reset App since no event then has a cost).
+- **Companion export is safe by construction** — `companionExport.js` is a positive
+  allow-list (§20), so `expenses` never appears in any bundle. Financials do not leak.
+- **Hard-delete guards** (§7): an event with a linked expense, and a subject with any
+  expense, are archive-only until the expense is removed.
+
+## 22. Referral tracking (Sale / StudService "Referred by")
+
+`Sale.referred_by_contact_id` and `StudService.referred_by_contact_id` are indexed FKs
+→ Contact (§4/§5), guarded in `CONTACT_REFERENCES`. Each page's form has a "Referred by"
+picker (any contact; the stud page uses a general picker, not its breeder-only partner
+one). On save the repo calls `contactRepo.ensureType` to auto-tag the referrer with the
+`buyer_referrer` / `stud_referrer` role (`CONTACT_TYPE` vocab — `stud_referrer` is new).
+The tag is a convenience label; the canonical link stays the FK on the Sale/StudService,
+and a contact's referrals are the reverse query over the indexed FK.
 
 ---
 

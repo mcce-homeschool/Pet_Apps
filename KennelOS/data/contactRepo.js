@@ -27,6 +27,20 @@ export const contactRepo = {
     return base.update(id, changes);
   },
 
+  // Add a role to a contact's `contact_type` multi-select if it isn't already
+  // there, leaving any other roles intact. Used to auto-tag referral sources when
+  // a Sale/StudService names them as "Referred by" (buyer_referrer / stud_referrer).
+  // A no-op (returns the contact unchanged) when the role is already present or the
+  // contact is missing — safe to call on every save.
+  async ensureType(contactId, type) {
+    if (!contactId) return null;
+    const c = await db.contacts.get(contactId);
+    if (!c) return null;
+    const types = c.contact_type || [];
+    if (types.includes(type)) return c;
+    return base.update(contactId, { contact_type: [...types, type] });
+  },
+
   // Dogs owned OR co-owned by this contact — powers the Contact Detail list
   // (read-only there; ownership is edited from the Dog record). Uses the
   // owner_contact_id index and the *co_owner_contact_ids multi-entry index.

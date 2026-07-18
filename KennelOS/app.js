@@ -6,6 +6,7 @@
 import { renderNav } from './nav.js';
 import { requestPersistentStorage } from './data/db.js';
 import { wasPersistRequested, markPersistRequested } from './data/settings.js';
+import { expenseRepo } from './data/expenseRepo.js';
 import { maybeShowFirstRunPrompt, renderSampleBanner } from './assets/sampleDataUI.js';
 import { maybeShowKennelSetupPrompt, renderKennelBanner } from './assets/kennelSetupUI.js';
 
@@ -38,6 +39,9 @@ function boot() {
   renderNav();
   registerServiceWorker();
   firstRunPersistence();
+  // One-time fold of legacy Event.cost values into the Financials ledger. Guarded
+  // by a settings flag inside the repo, so it's a cheap no-op after the first run.
+  expenseRepo.migrateEventCosts().catch(() => { /* non-fatal */ });
   renderSampleBanner();
   renderKennelBanner();
   firstRunFlow();

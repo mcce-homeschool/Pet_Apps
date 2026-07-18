@@ -30,7 +30,7 @@ const els = {
 const blankStudService = () => ({
   direction: '', our_dog_id: '', partner_dog_id: '', partner_contact_id: '',
   fee_amount: '', fee_structure: '', pick_status: '', pairing_id: '', status: '', result_notes: '', notes: '',
-  sent_date: '', returned_date: '', type: ''
+  sent_date: '', returned_date: '', type: '', referred_by_contact_id: ''
 });
 
 // pick_status is only meaningful when the fee structure includes a pick component
@@ -128,6 +128,16 @@ function contactOptions(current) {
   return `<option value="">— select —</option>` + opts;
 }
 
+// Any contact (unlike the breeder-only partner picker) — a referrer needn't be
+// a breeder in your network.
+function referrerContactOptions(current) {
+  const opts = ctx.allContacts
+    .filter((c) => ctx.pickerArchived || !c.is_archived || c.id === current)
+    .map((c) => `<option value="${esc(c.id)}"${c.id === current ? ' selected' : ''}>${esc(c.name)}${c.is_archived ? ' (archived)' : ''}</option>`)
+    .join('');
+  return `<option value="">— none —</option>` + opts;
+}
+
 function pairingOptions(current) {
   const opts = ctx.allPairings
     .filter((p) => ctx.pickerArchived || !p.is_archived || p.id === current)
@@ -159,6 +169,7 @@ function renderView() {
       ${feeHasPick(s.fee_structure) ? row('Pick status', s.pick_status ? esc(s.pick_status) : '') : ''}
       ${row('Linked pairing', pairingHtml)}
       ${row('Status', badge(STUD_SERVICE_STATUS, s.status))}
+      ${row('Referred by', s.referred_by_contact_id ? `<a href="contact.html?id=${encodeURIComponent(s.referred_by_contact_id)}">${esc(contactName(s.referred_by_contact_id) || '—')}</a>` : '')}
       ${row('Type', s.type ? badge(STUD_SERVICE_TYPE, s.type) : '')}
       ${row('Sent', s.sent_date ? esc(fmtDate(s.sent_date)) : '')}
       ${row('Returned', s.returned_date ? esc(fmtDate(s.returned_date)) : '')}
@@ -189,6 +200,7 @@ function renderEdit() {
       ${feeHasPick(s.fee_structure) ? field('Pick status', `<input id="f-pick_status" type="text" list="pick-status-suggestions" value="${esc(s.pick_status || '')}" placeholder="pending / claimed"><datalist id="pick-status-suggestions"><option value="pending"><option value="claimed"></datalist>`, { hint: 'Has the partner claimed their pick yet? Suggested: pending / claimed (free text allowed).' }) : ''}
       ${field('Linked pairing', `<select id="f-pairing_id">${pairingOptions(s.pairing_id)}</select>`, { hint: 'Optional — the actual breeding record and outcome.' })}
       ${field('Status', `<select id="f-status">${vocabOptions(STUD_SERVICE_STATUS, s.status, 'Select…')}</select>`, { required: true })}
+      ${field('Referred by', `<select id="f-referred_by_contact_id">${referrerContactOptions(s.referred_by_contact_id)}</select>`, { hint: 'The contact who referred this arrangement. Tags them as a Stud referrer automatically.' })}
       ${field('Type', `<select id="f-type">${vocabOptions(STUD_SERVICE_TYPE, s.type, '— unknown —')}</select>`, { hint: 'In person = the dog physically travelled — shows on the away board. AI/shipped never does.' })}
       ${field('Sent', `<input id="f-sent_date" type="date" value="${esc(s.sent_date)}">`, { hint: 'Date the dog/semen was sent out (optional).' })}
       ${field('Returned', `<input id="f-returned_date" type="date" value="${esc(s.returned_date)}">`)}
@@ -217,12 +229,12 @@ function renderEdit() {
     ctx.pickerArchived = e.target.checked;
     renderEdit();
   });
-  attachNewContactButton(document.getElementById('f-partner_contact_id'), {
-    onCreated: (contact) => {
-      ctx.allContacts.push(contact);
-      ctx.contactsById.set(contact.id, contact);
-    }
-  });
+  const onNewContact = (contact) => {
+    ctx.allContacts.push(contact);
+    ctx.contactsById.set(contact.id, contact);
+  };
+  attachNewContactButton(document.getElementById('f-partner_contact_id'), { onCreated: onNewContact });
+  attachNewContactButton(document.getElementById('f-referred_by_contact_id'), { onCreated: onNewContact });
   updateWarnings();
 }
 
@@ -245,6 +257,7 @@ function readForm() {
     type: val('f-type') || '',
     sent_date: val('f-sent_date'),
     returned_date: val('f-returned_date'),
+    referred_by_contact_id: val('f-referred_by_contact_id') || null,
     result_notes: val('f-result_notes'),
     notes: val('f-notes')
   };

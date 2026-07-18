@@ -6,7 +6,7 @@
 // never re-fetches a stale precached file on its own; only a CACHE_NAME change
 // (which changes these bytes, so the browser detects a new service worker,
 // installs it, and purges the old cache in `activate`) rolls it over.
-const CACHE_NAME = 'kennelos-shell-v35';
+const CACHE_NAME = 'kennelos-shell-v36';
 
 const PRECACHE_URLS = [
   './',
@@ -18,6 +18,7 @@ const PRECACHE_URLS = [
   'assets/app.css',
   'assets/contactPicker.js',
   'assets/eventForm.js',
+  'assets/expensePanel.js',
   'assets/importView.js',
   'assets/kennelSetupUI.js',
   'assets/listView.js',
@@ -42,6 +43,7 @@ const PRECACHE_URLS = [
   'data/db.js',
   'data/dogRepo.js',
   'data/eventRepo.js',
+  'data/expenseRepo.js',
   'data/importExport.js',
   'data/kennelRepo.js',
   'data/kennelSetup.js',
@@ -85,12 +87,16 @@ const PRECACHE_URLS = [
   'pages/dogs.js',
   'pages/event-import.html',
   'pages/event-import.js',
+  'pages/financials-report.html',
+  'pages/financials-report.js',
   'pages/health-tests-report.html',
   'pages/health-tests-report.js',
   'pages/import-export.html',
   'pages/import-export.js',
   'pages/kennel-tests-import.html',
   'pages/kennel-tests-import.js',
+  'pages/kennel.html',
+  'pages/kennel.js',
   'pages/kennels.html',
   'pages/kennels.js',
   'pages/litter-import.html',

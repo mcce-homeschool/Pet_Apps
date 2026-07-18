@@ -41,7 +41,7 @@ const HUB_CHILDREN = {
   'pages/today.html': ['dashboard.html', 'reminders.html', 'upcoming.html', 'board.html', 'scheduled-placements.html'],
   'pages/dogs.html': ['dog.html', 'roster.html', 'pedigree.html'],
   'pages/breeding.html': ['pairings.html', 'pairing.html', 'litters.html', 'litter.html', 'active-breeding.html', 'live-births.html'],
-  'pages/contacts.html': ['contact.html'],
+  'pages/contacts.html': ['contact.html', 'kennels.html', 'kennel.html'],
   'pages/sales.html': ['sale.html', 'stud-services.html', 'stud-service.html', 'contracts.html', 'contract.html']
 };
 

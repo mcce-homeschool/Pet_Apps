@@ -41,14 +41,22 @@ export const DOG_REFERENCES = [
   { table: 'sales',         field: 'dog_id',         label: 'placed via a sale' },
   { table: 'stud_services', field: 'our_dog_id',     label: 'our dog in a stud service' },
   { table: 'stud_services', field: 'partner_dog_id', label: 'partner dog in a stud service' },
-  { table: 'contracts',     field: 'related_dog_id', label: 'subject of a contract' }
+  { table: 'contracts',     field: 'related_dog_id', label: 'subject of a contract' },
+  {
+    table: 'expenses', field: 'subject_id', label: 'subject of an expense',
+    compoundIndex: '[subject_type+subject_id]', discriminatorValue: 'dog'
+  }
 ];
 
 // --- Litter: what can point at a Litter (Data Model v3 §10) -----------------
 // A litter can't be hard-deleted while any Dog still has litter_id pointing at it
 // (its puppy roster). Archive instead.
 export const LITTER_REFERENCES = [
-  { table: 'dogs', field: 'litter_id', label: 'puppy roster member' }
+  { table: 'dogs', field: 'litter_id', label: 'puppy roster member' },
+  {
+    table: 'expenses', field: 'subject_id', label: 'subject of an expense',
+    compoundIndex: '[subject_type+subject_id]', discriminatorValue: 'litter'
+  }
 ];
 
 // --- Pairing: what can point at a Pairing -----------------------------------
@@ -61,7 +69,11 @@ export const PAIRING_REFERENCES = [
     table: 'events', field: 'subject_id', label: 'subject of an event',
     compoundIndex: '[subject_type+subject_id]', discriminatorValue: 'pairing'
   },
-  { table: 'stud_services', field: 'pairing_id', label: 'linked stud service' }
+  { table: 'stud_services', field: 'pairing_id', label: 'linked stud service' },
+  {
+    table: 'expenses', field: 'subject_id', label: 'subject of an expense',
+    compoundIndex: '[subject_type+subject_id]', discriminatorValue: 'pairing'
+  }
 ];
 
 // --- Contact: what can point at a Contact -----------------------------------
@@ -70,17 +82,23 @@ export const PAIRING_REFERENCES = [
 export const CONTACT_REFERENCES = [
   { table: 'dogs',          field: 'owner_contact_id',     label: 'owner of a dog' },
   { table: 'dogs',          field: 'co_owner_contact_ids', label: 'co-owner of a dog', multiEntry: true },
-  { table: 'sales',         field: 'buyer_contact_id',     label: 'buyer on a sale' },
-  { table: 'stud_services', field: 'partner_contact_id',   label: 'partner contact in a stud service' },
-  { table: 'events',        field: 'related_contact_id',   label: 'contact on a boarding event' },
-  { table: 'contracts',     field: 'related_contact_id',   label: 'counterparty on a contract' }
+  { table: 'sales',         field: 'buyer_contact_id',        label: 'buyer on a sale' },
+  { table: 'sales',         field: 'referred_by_contact_id',  label: 'referrer on a sale' },
+  { table: 'stud_services', field: 'partner_contact_id',      label: 'partner contact in a stud service' },
+  { table: 'stud_services', field: 'referred_by_contact_id',  label: 'referrer on a stud service' },
+  { table: 'events',        field: 'related_contact_id',      label: 'contact on a boarding event' },
+  { table: 'contracts',     field: 'related_contact_id',      label: 'counterparty on a contract' }
 ];
 
 // --- Kennel: what can point at a Kennel -------------------------------------
 export const KENNEL_REFERENCES = [
   { table: 'contacts', field: 'kennel_id',          label: 'kennel of a contact' },
   { table: 'dogs',     field: 'kennel_id',          label: 'kennel of a dog' },
-  { table: 'dogs',     field: 'breeder_kennel_id',  label: 'breeder kennel of a dog' }
+  { table: 'dogs',     field: 'breeder_kennel_id',  label: 'breeder kennel of a dog' },
+  {
+    table: 'expenses', field: 'subject_id', label: 'subject of an expense',
+    compoundIndex: '[subject_type+subject_id]', discriminatorValue: 'kennel'
+  }
 ];
 
 // --- Sale: what can point at a Sale (Stage 4) -------------------------------
@@ -96,6 +114,19 @@ export const STUD_SERVICE_REFERENCES = [
 // --- Contract: a leaf entity — nothing points at a Contract (Stage 4). Always
 // hard-deletable; Data Model v3 §5.7.
 export const CONTRACT_REFERENCES = [];
+
+// --- Event: an Expense captured from an event points back at it via
+// expenses.event_id (the ONE canonical event↔cost link; the event queries it,
+// never mirrors it). So an event carrying a linked expense can't be hard-deleted
+// out from under its cost — archive it, or remove the cost first. Events were a
+// leaf before the Financials ledger; this is the only thing that points at one.
+export const EVENT_REFERENCES = [
+  { table: 'expenses', field: 'event_id', label: 'linked expense' }
+];
+
+// --- Expense: a leaf entity — nothing points at an Expense. Its own FKs
+// (event_id, subject_id) point OUTWARD and are guarded on those targets above.
+export const EXPENSE_REFERENCES = [];
 
 // Count rows matching one registry entry for the given target id.
 async function countReferences(ref, id) {

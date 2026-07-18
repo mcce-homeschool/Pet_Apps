@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Litter — KennelOS</title>
+  <title>Financials — KennelOS</title>
   <link rel="stylesheet" href="../assets/app.css">
   <link rel="manifest" href="../manifest.json">
   <link rel="icon" href="../assets/icons/favicon-32.png" sizes="32x32">
@@ -18,32 +18,20 @@
   <main>
     <div class="page-header">
       <div>
-        <a class="muted" href="litters.html">← All litters</a>
-        <h1 id="litter-title">Litter</h1>
-        <div id="litter-subtitle" class="page-subtitle"></div>
+        <a class="muted" href="reports.html">← All reports</a>
+        <h1>Financials</h1>
+        <p class="page-subtitle">Every expense across the program — costs on dogs, litters, pairings, and kennel-wide overhead, all from the one ledger. Filter, and export the visible rows to CSV.</p>
       </div>
-      <div id="header-actions" class="pill-row"></div>
     </div>
-
-    <div id="page-error"></div>
-
-    <section class="card" id="profile-section">
-      <div class="row-between">
-        <h2 style="margin:0;">Profile</h2>
-        <div id="profile-actions" class="pill-row"></div>
-      </div>
-      <div id="profile-body"></div>
+    <section class="card" id="summary-section" style="margin-bottom:16px;">
+      <div id="summary"></div>
     </section>
-
-    <!-- Timeline (litter-subject events) -->
-    <section id="timeline-section"></section>
-
-    <section id="expenses-section"></section>
-    <!-- Puppy Roster (derived Dog records with this litter_id) -->
-    <section id="roster-section"></section>
+    <section class="card">
+      <div id="report-mount"></div>
+    </section>
   </main>
 
   <script type="module" src="../app.js"></script>
-  <script type="module" src="./litter.js"></script>
+  <script type="module" src="./financials-report.js"></script>
 </body>
 </html>
