@@ -50,7 +50,7 @@ const blankDog = () => ({
   call_name: '', registered_name: '', sex: '', date_of_birth: '', dob_is_estimated: false,
   date_of_death: '', breed: '', color_markings: '', registry: '', registration_number: '',
   microchip_id: '', sire_id: '', dam_id: '', ownership_type: '', owner_contact_id: '',
-  co_owner_contact_ids: [], litter_id: '', kennel_id: '', status: '', status_date: '', disposition: '', notes: '',
+  co_owner_contact_ids: [], litter_id: '', breeder_kennel_id: '', kennel_id: '', status: '', status_date: '', disposition: '', notes: '',
   planned_tests: []
 });
 
@@ -234,6 +234,17 @@ function kennelOptions(current) {
   return `<option value="">— none —</option>` + opts;
 }
 
+// Unlike kennelOptions() above, the breeder-kennel picker isn't limited to your
+// own kennels — the whole point is naming an outside contact's kennel for a dog
+// you acquired rather than bred yourself.
+function breederKennelOptions(current) {
+  const opts = ctx.allKennels
+    .filter((k) => ctx.pickerArchived || !k.is_archived || k.id === current)
+    .map((k) => `<option value="${esc(k.id)}"${k.id === current ? ' selected' : ''}>${esc(k.kennel_name)}${k.is_own_kennel ? ' — My kennel' : ''}${k.is_archived ? ' (archived)' : ''}</option>`)
+    .join('');
+  return `<option value="">— none —</option>` + opts;
+}
+
 // --- Rendering: read-only view ------------------------------------------
 function row(label, valueHtml) {
   return valueHtml ? `<dt>${esc(label)}</dt><dd>${valueHtml}</dd>` : '';
@@ -257,6 +268,7 @@ function renderView() {
       ${row('Sire', esc(dogName(d.sire_id)))}
       ${row('Dam', esc(dogName(d.dam_id)))}
       ${row('Litter', d.litter_id ? `<a href="litter.html?id=${encodeURIComponent(d.litter_id)}">${esc(litterLabel(d.litter_id) || 'View litter')}</a>` : '')}
+      ${row('Breeder kennel', esc(kennelName(d.breeder_kennel_id)))}
       ${row('Ownership', badge(OWNERSHIP_TYPE, d.ownership_type))}
       ${row('Owner', esc(contactName(d.owner_contact_id)))}
       ${row('Co-owners', coOwners)}
@@ -304,6 +316,7 @@ function renderEdit() {
       ${field('Sire', `<select id="f-sire_id">${dogOptions(d.sire_id, ctx.original?.id, 'male')}</select>`)}
       ${field('Dam', `<select id="f-dam_id">${dogOptions(d.dam_id, ctx.original?.id, 'female')}</select>`)}
       ${field('Litter', `<select id="f-litter_id">${litterOptions(d.litter_id)}</select>`, { hint: 'The litter this dog was born into, if born in-house.' })}
+      ${field('Breeder kennel', `<select id="f-breeder_kennel_id">${breederKennelOptions(d.breeder_kennel_id)}</select>`, { hint: 'The kennel that produced this dog — your own for an in-house litter, or an outside kennel for a dog you acquired.' })}
       ${field('Owner', `<select id="f-owner_contact_id">${contactOptions(d.owner_contact_id)}</select>`, { hint: 'Required for external / leased-in dogs.' })}
       ${field('Co-owners', `<select id="f-co_owner_contact_ids" multiple size="4">${coOptions}</select>`, { hint: 'Ctrl/Cmd-click to select multiple.' })}
       ${KENNEL_FIELD_HIDDEN_FOR.includes(d.ownership_type) ? '' : field('Kennel', `<select id="f-kennel_id">${kennelOptions(d.kennel_id)}</select>`, { hint: 'Which of your own kennels this dog belongs to.' })}
@@ -342,12 +355,21 @@ function renderEdit() {
   // Convenience: linking a Litter prefills Date of birth from the litter's
   // whelp date, if DOB is still empty — a prefill only, never an override. A
   // DOB that already conflicts with the litter's whelp date surfaces as an
-  // actionable warning instead (updateWarnings).
+  // actionable warning instead (updateWarnings). It also prefills Breeder
+  // kennel from the litter's dam — but only when the dam is your own dog
+  // (owned/co-owned); a litter whose dam belongs to someone else (e.g. a
+  // stud service out) says nothing about which of your kennels bred it.
   document.getElementById('f-litter_id').addEventListener('change', (e) => {
     ctx.draft = readForm();
     const litter = e.target.value ? ctx.littersById.get(e.target.value) : null;
     if (litter && litter.whelp_date && !ctx.draft.date_of_birth) {
       ctx.draft.date_of_birth = litter.whelp_date;
+    }
+    if (litter && !ctx.draft.breeder_kennel_id) {
+      const dam = litter.dam_id ? ctx.dogsById.get(litter.dam_id) : null;
+      if (dam && ['owned', 'co_owned'].includes(dam.ownership_type) && dam.kennel_id) {
+        ctx.draft.breeder_kennel_id = dam.kennel_id;
+      }
     }
     renderEdit();
   });
@@ -376,6 +398,7 @@ function readForm() {
     sire_id: val('f-sire_id') || null,
     dam_id: val('f-dam_id') || null,
     litter_id: val('f-litter_id') || null,
+    breeder_kennel_id: val('f-breeder_kennel_id') || null,
     owner_contact_id: val('f-owner_contact_id') || null,
     co_owner_contact_ids: coSel ? [...coSel.selectedOptions].map((o) => o.value) : [],
     // Hidden (external/leased-in) means "doesn't apply" — clear rather than

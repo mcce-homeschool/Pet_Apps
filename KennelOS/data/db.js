@@ -43,8 +43,13 @@ export const db = new Dexie('KennelOSBreedingApp');
 //    and `dogs.recorded_coi` (object) — that are deliberately UNindexed: they
 //    persist and ride the JSON backup, but nothing queries them by key, so they
 //    stay out of the index strings below (Build Brief §2.1/§3.2).
+//  - `dogs.breeder_kennel_id` (FK → Kennel, the kennel that produced this dog —
+//    distinct from `kennel_id`, which of the user's own kennels the dog belongs
+//    to now) is indexed like every other canonical Dog FK, and guarded in
+//    `KENNEL_REFERENCES` (referenceRegistry.js) so a Kennel can't be
+//    hard-deleted out from under a dog that still names it as its breeder.
 db.version(1).stores({
-  dogs:          'id, sire_id, dam_id, litter_id, owner_contact_id, *co_owner_contact_ids, status, ownership_type, sex, breed, kennel_id, is_archived',
+  dogs:          'id, sire_id, dam_id, litter_id, breeder_kennel_id, owner_contact_id, *co_owner_contact_ids, status, ownership_type, sex, breed, kennel_id, is_archived',
   events:        'id, [subject_type+subject_id], event_type, event_date, reminder_date, related_dog_id, related_contact_id, is_archived',
   contacts:      'id, kennel_id, waitlist_status, is_archived',
   kennels:       'id, is_archived',

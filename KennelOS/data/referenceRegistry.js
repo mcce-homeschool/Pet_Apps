@@ -77,8 +77,9 @@ export const CONTACT_REFERENCES = [
 
 // --- Kennel: what can point at a Kennel -------------------------------------
 export const KENNEL_REFERENCES = [
-  { table: 'contacts', field: 'kennel_id', label: 'kennel of a contact' },
-  { table: 'dogs',     field: 'kennel_id', label: 'kennel of a dog' }
+  { table: 'contacts', field: 'kennel_id',          label: 'kennel of a contact' },
+  { table: 'dogs',     field: 'kennel_id',          label: 'kennel of a dog' },
+  { table: 'dogs',     field: 'breeder_kennel_id',  label: 'breeder kennel of a dog' }
 ];
 
 // --- Sale: what can point at a Sale (Stage 4) -------------------------------

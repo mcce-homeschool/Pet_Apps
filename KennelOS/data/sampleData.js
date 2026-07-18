@@ -139,11 +139,15 @@ export async function seedSampleData() {
   // Gunnar stays kennel_id: null — external, owned by Dana Ruiz. His kennel
   // identity flows through owner_contact_id, not kennel_id. His recorded COI uses
   // a DIFFERENT method/source (pedigree, AKC 5-gen) so the mixed-provenance
-  // display is exercised (Stage 5 §9).
+  // display is exercised (Stage 5 §9). breeder_kennel_id points at Meadow
+  // Ridge — Dana's outside kennel — exercising the "acquired dog, outside
+  // breeder" case (as opposed to Fern/Birch/Hazel below, whose in-house
+  // breeder_kennel_id comes from the auto-prefill instead).
   const gunnar = await dogRepo.create({
     call_name: 'Gunnar', sex: 'male', breed: BREED,
     date_of_birth: '2018-06-01', dob_is_estimated: true,
     ownership_type: 'external', owner_contact_id: dana.id, status: 'external_reference',
+    breeder_kennel_id: meadowRidge.id,
     recorded_coi: { value: 4.1, method: 'pedigree', source: 'AKC 5-gen', as_of_date: '2022-11-15' }
   });
 
@@ -163,20 +167,26 @@ export async function seedSampleData() {
     status: 'closed'
   });
 
+  // Fern/Birch/Hazel carry breeder_kennel_id: thornfield.id — Juniper (their dam)
+  // is an owned dog whose own kennel_id is Thornfield, exercising the
+  // dam-is-my-dog auto-prefill (dog.js / puppyForm.js) rather than a manual set.
   const fern = await dogRepo.create({
     call_name: 'Fern', sex: 'female', breed: BREED,
     date_of_birth: '2025-08-20', sire_id: gunnar.id, dam_id: juniper.id, litter_id: litter.id,
-    ownership_type: 'owned', status: 'puppy', disposition: 'available', kennel_id: thornfield.id
+    ownership_type: 'owned', status: 'puppy', disposition: 'available', kennel_id: thornfield.id,
+    breeder_kennel_id: thornfield.id
   });
   const birch = await dogRepo.create({
     call_name: 'Birch', sex: 'male', breed: BREED,
     date_of_birth: '2025-08-20', sire_id: gunnar.id, dam_id: juniper.id, litter_id: litter.id,
-    ownership_type: 'owned', status: 'active_breeding', disposition: 'keeping', kennel_id: thornfield.id
+    ownership_type: 'owned', status: 'active_breeding', disposition: 'keeping', kennel_id: thornfield.id,
+    breeder_kennel_id: thornfield.id
   });
   const hazel = await dogRepo.create({
     call_name: 'Hazel', sex: 'female', breed: BREED,
     date_of_birth: '2025-08-20', sire_id: gunnar.id, dam_id: juniper.id, litter_id: litter.id,
-    ownership_type: 'owned', status: 'pet_home', disposition: 'placed', kennel_id: thornfield.id
+    ownership_type: 'owned', status: 'pet_home', disposition: 'placed', kennel_id: thornfield.id,
+    breeder_kennel_id: thornfield.id
   });
 
   const percy = await dogRepo.create({

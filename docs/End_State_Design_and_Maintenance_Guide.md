@@ -109,7 +109,7 @@ and commonly blank at entry time.
 
 | Entity | Required | Notable other fields |
 |---|---|---|
-| **Dog** | `call_name`, `sex`, `breed`, `ownership_type`, `status` | `registered_name`, `date_of_birth`, `date_of_death`, `sire_id`, `dam_id`, `litter_id`, `owner_contact_id`, `co_owner_contact_ids[]`, `kennel_id`, `color_markings`, `registry`, `registration_number`, `microchip_id`, `planned_tests[]`, `recorded_coi{value,method,source,as_of_date}`, `disposition` (`undecided`/`keeping`/`available`/`placed` — breeder intent, orthogonal to `status`; feeds the Today "Available puppies" feed and the promote-lifecycle nudge, §19), `notes`. Owner required when `ownership_type ∈ {external, leased_in}`. |
+| **Dog** | `call_name`, `sex`, `breed`, `ownership_type`, `status` | `registered_name`, `date_of_birth`, `date_of_death`, `sire_id`, `dam_id`, `litter_id`, `breeder_kennel_id` (the kennel that *produced* this dog — own or an outside contact's; distinct from `kennel_id` below, which of the user's own kennels it belongs to *now*; auto-prefilled from the litter's dam's own `kennel_id` when that dam is owned/co-owned), `owner_contact_id`, `co_owner_contact_ids[]`, `kennel_id`, `color_markings`, `registry`, `registration_number`, `microchip_id`, `planned_tests[]`, `recorded_coi{value,method,source,as_of_date}`, `disposition` (`undecided`/`keeping`/`available`/`placed` — breeder intent, orthogonal to `status`; feeds the Today "Available puppies" feed and the promote-lifecycle nudge, §19), `notes`. Owner required when `ownership_type ∈ {external, leased_in}`. |
 | **Contact** | `name` | `contact_type[]` (multi), `email`, `phone`, `address`, `kennel_id`, `waitlist_status`, `first_contact_source`, `notes`. Buyers are Contacts — **there is no Buyer table**. `address` also resolves an in-person stud service's away-board location (§19). |
 | **Kennel** | `kennel_name` | `is_own_kennel`, `preferred_tests[]`, `preferred_breeds[]`, `promote_nudge_enabled` (bool, default off), `promote_age_male_months`/`promote_age_female_months` (numbers — the promote-lifecycle nudge's per-kennel thresholds, §19). Lightweight; added inline from Contact form. |
 | **Pairing** | `sire_id`, `dam_id`, `pairing_type`, `status` | `method`, `planned_date`, `expected_due_date`, `notes`. Sire ≠ dam (hard block). |
@@ -152,9 +152,9 @@ DB name: `KennelOSBreedingApp`. All nine tables live in a **single collapsed
 `version(1)` block**. Indexes:
 
 ```
-dogs:          id, sire_id, dam_id, litter_id, owner_contact_id,
-               *co_owner_contact_ids, status, ownership_type, sex, breed,
-               kennel_id, is_archived
+dogs:          id, sire_id, dam_id, litter_id, breeder_kennel_id,
+               owner_contact_id, *co_owner_contact_ids, status, ownership_type,
+               sex, breed, kennel_id, is_archived
 events:        id, [subject_type+subject_id], event_type, event_date,
                reminder_date, related_dog_id, related_contact_id, is_archived
 contacts:      id, kennel_id, waitlist_status, is_archived
@@ -381,7 +381,7 @@ declined (or after sample data is later cleared), offer kennel setup.
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v12`) + a `PRECACHE_URLS` list of **every**
+- `CACHE_NAME` (currently `kennelos-shell-v19`) + a `PRECACHE_URLS` list of **every**
   app file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed
   file fails the whole install). `activate` deletes old caches. Fetch is

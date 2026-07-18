@@ -14,6 +14,11 @@ import { esc, fmtDate, todayYMD } from './ui.js';
 // litter can still be "Expected" with a future whelp_date when placeholders
 // get added, and Dog rejects a future date_of_birth outright.
 function baseFromLitter(litter, dam) {
+  // Breeder kennel inherits the dam's own kennel_id when she's your own dog
+  // (owned/co-owned) — the same "dam is my dog" rule dog.js applies when a
+  // Litter is linked after the fact. A dam you don't own says nothing about
+  // which of your kennels bred this puppy, so it's left for the user to set.
+  const damIsMine = dam && ['owned', 'co_owned'].includes(dam.ownership_type);
   return {
     litter_id: litter.id,
     dam_id: litter.dam_id || null,
@@ -21,7 +26,8 @@ function baseFromLitter(litter, dam) {
     breed: dam?.breed || '',        // breed comes from the dam
     date_of_birth: (litter.whelp_date && litter.whelp_date <= todayYMD()) ? litter.whelp_date : '',
     status: 'puppy',
-    ownership_type: 'owned'
+    ownership_type: 'owned',
+    breeder_kennel_id: damIsMine ? (dam.kennel_id || null) : null
   };
 }
 
