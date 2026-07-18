@@ -16,7 +16,7 @@ import { getMyContactId } from '../data/kennelSetup.js';
 import {
   SEX, DOG_STATUS, DISPOSITION, OWNERSHIP_TYPE, PAIRING_TYPE, PAIRING_STATUS,
   PLACEMENT_TYPE, SALE_STATUS, STUD_SERVICE_DIRECTION, STUD_SERVICE_STATUS,
-  EVENT_TYPES, descriptor, COI_METHOD_SUGGESTIONS, CONTRACT_TYPE, CONTRACT_STATUS
+  LITTER_STATUS, EVENT_TYPES, descriptor, COI_METHOD_SUGGESTIONS, CONTRACT_TYPE, CONTRACT_STATUS
 } from '../data/vocab.js';
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { renderTimeline } from '../assets/timeline.js';
@@ -42,6 +42,7 @@ const els = {
   sales: document.getElementById('sales-section'),
   studServices: document.getElementById('stud-services-section'),
   contracts: document.getElementById('contracts-section'),
+  litters: document.getElementById('litters-section'),
   pedigree: document.getElementById('pedigree-section')
 };
 
@@ -82,8 +83,55 @@ const ctx = {
   dogsById: new Map(),
   contactsById: new Map(),
   littersById: new Map(),
-  kennelsById: new Map()
+  kennelsById: new Map(),
+  // Collapsible card state — tracks which cards are expanded
+  expandedCards: new Set()
 };
+
+// Helper to create a collapsible card. The card auto-collapses when empty.
+// If hasContent is false, the card starts collapsed with an empty badge.
+// The toggle button for the card should be passed in headerButton.
+function renderCollapsibleCard(title, bodyHtml, headerButton = '', { sectionKey = '', hasContent = true } = {}) {
+  const isExpanded = ctx.expandedCards.has(sectionKey) || hasContent;
+  const toggleId = `${sectionKey}-toggle`;
+
+  return `
+    <section class="card" style="margin-top:16px;">
+      <div class="row-between">
+        <div class="collapsible-header" style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;" data-toggle="${toggleId}">
+          <span class="collapsible-arrow" style="transform: rotate(${isExpanded ? '90deg' : '0deg'}); display: inline-block; transition: transform 0.2s; font-size: 12px;">▶</span>
+          <h2 style="margin:0;">${esc(title)}${!hasContent ? ' <span class="badge badge-gray">empty</span>' : ''}</h2>
+        </div>
+        <div id="${toggleId}-actions" class="pill-row">${headerButton}</div>
+      </div>
+      <div class="collapsible-content" id="${toggleId}-content" style="display: ${isExpanded ? 'block' : 'none'}; margin-top:12px;">
+        ${bodyHtml}
+      </div>
+    </section>`;
+}
+
+// Setup collapsible functionality for a card
+function setupCollapsibleCard(sectionKey) {
+  const toggleId = `${sectionKey}-toggle`;
+  const header = document.querySelector(`[data-toggle="${toggleId}"]`);
+  const content = document.getElementById(`${toggleId}-content`);
+  const arrow = header?.querySelector('.collapsible-arrow');
+
+  if (!header || !content) return;
+
+  header.addEventListener('click', () => {
+    const isExpanded = ctx.expandedCards.has(sectionKey);
+    if (isExpanded) {
+      ctx.expandedCards.delete(sectionKey);
+      content.style.display = 'none';
+      if (arrow) arrow.style.transform = 'rotate(0deg)';
+    } else {
+      ctx.expandedCards.add(sectionKey);
+      content.style.display = 'block';
+      if (arrow) arrow.style.transform = 'rotate(90deg)';
+    }
+  });
+}
 
 // --- Data loading --------------------------------------------------------
 async function loadRefs() {
@@ -392,6 +440,7 @@ function enterEdit() {
   renderSalesSection();
   renderStudServicesSection();
   renderContractsSection();
+  renderLittersSection(); // hide litters while editing too
   renderPedigreeSection(); // hide pedigree while editing too
 }
 
@@ -409,6 +458,7 @@ function cancel() {
   renderSalesSection();
   renderStudServicesSection();
   renderContractsSection();
+  renderLittersSection();
   renderPedigreeSection();
 }
 
@@ -567,15 +617,11 @@ async function renderRecordedCoiSection() {
        <p class="faint" style="margin:10px 0 0; font-size:13px;">User-recorded / attested — recorded from your lab or registry, not computed or verified by this app.</p>`
     : `<p class="muted" style="margin:12px 0 0;">No COI recorded.</p>`;
 
-  els.recordedCoi.innerHTML = `
-    <section class="card" style="margin-top:16px;">
-      <div class="row-between">
-        <h2 style="margin:0;">Recorded COI</h2>
-        <button class="btn btn-sm" id="coi-edit">${coi && coi.value != null ? 'Edit' : '+ Add COI'}</button>
-      </div>
-      ${bodyHtml}
-    </section>`;
+  const hasContent = coi && coi.value != null;
+  const headerBtn = `<button class="btn btn-sm" id="coi-edit">${hasContent ? 'Edit' : '+ Add COI'}</button>`;
+  els.recordedCoi.innerHTML = renderCollapsibleCard('Recorded COI', bodyHtml, headerBtn, { sectionKey: 'recorded-coi', hasContent });
   document.getElementById('coi-edit').addEventListener('click', () => { ctx.coiEditing = true; renderRecordedCoiSection(); });
+  setupCollapsibleCard('recorded-coi');
 }
 
 // Health-test summary (Stage 5, Build Brief §6) — a READ-ONLY presentation of
@@ -612,12 +658,13 @@ async function renderHealthTestsSection() {
       }).join('') + `</ul>`
     : `<p class="muted" style="margin:14px 0 0;">No health-test events recorded yet.</p>`;
 
-  els.healthTests.innerHTML = `
-    <section class="card" style="margin-top:16px;">
-      <h2 style="margin:0;">Health-Test Summary</h2>
-      <p class="field-hint">Recorded genetic, OFA/PennHIP, and breed-specific test results for this dog — a read-only view of what's been logged. Add or edit these in the Health Timeline below.</p>
-      ${rowsHtml}
-    </section>`;
+  const bodyHtml = `
+    <p class="field-hint">Recorded genetic, OFA/PennHIP, and breed-specific test results for this dog — a read-only view of what's been logged. Add or edit these in the Health Timeline below.</p>
+    ${rowsHtml}`;
+
+  const hasContent = tests.length > 0;
+  els.healthTests.innerHTML = renderCollapsibleCard('Health-Test Summary', bodyHtml, '', { sectionKey: 'health-tests', hasContent });
+  setupCollapsibleCard('health-tests');
 }
 
 // Planned Tests panel + advisory completeness view (Test Planning Addendum §6.2).
@@ -688,21 +735,20 @@ async function renderPlannedTestsSection() {
       <div class="form-actions"><button class="btn btn-sm" id="pt-copy">Copy</button></div>
     </div>`;
 
-  els.plannedTests.innerHTML = `
-    <section class="card" style="margin-top:16px;">
-      <div class="row-between">
-        <h2 style="margin:0;">Planned Tests</h2>
-        <button class="btn btn-sm" id="pt-toggle">${ctx.plannedTestsAddOpen ? 'Hide' : '+ Plan a test'}</button>
-      </div>
-      <p class="field-hint">The tests this dog's plan says to run — an undated intention, not an event. Advisory only.</p>
-      ${rowsHtml}
-      ${controlsHtml}
-    </section>`;
+  const bodyHtml = `
+    <p class="field-hint">The tests this dog's plan says to run — an undated intention, not an event. Advisory only.</p>
+    ${rowsHtml}
+    ${controlsHtml}`;
+
+  const hasContent = planned.length > 0;
+  const headerBtn = `<button class="btn btn-sm" id="pt-toggle">${ctx.plannedTestsAddOpen ? 'Hide' : '+ Plan a test'}</button>`;
+  els.plannedTests.innerHTML = renderCollapsibleCard('Planned Tests', bodyHtml, headerBtn, { sectionKey: 'planned-tests', hasContent });
 
   document.getElementById('pt-toggle').addEventListener('click', () => {
     ctx.plannedTestsAddOpen = !ctx.plannedTestsAddOpen;
     renderPlannedTestsSection();
   });
+  setupCollapsibleCard('planned-tests');
 
   const addTest = async () => {
     const input = document.getElementById('pt-new');
@@ -769,14 +815,10 @@ async function renderPairingsSection() {
       }).join('') + `</ul>`
     : `<p class="muted" style="margin:14px 0 0;">No pairings recorded for this dog yet.</p>`;
 
-  els.pairings.innerHTML = `
-    <section class="card" style="margin-top:16px;">
-      <div class="row-between">
-        <h2 style="margin:0;">Pairings</h2>
-        <a class="btn btn-sm" href="pairing.html?new=1">+ Add Pairing</a>
-      </div>
-      ${rowsHtml}
-    </section>`;
+  const hasContent = pairings.length > 0;
+  const headerBtn = `<a class="btn btn-sm" href="pairing.html?new=1">+ Add Pairing</a>`;
+  els.pairings.innerHTML = renderCollapsibleCard('Pairings', rowsHtml, headerBtn, { sectionKey: 'pairings', hasContent });
+  setupCollapsibleCard('pairings');
 }
 
 // Derived "Sales" panel (Stage 4): placements recorded for this dog. Shown when
@@ -798,14 +840,10 @@ async function renderSalesSection() {
         </li>`).join('') + `</ul>`
     : `<p class="muted" style="margin:14px 0 0;">No sales recorded for this dog yet.</p>`;
 
-  els.sales.innerHTML = `
-    <section class="card" style="margin-top:16px;">
-      <div class="row-between">
-        <h2 style="margin:0;">Sales</h2>
-        <a class="btn btn-sm" href="sale.html?new=1&dog=${encodeURIComponent(d.id)}">+ Add Sale</a>
-      </div>
-      ${rowsHtml}
-    </section>`;
+  const hasContent = sales.length > 0;
+  const headerBtn = `<a class="btn btn-sm" href="sale.html?new=1&dog=${encodeURIComponent(d.id)}">+ Add Sale</a>`;
+  els.sales.innerHTML = renderCollapsibleCard('Sales', rowsHtml, headerBtn, { sectionKey: 'sales', hasContent });
+  setupCollapsibleCard('sales');
 }
 
 // Derived "Stud Services" panel (Stage 4): stud services where this dog appears
@@ -828,14 +866,10 @@ async function renderStudServicesSection() {
       }).join('') + `</ul>`
     : `<p class="muted" style="margin:14px 0 0;">No stud services recorded for this dog yet.</p>`;
 
-  els.studServices.innerHTML = `
-    <section class="card" style="margin-top:16px;">
-      <div class="row-between">
-        <h2 style="margin:0;">Stud Services</h2>
-        <a class="btn btn-sm" href="stud-service.html?new=1&dog=${encodeURIComponent(d.id)}">+ Add Stud Service</a>
-      </div>
-      ${rowsHtml}
-    </section>`;
+  const hasContent = studServices.length > 0;
+  const headerBtn = `<a class="btn btn-sm" href="stud-service.html?new=1&dog=${encodeURIComponent(d.id)}">+ Add Stud Service</a>`;
+  els.studServices.innerHTML = renderCollapsibleCard('Stud Services', rowsHtml, headerBtn, { sectionKey: 'stud-services', hasContent });
+  setupCollapsibleCard('stud-services');
 }
 
 // Derived "Contracts" panel: contracts that name this dog directly via
@@ -859,14 +893,34 @@ async function renderContractsSection() {
         </li>`).join('') + `</ul>`
     : `<p class="muted" style="margin:14px 0 0;">No contracts naming this dog directly yet.</p>`;
 
-  els.contracts.innerHTML = `
-    <section class="card" style="margin-top:16px;">
-      <div class="row-between">
-        <h2 style="margin:0;">Contracts</h2>
-        <a class="btn btn-sm" href="contract.html?new=1&dog=${encodeURIComponent(d.id)}">+ Add Contract</a>
-      </div>
-      ${rowsHtml}
-    </section>`;
+  const hasContent = contracts.length > 0;
+  const headerBtn = `<a class="btn btn-sm" href="contract.html?new=1&dog=${encodeURIComponent(d.id)}">+ Add Contract</a>`;
+  els.contracts.innerHTML = renderCollapsibleCard('Contracts', rowsHtml, headerBtn, { sectionKey: 'contracts', hasContent });
+  setupCollapsibleCard('contracts');
+}
+
+// Derived "Litters" panel: litters where this dog is sire or dam.
+async function renderLittersSection() {
+  if (!els.litters) return;
+  if (ctx.mode !== 'view' || !ctx.original) { els.litters.innerHTML = ''; return; }
+  const d = ctx.original;
+  const litters = ctx.allLitters.filter((l) => l.sire_id === d.id || l.dam_id === d.id);
+
+  const rowsHtml = litters.length
+    ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + litters.map((l) => {
+        const role = l.sire_id === d.id ? 'Sire' : 'Dam';
+        const partnerId = l.sire_id === d.id ? l.dam_id : l.sire_id;
+        return `<li class="row-between" style="padding:8px 0; border-top:1px solid var(--border);">
+          <span><span class="faint">${role} ·</span> with <strong>${esc(dogName(partnerId) || '—')}</strong> ${badge(LITTER_STATUS, l.status)}${l.whelp_date ? ` <span class="faint">${esc(fmtDate(l.whelp_date))}</span>` : ''}</span>
+          <a class="btn btn-sm" href="litter.html?id=${encodeURIComponent(l.id)}">Open →</a>
+        </li>`;
+      }).join('') + `</ul>`
+    : `<p class="muted" style="margin:14px 0 0;">No litters recorded for this dog yet.</p>`;
+
+  const hasContent = litters.length > 0;
+  const headerBtn = `<a class="btn btn-sm" href="litter.html?new=1">+ Add Litter</a>`;
+  els.litters.innerHTML = renderCollapsibleCard('Litters', rowsHtml, headerBtn, { sectionKey: 'litters', hasContent });
+  setupCollapsibleCard('litters');
 }
 
 // Pedigree centered on this dog (only for a saved dog in view mode). Clicking a
@@ -874,20 +928,16 @@ async function renderContractsSection() {
 function renderPedigreeSection() {
   if (!els.pedigree) return;
   if (ctx.mode === 'view' && ctx.original) {
-    els.pedigree.innerHTML = `
-      <section class="card" style="margin-top:16px;">
-        <div class="row-between">
-          <h2 style="margin:0;">Pedigree</h2>
-          <a class="btn btn-sm" href="pedigree.html?id=${encodeURIComponent(ctx.original.id)}">Open full view →</a>
-        </div>
-        <div id="dog-pedigree-mount" style="margin-top:14px;"></div>
-      </section>`;
+    const bodyHtml = `<div id="dog-pedigree-mount" style="margin-top:14px;"></div>`;
+    const headerBtn = `<a class="btn btn-sm" href="pedigree.html?id=${encodeURIComponent(ctx.original.id)}">Open full view →</a>`;
+    els.pedigree.innerHTML = renderCollapsibleCard('Pedigree', bodyHtml, headerBtn, { sectionKey: 'pedigree', hasContent: true });
     renderPedigree({
       mount: document.getElementById('dog-pedigree-mount'),
       rootId: ctx.original.id,
       generations: 3,
       onNavigate: (id) => { location.href = `pedigree.html?id=${encodeURIComponent(id)}`; }
     });
+    setupCollapsibleCard('pedigree');
   } else {
     els.pedigree.innerHTML = '';
   }
@@ -907,6 +957,7 @@ function renderAll() {
   renderSalesSection();
   renderStudServicesSection();
   renderContractsSection();
+  renderLittersSection();
   renderPedigreeSection();
 }
 
