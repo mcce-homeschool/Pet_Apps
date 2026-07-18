@@ -6,7 +6,7 @@ import { contractRepo } from '../data/contractRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import { litterRepo } from '../data/litterRepo.js';
-import { PLACEMENT_TYPE, SALE_STATUS, CONTRACT_TYPE, CONTRACT_STATUS } from '../data/vocab.js';
+import { PLACEMENT_TYPE, SALE_STATUS, CONTRACT_TYPE, CONTRACT_STATUS, BOARDING_FREQUENCY_OPTIONS } from '../data/vocab.js';
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { openEventForm } from '../assets/eventForm.js';
 import { attachNewContactButton } from '../assets/contactPicker.js';
@@ -27,7 +27,8 @@ const els = {
 const blankSale = () => ({
   dog_id: '', buyer_contact_id: '', sale_date: '', price: '', deposit_amount: '',
   deposit_date: '', balance_paid_date: '', placement_type: '', lead_source: '',
-  referred_by_contact_id: '', status: '', notes: ''
+  referred_by_contact_id: '', status: '', notes: '',
+  deferred_boarding_amount: '', deferred_boarding_frequency: ''
 });
 
 const ctx = {
@@ -103,6 +104,13 @@ function contactOptions(current) {
   return `<option value="">— select —</option>` + opts;
 }
 
+function frequencyOptions(current) {
+  const opts = BOARDING_FREQUENCY_OPTIONS
+    .map((o) => `<option value="${esc(o)}"${o === current ? ' selected' : ''}>${esc(o)}</option>`)
+    .join('');
+  return `<option value="">— select —</option>` + opts;
+}
+
 // --- Read-only view --------------------------------------------------------
 function row(label, valueHtml) {
   return `<dt>${esc(label)}</dt><dd>${valueHtml || '<span class="faint">—</span>'}</dd>`;
@@ -124,6 +132,7 @@ function renderView() {
       ${row('Price', esc(money(s.price)))}
       ${row('Deposit', esc(money(s.deposit_amount)) + (s.deposit_date ? ` <span class="faint">(${esc(fmtDate(s.deposit_date))})</span>` : ''))}
       ${row('Balance paid', s.balance_paid_date ? esc(fmtDate(s.balance_paid_date)) : '')}
+      ${row('Deferred pickup boarding', s.deferred_boarding_amount != null && s.deferred_boarding_amount !== '' ? `${esc(money(s.deferred_boarding_amount))}${s.deferred_boarding_frequency ? ` per ${esc(s.deferred_boarding_frequency)}` : ''}` : '')}
       ${row('Lead source', esc(s.lead_source))}
       ${row('Referred by', s.referred_by_contact_id ? `<a href="contact.html?id=${encodeURIComponent(s.referred_by_contact_id)}">${esc(contactName(s.referred_by_contact_id) || '—')}</a>` : '')}
       ${row('Notes', s.notes ? esc(s.notes).replace(/\n/g, '<br>') : '')}
@@ -153,6 +162,11 @@ function renderEdit() {
       ${field('Deposit amount', `<input id="f-deposit_amount" type="number" min="0" step="0.01" value="${esc(s.deposit_amount)}">`)}
       ${field('Deposit date', `<input id="f-deposit_date" type="date" value="${esc(s.deposit_date)}">`)}
       ${field('Balance paid date', `<input id="f-balance_paid_date" type="date" value="${esc(s.balance_paid_date)}">`)}
+      ${field('Deferred pickup boarding', `<div style="display:flex; align-items:center; gap:8px;">
+          <input id="f-deferred_boarding_amount" type="number" min="0" step="0.01" value="${esc(s.deferred_boarding_amount)}" style="flex:1;">
+          <span class="faint">per</span>
+          <select id="f-deferred_boarding_frequency" style="flex:1;">${frequencyOptions(s.deferred_boarding_frequency)}</select>
+        </div>`, { hint: 'A boarding rate for a buyer who delayed pickup — a plain rate, not a Financials cost.' })}
       ${field('Lead source', `<input id="f-lead_source" type="text" list="lead-source-list" value="${esc(s.lead_source)}"><datalist id="lead-source-list">${sourceList}</datalist>`, { hint: 'How this specific sale came in. Prefills from the buyer, but may differ.' })}
       ${field('Referred by', `<select id="f-referred_by_contact_id">${contactOptions(s.referred_by_contact_id)}</select>`, { hint: 'The contact who referred this buyer. Tags them as a Buyer referrer automatically.' })}
       <div class="field field-wide">
@@ -205,6 +219,8 @@ function readForm() {
     deposit_amount: val('f-deposit_amount'),
     deposit_date: val('f-deposit_date'),
     balance_paid_date: val('f-balance_paid_date'),
+    deferred_boarding_amount: val('f-deferred_boarding_amount'),
+    deferred_boarding_frequency: val('f-deferred_boarding_frequency'),
     lead_source: val('f-lead_source').trim(),
     referred_by_contact_id: val('f-referred_by_contact_id') || null,
     notes: val('f-notes')
@@ -213,7 +229,7 @@ function readForm() {
 
 // Empty numeric strings become null.
 function normalizeMoney(candidate) {
-  for (const k of ['price', 'deposit_amount']) {
+  for (const k of ['price', 'deposit_amount', 'deferred_boarding_amount']) {
     candidate[k] = candidate[k] === '' || candidate[k] == null ? null : Number(candidate[k]);
   }
   return candidate;

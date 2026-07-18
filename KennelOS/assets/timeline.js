@@ -14,11 +14,6 @@ function detailsSummary(ev) {
   const parts = typeDef.fields
     .filter((f) => ev.details[f.key] != null && ev.details[f.key] !== '')
     .map((f) => {
-      if (f.type === 'currency_per_frequency') {
-        const freq = ev.details[f.frequencyKey];
-        const v = fmtMoney(ev.details[f.key]) + (freq ? ` per ${freq}` : '');
-        return `${esc(f.label)}: ${esc(v)}`;
-      }
       const v = f.type === 'date' ? fmtDate(ev.details[f.key]) : ev.details[f.key];
       return `${esc(f.label)}: ${esc(v)}`;
     });

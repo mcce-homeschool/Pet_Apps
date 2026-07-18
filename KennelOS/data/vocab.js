@@ -181,8 +181,8 @@ export const COI_METHOD_SUGGESTIONS = ['genomic', 'pedigree', 'registry', 'other
 // how the puppy actually travelled to the buyer.
 export const PLACEMENT_METHODS = ['Flight nanny', 'Ground transport', 'Local pickup', 'Other'];
 
-// Enforced choice list for the `placement` event type's deferred-boarding
-// `frequency` field — the rate period the boarding amount is charged per.
+// Enforced choice list for Sale's `deferred_boarding_frequency` field — the
+// rate period the deferred pickup boarding amount is charged per.
 export const BOARDING_FREQUENCY_OPTIONS = ['Day', 'Week', 'Month'];
 
 // Enforced choice list for the `abnormalities` event type's `Type` field —
@@ -290,15 +290,11 @@ export const EVENT_TYPES = [
   // is the puppy, related_contact_id is the buyer. No stored link to the Sale
   // (prompted at the Sale, never tied to it — see saleRepo/sale.js prompt).
   // placement_time is an inert display string, same posture as boarding's times.
-  // deferred_boarding_amount/_frequency is a plain rate (amount per day/week/
-  // month), not an actual cost — it never touches the Financials ledger (that's
-  // the separate top-level Cost field, a linked Expense).
   { value: 'placement',          label: 'Placement / drop-off', badge: 'badge-green', subjects: ['dog'], duration: 'instant', relatedContact: true,
     fields: [
       { key: 'dropoff_method', label: 'Method', type: 'select', options: PLACEMENT_METHODS },
       { key: 'placement_time', label: 'Drop-off time', type: 'text' },
       { key: 'location', label: 'Location', type: 'text' },
-      { key: 'deferred_boarding_amount', label: 'Deferred pickup boarding', type: 'currency_per_frequency', frequencyKey: 'deferred_boarding_frequency', frequencyOptions: BOARDING_FREQUENCY_OPTIONS },
       { key: 'notes', label: 'Notes', type: 'textarea' }
     ] },
   { value: 'note',               label: 'Note',               badge: 'badge-gray',    subjects: ['dog', 'pairing', 'litter'], duration: 'instant',

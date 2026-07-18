@@ -190,7 +190,7 @@ Edges worth calling out:
 | title_earned | dog | instant | | `{title_abbreviation, organization}` |
 | heat_cycle | dog | **span** | | `{notes}` — the cycle start is `event_date`, the end is `event_end_date` |
 | boarding | dog | **span** | ✓ | `{location, boarding_reason, dropoff_time, pickup_time, notes}` — a dog away from home; `related_contact_id` is where it's staying |
-| placement | dog | instant | ✓ | `{dropoff_method, placement_time, location, deferred_boarding_amount, deferred_boarding_frequency, notes}` — a puppy drop-off; `subject_id` is the puppy, `related_contact_id` is the buyer |
+| placement | dog | instant | ✓ | `{dropoff_method, placement_time, location, notes}` — a puppy drop-off; `subject_id` is the puppy, `related_contact_id` is the buyer |
 | breeding_tie | pairing | instant | | `{tie_date, method}` |
 | progesterone_test | pairing | instant | | `{value, lab}` |
 | ultrasound | pairing | instant | | `{confirmed, estimated_count}` |
@@ -200,7 +200,7 @@ Edges worth calling out:
 
 **Boarding specifics:** `boarding_reason` is *suggest-not-enforce* (a combobox over a starter set — stud service, co-owner rotation, foster, grow-out, owner travel, whelp assist, other — never a validated enum). `location` stays a plain string in `details`; the person/kennel is the top-level `related_contact_id`. `dropoff_time` / `pickup_time` (and `placement`'s `placement_time`) are **inert display strings** — never parsed or compared.
 
-**Placement specifics:** `dropoff_method` is an **enforced choice** from `PLACEMENT_METHODS` (`vocab.js`) — Flight nanny / Ground transport / Local pickup / Other — rendered directly above `placement_time` in the event form. `deferred_boarding_amount` (decimal, same posture as every other money field in the app — Sale `price`, StudService `fee_amount`; **never cents**) pairs with `deferred_boarding_frequency` (enforced choice from `BOARDING_FREQUENCY_OPTIONS` — Day / Week / Month), rendered on one line as "amount **per** frequency." This is a plain rate the breeder is recording, not an actual cost — it never writes to the Financials ledger (that's the separate top-level Cost field on the event form, which links an `Expense`).
+**Placement specifics:** `dropoff_method` is an **enforced choice** from `PLACEMENT_METHODS` (`vocab.js`) — Flight nanny / Ground transport / Local pickup / Other — rendered directly above `placement_time` in the event form.
 
 > **Test-name strings as vocabulary — built (§5.11).** The test-name `details` fields on `genetic_test` (`panel_name`), `breed_specific_test` (`test_name`), and `ofa_pennhip` (`joint`, combined with `method`) are the "seen-in-events" half of the shared suggestion vocabulary, unioned with `Kennel.preferred_tests` (`eventRepo.getTestTokens()` / `kennelRepo.getVocabulary()`).
 
@@ -268,6 +268,7 @@ The puppy roster itself is **not stored on Litter** — it's derived by querying
 | sale_date | date (`YYYY-MM-DD`) | | |
 | price / deposit_amount | decimal | | Prefilled on a new sale from the dog's `Litter.expected_price_male/_female`/`expected_deposit_male/_female` (§5.4), matched by the dog's `sex`, when `dog_id` names a puppy with a `litter_id`, only into fields still empty — a plain form prefill, not a stored link. |
 | deposit_date / balance_paid_date | date (`YYYY-MM-DD`) | | |
+| deferred_boarding_amount / deferred_boarding_frequency | decimal / enum: Day / Week / Month | | **Built.** Nullable, unindexed. A boarding rate for a buyer who delayed pickup — a plain rate the breeder is recording, same decimal-money posture as `price`/`deposit_amount` (**never cents**). `deferred_boarding_frequency` is an enforced choice from `BOARDING_FREQUENCY_OPTIONS` (`vocab.js`). Rendered on the Sale form as one line, "amount **per** frequency." Deliberately **not** a Financials cost — it never writes to the Expense ledger. |
 | placement_type | enum: pet / show / breeding_rights / co_own | ✓ | a `co_own` placement pairs naturally with adding the buyer to the dog's `co_owner_contact_ids` (a confirmed action, written through `dogRepo`) |
 | lead_source | string | | Free text with `<datalist>` autocomplete; how *this specific sale* came in. Prefills from the buyer's `first_contact_source` but may differ (same buyer, two dogs, two channels — which is why it can't live only on the person). Not indexed. |
 | status | enum: reserved / deposit_paid / paid_in_full / delivered / returned / cancelled | ✓ | a `returned` sale stays visible on the dog's record — status records what happened, archive only hides |

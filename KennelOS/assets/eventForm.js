@@ -111,17 +111,6 @@ export async function openEventForm(opts) {
       const opts = (f.options || []).map((o) => `<option value="${esc(o)}"${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('');
       return `<div class="field"><label>${esc(f.label)}</label><select data-detail="${esc(f.key)}"><option value="">— select —</option>${opts}</select></div>`;
     }
-    if (f.type === 'currency_per_frequency') {
-      const freqVal = draft.details[f.frequencyKey] ?? '';
-      const freqOpts = (f.frequencyOptions || []).map((o) => `<option value="${esc(o)}"${o === freqVal ? ' selected' : ''}>${esc(o)}</option>`).join('');
-      return `<div class="field field-wide"><label>${esc(f.label)}</label>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <input data-detail="${esc(f.key)}" type="number" step="0.01" min="0" value="${esc(v)}" style="flex:1;">
-          <span class="faint">per</span>
-          <select data-detail="${esc(f.frequencyKey)}" style="flex:1;"><option value="">— select —</option>${freqOpts}</select>
-        </div>
-      </div>`;
-    }
     const inputType = f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text';
     const stepAttr = f.type === 'number' && f.step ? ` step="${esc(f.step)}"` : '';
     return `<div class="field"><label>${esc(f.label)}</label><input data-detail="${esc(f.key)}" type="${inputType}"${stepAttr} value="${esc(v)}"></div>`;
