@@ -23,7 +23,56 @@ const blank = () => ({
   waitlist_status: '', first_contact_source: '', notes: '', companion_note: ''
 });
 
-const ctx = { mode: 'view', original: null, draft: null, kennels: [], firstContactSources: [] };
+const ctx = {
+  mode: 'view', original: null, draft: null, kennels: [], firstContactSources: [],
+  // Collapsible card state — tracks which cards are expanded (mirrors dog.js)
+  expandedCards: new Set()
+};
+
+// Helper to create a collapsible card. The card auto-collapses when empty.
+// If hasContent is false, the card starts collapsed with an empty badge.
+// The toggle button for the card should be passed in headerButton.
+function renderCollapsibleCard(title, bodyHtml, headerButton = '', { sectionKey = '', hasContent = true } = {}) {
+  const isExpanded = ctx.expandedCards.has(sectionKey) || hasContent;
+  const toggleId = `${sectionKey}-toggle`;
+
+  return `
+    <section class="card" style="margin-top:16px;">
+      <div class="row-between">
+        <div class="collapsible-header" style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;" data-toggle="${toggleId}">
+          <span class="collapsible-arrow" style="transform: rotate(${isExpanded ? '90deg' : '0deg'}); display: inline-block; transition: transform 0.2s; font-size: 12px;">▶</span>
+          <h2 style="margin:0;">${esc(title)}${!hasContent ? ' <span class="badge badge-gray">empty</span>' : ''}</h2>
+        </div>
+        <div id="${toggleId}-actions" class="pill-row">${headerButton}</div>
+      </div>
+      <div class="collapsible-content" id="${toggleId}-content" style="display: ${isExpanded ? 'block' : 'none'}; margin-top:12px;">
+        ${bodyHtml}
+      </div>
+    </section>`;
+}
+
+// Setup collapsible functionality for a card
+function setupCollapsibleCard(sectionKey) {
+  const toggleId = `${sectionKey}-toggle`;
+  const header = document.querySelector(`[data-toggle="${toggleId}"]`);
+  const content = document.getElementById(`${toggleId}-content`);
+  const arrow = header?.querySelector('.collapsible-arrow');
+
+  if (!header || !content) return;
+
+  header.addEventListener('click', () => {
+    const isExpanded = ctx.expandedCards.has(sectionKey);
+    if (isExpanded) {
+      ctx.expandedCards.delete(sectionKey);
+      content.style.display = 'none';
+      if (arrow) arrow.style.transform = 'rotate(0deg)';
+    } else {
+      ctx.expandedCards.add(sectionKey);
+      content.style.display = 'block';
+      if (arrow) arrow.style.transform = 'rotate(90deg)';
+    }
+  });
+}
 
 async function loadKennels() {
   const [kennels, sources] = await Promise.all([
@@ -39,14 +88,15 @@ function showError(msg) { els.error.innerHTML = `<div class="inline-error">${esc
 function clearError() { els.error.innerHTML = ''; }
 
 // --- Read-only view ------------------------------------------------------
-function row(label, valueHtml) { return `<dt>${esc(label)}</dt><dd>${valueHtml || '<span class="faint">—</span>'}</dd>`; }
+// Hides the field entirely until it has a value (matches dog.js's Profile card).
+function row(label, valueHtml) { return valueHtml ? `<dt>${esc(label)}</dt><dd>${valueHtml}</dd>` : ''; }
 
 function renderView() {
   const c = ctx.original;
   els.body.innerHTML = `
     <dl class="dl-meta" style="margin-top:14px;">
       ${row('Name', esc(c.name))}
-      ${row('Type', badges(CONTACT_TYPE, c.contact_type))}
+      ${row('Type', (c.contact_type || []).length ? badges(CONTACT_TYPE, c.contact_type) : '')}
       ${row('Waitlist', c.waitlist_status && c.waitlist_status !== 'none' ? badge(WAITLIST_STATUS, c.waitlist_status) : '')}
       ${row('First contact source', esc(c.first_contact_source))}
       ${row('Kennel', esc(kennelName(c.kennel_id)))}
@@ -132,10 +182,9 @@ async function addKennelInline() {
 
 // --- Owned / co-owned dogs list -----------------------------------------
 async function renderDogsSection() {
-  els.dogs.innerHTML = '';
-  if (ctx.mode !== 'view' || !ctx.original) return;
+  if (ctx.mode !== 'view' || !ctx.original) { els.dogs.innerHTML = ''; return; }
   const dogs = await contactRepo.getDogs(ctx.original.id);
-  const inner = dogs.length
+  const bodyHtml = dogs.length
     ? `<table class="data"><thead><tr><th>Call name</th><th>Registered</th><th>Status</th><th>Role</th></tr></thead><tbody>${
         dogs.map((d) => {
           const role = d.owner_contact_id === ctx.original.id ? 'Owner' : 'Co-owner';
@@ -143,28 +192,39 @@ async function renderDogsSection() {
         }).join('')
       }</tbody></table>`
     : `<div class="empty-state">No dogs linked to this contact. Ownership is edited from the dog’s own record.</div>`;
-  els.dogs.innerHTML = `<section class="card" style="margin-top:16px;"><h2 style="margin-top:0;">Dogs owned or co-owned</h2>${inner}</section>`;
+
+  const hasContent = dogs.length > 0;
+  els.dogs.innerHTML = renderCollapsibleCard('Dogs owned or co-owned', bodyHtml, '', { sectionKey: 'dogs', hasContent });
   els.dogs.querySelectorAll('tr[data-id]').forEach((tr) => {
     tr.addEventListener('click', () => { location.href = `dog.html?id=${encodeURIComponent(tr.dataset.id)}`; });
   });
+  setupCollapsibleCard('dogs');
 }
 
 // --- Sales (as buyer) list -------------------------------------------------
+// Shown (collapsed if empty) for buyer-type contacts, or any contact that
+// already has sales on record — same "relevant or has history" gating dog.js
+// uses for its Sales/Stud Services/Contracts panels.
 async function renderSalesSection() {
-  els.sales.innerHTML = '';
-  if (ctx.mode !== 'view' || !ctx.original) return;
-  const sales = await saleRepo.getByBuyer(ctx.original.id);
-  if (!sales.length) return; // no "Buyers" panel noise on non-buyer contacts
+  if (ctx.mode !== 'view' || !ctx.original) { els.sales.innerHTML = ''; return; }
+  const c = ctx.original;
+  const sales = await saleRepo.getByBuyer(c.id);
+  if (!sales.length && !(c.contact_type || []).includes('buyer')) { els.sales.innerHTML = ''; return; }
   const dogs = await dogRepo.getAll({ includeArchived: true });
   const dogsById = new Map(dogs.map((d) => [d.id, d]));
-  const inner = `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + sales.map((s) => {
-    const dog = dogsById.get(s.dog_id);
-    return `<li class="row-between" style="padding:8px 0; border-top:1px solid var(--border);">
-      <span>${badge(PLACEMENT_TYPE, s.placement_type)} <strong>${esc(dog ? dog.call_name : '—')}</strong> ${badge(SALE_STATUS, s.status)}${s.sale_date ? ` <span class="faint">${esc(s.sale_date)}</span>` : ''}</span>
-      <a class="btn btn-sm" href="sale.html?id=${encodeURIComponent(s.id)}">Open →</a>
-    </li>`;
-  }).join('') + `</ul>`;
-  els.sales.innerHTML = `<section class="card" style="margin-top:16px;"><h2 style="margin-top:0;">Sales (as buyer)</h2>${inner}</section>`;
+  const bodyHtml = sales.length
+    ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + sales.map((s) => {
+        const dog = dogsById.get(s.dog_id);
+        return `<li class="row-between" style="padding:8px 0; border-top:1px solid var(--border);">
+          <span>${badge(PLACEMENT_TYPE, s.placement_type)} <strong>${esc(dog ? dog.call_name : '—')}</strong> ${badge(SALE_STATUS, s.status)}${s.sale_date ? ` <span class="faint">${esc(s.sale_date)}</span>` : ''}</span>
+          <a class="btn btn-sm" href="sale.html?id=${encodeURIComponent(s.id)}">Open →</a>
+        </li>`;
+      }).join('') + `</ul>`
+    : `<p class="muted" style="margin:14px 0 0;">No sales recorded for this contact yet.</p>`;
+
+  const hasContent = sales.length > 0;
+  els.sales.innerHTML = renderCollapsibleCard('Sales (as buyer)', bodyHtml, '', { sectionKey: 'sales', hasContent });
+  setupCollapsibleCard('sales');
 }
 
 // --- Actions -------------------------------------------------------------
