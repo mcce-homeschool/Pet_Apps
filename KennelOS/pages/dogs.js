@@ -84,9 +84,9 @@ async function init() {
       { id: 'ownership', label: 'Ownership', options: OWNERSHIP_TYPE, match: (d, v) => d.ownership_type === v },
       { id: 'breed', label: 'Breed', options: breeds.map((b) => ({ value: b, label: b })), match: (d, v) => d.breed === v }
     ],
-    // Call name, Sex, and Status stay visible at every width; Registered name,
-    // Breed, and DOB collapse behind the row's "more details" toggle on phones
-    // so the table never forces horizontal scroll.
+    // Call name, Sex, Status, and Disposition stay visible at every width;
+    // Registered name, Breed, and DOB collapse behind the row's "more details"
+    // toggle on phones so the table never forces horizontal scroll.
     columns: [
       { header: 'Call name', cell: (d) => `<strong>${esc(d.call_name)}</strong>` },
       { header: 'Registered name', collapse: true, cell: (d) => d.registered_name ? esc(d.registered_name) : '<span class="faint">—</span>' },
@@ -94,7 +94,7 @@ async function init() {
       { header: 'Breed', collapse: true, cell: (d) => esc(d.breed || '—') },
       { header: 'DOB', collapse: true, cell: (d) => d.date_of_birth ? esc(fmtDate(d.date_of_birth)) : '<span class="faint">—</span>' },
       { header: 'Status', cell: (d) => badge(DOG_STATUS, d.status) },
-      { header: 'Disposition', collapse: true, cell: (d) => d.disposition ? badge(DISPOSITION, d.disposition) : '<span class="faint">—</span>' }
+      { header: 'Disposition', cell: (d) => d.disposition ? badge(DISPOSITION, d.disposition) : '<span class="faint">—</span>' }
     ],
     onRowClick: (d) => { location.href = `dog.html?id=${encodeURIComponent(d.id)}`; },
     load: (o) => dogRepo.getAll(o),

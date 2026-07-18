@@ -334,6 +334,14 @@ table.data tr.row-detail .dl-meta { margin: 0; }
 }
 @media (max-width: 640px) {
   table.data th.col-collapse, table.data td.col-collapse { display: none; }
+  /* Four always-visible dog-list columns (call name, sex, status, disposition)
+     need tighter spacing than the desktop table, and badges need to be able
+     to wrap to a second line (e.g. "External reference"), so the row never
+     forces horizontal scroll. */
+  table.data th, table.data td { padding: 8px 5px; font-size: 13px; overflow-wrap: break-word; }
+  table.data th { font-size: 10px; letter-spacing: 0.2px; hyphens: auto; }
+  table.data .badge { padding: 2px 6px; white-space: normal; }
+  .col-toggle { width: 20px; }
 }
 
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
