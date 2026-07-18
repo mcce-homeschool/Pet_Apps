@@ -21,7 +21,7 @@ const els = {
 
 const blankContract = () => ({
   contract_type: '', status: 'draft', related_sale_id: '', related_stud_service_id: '',
-  title: '', signed_date: '', terms_summary: '', notes: ''
+  title: '', signed_date: '', lease_start_date: '', lease_end_date: '', terms_summary: '', notes: ''
 });
 
 const ctx = {
@@ -91,6 +91,8 @@ function renderView() {
       ${row('Type', badge(CONTRACT_TYPE, c.contract_type))}
       ${row('Status', badge(CONTRACT_STATUS, c.status))}
       ${row('Signed date', c.signed_date ? esc(fmtDate(c.signed_date)) : '')}
+      ${c.contract_type === 'lease' ? row('Lease start', c.lease_start_date ? esc(fmtDate(c.lease_start_date)) : '') : ''}
+      ${c.contract_type === 'lease' ? row('Lease end', c.lease_end_date ? esc(fmtDate(c.lease_end_date)) : '') : ''}
       ${row('Related sale', sale ? `<a href="sale.html?id=${encodeURIComponent(sale.id)}">${esc(saleLabel(sale))}</a>` : '')}
       ${row('Related stud service', ss ? `<a href="stud-service.html?id=${encodeURIComponent(ss.id)}">${esc(studServiceLabel(ss))}</a>` : '')}
       ${row('Terms summary', c.terms_summary ? esc(c.terms_summary).replace(/\n/g, '<br>') : '')}
@@ -115,11 +117,31 @@ function renderEdit() {
       ${field('Type', `<select id="f-contract_type">${vocabOptions(CONTRACT_TYPE, c.contract_type, 'Select…')}</select>`, { required: true })}
       ${field('Status', `<select id="f-status">${vocabOptions(CONTRACT_STATUS, c.status, null)}</select>`, { hint: 'Not a locked sequence — moves freely, e.g. sent → declined → sent → signed.' })}
       ${field('Signed date', `<input id="f-signed_date" type="date" value="${esc(c.signed_date)}">`)}
+      ${c.contract_type === 'lease' ? field('Lease start', `<input id="f-lease_start_date" type="date" value="${esc(c.lease_start_date)}">`) : ''}
+      ${c.contract_type === 'lease' ? field('Lease end', `<input id="f-lease_end_date" type="date" value="${esc(c.lease_end_date)}">`) : ''}
       ${field('Related sale', `<select id="f-related_sale_id">${saleOptions(c.related_sale_id)}</select>`)}
       ${field('Related stud service', `<select id="f-related_stud_service_id">${studServiceOptions(c.related_stud_service_id)}</select>`)}
       ${field('Terms summary', `<textarea id="f-terms_summary">${esc(c.terms_summary)}</textarea>`, { wide: true })}
       ${field('Notes', `<textarea id="f-notes">${esc(c.notes)}</textarea>`, { wide: true })}
-    </div>`;
+    </div>
+    <div id="form-warn"></div>`;
+
+  const form = document.getElementById('contract-form');
+  form.addEventListener('input', updateWarnings);
+  form.addEventListener('change', updateWarnings);
+  document.getElementById('f-contract_type').addEventListener('change', () => {
+    ctx.draft = readForm();
+    renderEdit();
+  });
+  updateWarnings();
+}
+
+function updateWarnings() {
+  const s = readForm();
+  const warns = [];
+  if (s.lease_start_date && s.lease_end_date && s.lease_end_date < s.lease_start_date) warns.push('Lease end date is before the lease start date.');
+  const box = document.getElementById('form-warn');
+  if (box) box.innerHTML = warns.length ? `<div class="inline-warn">${warns.map(esc).join('<br>')}</div>` : '';
 }
 
 function readForm() {
@@ -130,6 +152,8 @@ function readForm() {
     contract_type: val('f-contract_type'),
     status: val('f-status') || 'draft',
     signed_date: val('f-signed_date'),
+    lease_start_date: val('f-lease_start_date'),
+    lease_end_date: val('f-lease_end_date'),
     related_sale_id: val('f-related_sale_id') || null,
     related_stud_service_id: val('f-related_stud_service_id') || null,
     terms_summary: val('f-terms_summary'),
