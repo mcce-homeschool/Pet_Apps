@@ -403,7 +403,7 @@ declined (or after sample data is later cleared), offer kennel setup.
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v32`) + a `PRECACHE_URLS` list of **every**
+- `CACHE_NAME` (currently `kennelos-shell-v33`) + a `PRECACHE_URLS` list of **every**
   app file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed
   file fails the whole install). `activate` deletes old caches. Fetch is

@@ -186,7 +186,7 @@ function renderEdit() {
       ${field('Puppies born (total)', `<input id="f-puppies_born_total" type="number" min="0" value="${esc(l.puppies_born_total)}">`)}
       ${field('Born alive', `<input id="f-puppies_born_alive" type="number" min="0" value="${esc(l.puppies_born_alive)}">`)}
       ${field('Born deceased', `<input id="f-puppies_born_deceased" type="number" min="0" value="${esc(l.puppies_born_deceased)}">`)}
-      ${field('Puppies born with abnormalities', `<input id="f-puppies_born_abnormalities" type="number" min="0" value="${esc(l.puppies_born_abnormalities)}">`)}
+      ${field('Born with abnormalities', `<input id="f-puppies_born_abnormalities" type="number" min="0" value="${esc(l.puppies_born_abnormalities)}">`)}
       <div class="field field-wide"><h3 style="margin:8px 0 0;">Males — expected price &amp; deposit</h3></div>
       ${field('Expected price (male)', `<input id="f-expected_price_male" type="number" min="0" step="0.01" value="${esc(l.expected_price_male)}">`, { hint: 'Prefills a new sale\'s price when the puppy sold is male. Still editable per sale.' })}
       ${field('Expected deposit (male)', `<input id="f-expected_deposit_male" type="number" min="0" step="0.01" value="${esc(l.expected_deposit_male)}">`, { hint: 'Prefills a new sale\'s deposit amount when the puppy sold is male. Still editable per sale.' })}
