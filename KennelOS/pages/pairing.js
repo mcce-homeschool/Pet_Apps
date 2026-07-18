@@ -9,6 +9,7 @@ import { dogRepo } from '../data/dogRepo.js';
 import { studServiceRepo } from '../data/studServiceRepo.js';
 import { PAIRING_TYPE, PAIRING_METHOD, PAIRING_STATUS, LITTER_STATUS, STUD_SERVICE_DIRECTION, STUD_SERVICE_STATUS } from '../data/vocab.js';
 import { esc, badge, fmtDate, param, confirmAction } from '../assets/ui.js';
+import { addDaysToYMD } from '../data/dateUtils.js';
 import { renderTimeline } from '../assets/timeline.js';
 import { openEventFromQuery } from '../assets/eventForm.js';
 
@@ -30,9 +31,12 @@ const els = {
 // Stage4 Revision v2 §5).
 let sourceStudServiceId = null;
 
+// Expected due date defaults to 63 days after the planned first (tie) date.
+const DUE_DAYS_AFTER_PLANNED = 63;
+
 const blankPairing = () => ({
   sire_id: '', dam_id: '', pairing_type: '', method: '', status: '',
-  planned_date: '', expected_due_date: '', notes: ''
+  planned_date: '', last_observed_date: '', expected_due_date: '', notes: ''
 });
 
 const ctx = {
@@ -96,7 +100,8 @@ function renderView() {
       ${row('Type', badge(PAIRING_TYPE, p.pairing_type))}
       ${row('Method', p.method ? badge(PAIRING_METHOD, p.method) : '')}
       ${row('Status', badge(PAIRING_STATUS, p.status))}
-      ${row('Planned date', p.planned_date ? esc(fmtDate(p.planned_date)) : '')}
+      ${row('Planned first date', p.planned_date ? esc(fmtDate(p.planned_date)) : '')}
+      ${row('Last observed date', p.last_observed_date ? esc(fmtDate(p.last_observed_date)) : '')}
       ${row('Expected due date', p.expected_due_date ? esc(fmtDate(p.expected_due_date)) : '')}
       ${row('Notes', p.notes ? esc(p.notes).replace(/\n/g, '<br>') : '')}
     </dl>`;
@@ -120,8 +125,9 @@ function renderEdit() {
       ${field('Type', `<select id="f-pairing_type">${vocabOptions(PAIRING_TYPE, p.pairing_type, 'Select…')}</select>`, { required: true })}
       ${field('Method', `<select id="f-method">${vocabOptions(PAIRING_METHOD, p.method, '— none —')}</select>`)}
       ${field('Status', `<select id="f-status">${vocabOptions(PAIRING_STATUS, p.status, 'Select…')}</select>`, { required: true })}
-      ${field('Planned date', `<input id="f-planned_date" type="date" value="${esc(p.planned_date)}">`)}
-      ${field('Expected due date', `<input id="f-expected_due_date" type="date" value="${esc(p.expected_due_date)}">`, { hint: 'Typically ~63 days after the planned/tie date.' })}
+      ${field('Planned first date', `<input id="f-planned_date" type="date" value="${esc(p.planned_date)}">`)}
+      ${field('Last observed date', `<input id="f-last_observed_date" type="date" value="${esc(p.last_observed_date)}">`)}
+      ${field('Expected due date', `<input id="f-expected_due_date" type="date" value="${esc(p.expected_due_date)}">`, { hint: 'Defaults to 63 days after the planned first date. Still editable.' })}
       <div class="field field-wide">
         <label class="check-inline"><input id="picker-archived" type="checkbox"${ctx.pickerArchived ? ' checked' : ''}> Include archived dogs in the pickers above</label>
       </div>
@@ -137,6 +143,15 @@ function renderEdit() {
     ctx.pickerArchived = e.target.checked;
     renderEdit();
   });
+  // Planned first date prefills expected due date (63 days later) — only while
+  // that field is still empty, so it never clobbers a deliberate edit.
+  document.getElementById('f-planned_date').addEventListener('change', (e) => {
+    ctx.draft = readForm();
+    if (e.target.value && !ctx.draft.expected_due_date) {
+      ctx.draft.expected_due_date = addDaysToYMD(e.target.value, DUE_DAYS_AFTER_PLANNED);
+    }
+    renderEdit();
+  });
   updateWarnings();
 }
 
@@ -150,6 +165,7 @@ function readForm() {
     method: val('f-method') || '',
     status: val('f-status'),
     planned_date: val('f-planned_date'),
+    last_observed_date: val('f-last_observed_date'),
     expected_due_date: val('f-expected_due_date'),
     notes: val('f-notes')
   };
@@ -164,7 +180,7 @@ function updateWarnings() {
   if (dam && dam.sex === 'male') warns.push('Selected dam is recorded as male.');
   if (p.sire_id && p.dam_id && p.sire_id === p.dam_id) warns.push('Sire and dam are the same dog — this will be blocked on save.');
   if (p.expected_due_date && p.planned_date && p.expected_due_date < p.planned_date) {
-    warns.push('Expected due date is before the planned date.');
+    warns.push('Expected due date is before the planned first date.');
   }
   const box = document.getElementById('form-warn');
   if (box) box.innerHTML = warns.length ? `<div class="inline-warn">${warns.map(esc).join('<br>')}</div>` : '';

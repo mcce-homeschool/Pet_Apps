@@ -8,6 +8,7 @@ import { pairingRepo } from '../data/pairingRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
 import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX, descriptor } from '../data/vocab.js';
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
+import { addDaysToYMD } from '../data/dateUtils.js';
 import { renderTimeline } from '../assets/timeline.js';
 import { openAddPuppyForm, openAddPuppiesForm } from '../assets/puppyForm.js';
 import { openEventForm, openEventFromQuery } from '../assets/eventForm.js';
@@ -17,6 +18,9 @@ const GROW_OUT_STATUSES = ['ready', 'placed'];
 
 // Statuses at/after whelping — used to decide whether a future whelp_date warns.
 const WHELPED_OR_LATER = ['whelped', 'weaning', 'ready', 'placed', 'closed'];
+
+// Estimated ready date defaults to 8 weeks (56 days) after whelping.
+const READY_DAYS_AFTER_WHELP = 56;
 
 const els = {
   title: document.getElementById('litter-title'),
@@ -30,7 +34,7 @@ const els = {
 };
 
 const blankLitter = () => ({
-  pairing_id: '', dam_id: '', sire_id: '', nickname: '', whelp_date: '', litter_registration_number: '',
+  pairing_id: '', dam_id: '', sire_id: '', nickname: '', whelp_date: '', estimated_ready_date: '', litter_registration_number: '',
   puppies_born_total: '', puppies_born_alive: '', puppies_born_deceased: '', puppies_born_abnormalities: '', status: '', notes: '',
   expected_price_male: '', expected_price_female: '', expected_deposit_male: '', expected_deposit_female: ''
 });
@@ -132,6 +136,7 @@ function renderView() {
       ${row('Sire', dogLink(l.sire_id))}
       ${row('Linked pairing', pairingHtml)}
       ${row('Whelp date', l.whelp_date ? esc(fmtDate(l.whelp_date)) : '')}
+      ${row('Estimated ready date', l.estimated_ready_date ? esc(fmtDate(l.estimated_ready_date)) : '')}
       ${row('Litter registration #', esc(l.litter_registration_number))}
       ${row('Puppies born', countsDisplay(l))}
       ${row('Status', badge(LITTER_STATUS, l.status))}
@@ -182,6 +187,7 @@ function renderEdit() {
       ${field('Sire', `<select id="f-sire_id">${dogOptions(l.sire_id, 'male')}</select>`, { required: true })}
       ${field('Status', `<select id="f-status">${vocabOptions(LITTER_STATUS, l.status, 'Select…')}</select>`, { required: true })}
       ${field('Whelp date', `<input id="f-whelp_date" type="date" value="${esc(l.whelp_date)}">`, { hint: 'May be a projected date while status is Expected.' })}
+      ${field('Estimated ready date', `<input id="f-estimated_ready_date" type="date" value="${esc(l.estimated_ready_date)}">`, { hint: 'Defaults to 8 weeks (56 days) after the whelp date. Still editable.' })}
       ${field('Litter registration #', `<input id="f-litter_registration_number" type="text" value="${esc(l.litter_registration_number)}">`)}
       ${field('Puppies born (total)', `<input id="f-puppies_born_total" type="number" min="0" value="${esc(l.puppies_born_total)}">`)}
       ${field('Born alive', `<input id="f-puppies_born_alive" type="number" min="0" value="${esc(l.puppies_born_alive)}">`)}
@@ -219,6 +225,15 @@ function renderEdit() {
     }
     renderEdit();
   });
+  // Whelp date prefills estimated ready date (8 weeks later) — only while that
+  // field is still empty, so it never clobbers a deliberate edit.
+  document.getElementById('f-whelp_date').addEventListener('change', (e) => {
+    ctx.draft = readForm();
+    if (e.target.value && !ctx.draft.estimated_ready_date) {
+      ctx.draft.estimated_ready_date = addDaysToYMD(e.target.value, READY_DAYS_AFTER_WHELP);
+    }
+    renderEdit();
+  });
   updateWarnings();
 }
 
@@ -232,6 +247,7 @@ function readForm() {
     sire_id: val('f-sire_id') || '',
     status: val('f-status'),
     whelp_date: val('f-whelp_date'),
+    estimated_ready_date: val('f-estimated_ready_date'),
     litter_registration_number: val('f-litter_registration_number').trim(),
     puppies_born_total: val('f-puppies_born_total'),
     puppies_born_alive: val('f-puppies_born_alive'),
