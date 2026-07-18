@@ -129,25 +129,42 @@ document.getElementById('log-heat-btn').addEventListener('click', async () => {
 });
 
 async function main() {
-  const [pairings, dogs] = await Promise.all([
+  const [pairings, dogs, allLittersIncl] = await Promise.all([
     pairingRepo.getAll({ includeArchived: false }),
-    dogRepo.getAll({ includeArchived: true })
+    dogRepo.getAll({ includeArchived: true }),
+    litterRepo.getAll({ includeArchived: true })
   ]);
   const dogsById = new Map(dogs.map((d) => [d.id, d]));
 
+  // Group the derived relationships once, in memory, instead of firing a
+  // getForPairing + getByLitter query per pairing (and one more per orphan
+  // litter). The puppy roster is Dog WHERE litter_id = <id>, so bucket the dogs
+  // we already loaded by litter_id (includeArchived matches getByLitter, which
+  // never filtered archived). littersByPairing keeps the first litter seen per
+  // pairing — one litter per pairing is the norm, same as getForPairing.
+  const puppiesByLitter = new Map();
+  for (const d of dogs) {
+    if (!d.litter_id) continue;
+    const arr = puppiesByLitter.get(d.litter_id);
+    if (arr) arr.push(d); else puppiesByLitter.set(d.litter_id, [d]);
+  }
+  const littersByPairing = new Map();
+  for (const l of allLittersIncl) {
+    if (l.pairing_id && !littersByPairing.has(l.pairing_id)) littersByPairing.set(l.pairing_id, l);
+  }
+
   // Attach each pairing's derived litter, then that litter's derived puppies.
-  const withLitters = await Promise.all(pairings.map(async (p) => {
-    const litter = await litterRepo.getForPairing(p.id);
-    const puppies = litter ? await dogRepo.getByLitter(litter.id) : [];
+  const withLitters = pairings.map((p) => {
+    const litter = littersByPairing.get(p.id) || null;
+    const puppies = litter ? (puppiesByLitter.get(litter.id) || []) : [];
     return { p, litter, puppies };
-  }));
+  });
   withLitters.sort((a, b) => recencyKey(b.p).localeCompare(recencyKey(a.p)));
 
   // Litters that exist without any recorded pairing — surfaced on their own so
-  // the chain view never hides a litter.
+  // the chain view never hides a litter. Orphan list stays non-archived only.
   const linkedLitterIds = new Set(withLitters.map((w) => w.litter?.id).filter(Boolean));
-  const allLitters = await litterRepo.getAll({ includeArchived: false });
-  const orphanLitters = allLitters.filter((l) => !linkedLitterIds.has(l.id));
+  const orphanLitters = allLittersIncl.filter((l) => !l.is_archived && !linkedLitterIds.has(l.id));
 
   if (!withLitters.length && !orphanLitters.length) {
     body.innerHTML = `<div class="card empty-state">No pairings yet. Click “+ Add Pairing” to record the first breeding.</div>`;
@@ -166,10 +183,10 @@ async function main() {
   let orphanHtml = '';
   if (orphanLitters.length) {
     orphanLitters.sort((a, b) => (b.whelp_date || '').localeCompare(a.whelp_date || ''));
-    const cards = await Promise.all(orphanLitters.map(async (l) => {
-      const puppies = await dogRepo.getByLitter(l.id);
+    const cards = orphanLitters.map((l) => {
+      const puppies = puppiesByLitter.get(l.id) || [];
       return `<section class="card" style="margin-top:14px;">${litterHtml(l, puppies)}</section>`;
-    }));
+    });
     orphanHtml = `<h2 style="margin-top:26px;">Litters without a recorded pairing <span class="muted" style="font-size:14px;">(${orphanLitters.length})</span></h2>${cards.join('')}`;
   }
 

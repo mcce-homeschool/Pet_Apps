@@ -318,12 +318,16 @@ async function main() {
   ctx.littersById = new Map(litters.map((l) => [l.id, l]));
   ctx.contactsById = new Map(contacts.map((c) => [c.id, c]));
 
-  await renderNudges();
-  await renderReminders();
+  // Nudges and reminders each do their own async read; they're independent, so
+  // run them concurrently rather than one-then-the-other (halves the critical
+  // path for the two top cards). The remaining sections render synchronously
+  // from the data main() already loaded.
+  const asyncCards = Promise.all([renderNudges(), renderReminders()]);
   renderAvailable(allDogs);
   renderUpcoming(upcoming);
   renderBoard(boardRows);
   renderOverview({ allDogs, litters, pairings, sales });
+  await asyncCards;
 }
 
 main().catch((e) => showError(e.message || String(e)));

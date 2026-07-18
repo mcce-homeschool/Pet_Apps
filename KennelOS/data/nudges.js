@@ -78,15 +78,20 @@ function studInProgressNudge(s, dogsById) {
 
 export async function computeNudges() {
   const today = todayYMD();
-  const [studServices, dogs, kennels, pairings, events] = await Promise.all([
+  const [studServices, dogs, kennels, pairings, events, litters] = await Promise.all([
     studServiceRepo.getAll(),
     dogRepo.getAll(),
     kennelRepo.getAll(),
     pairingRepo.getAll(),
-    eventRepo.getAll()
+    eventRepo.getAll(),
+    litterRepo.getAll({ includeArchived: true })
   ]);
   const dogsById = new Map(dogs.map((d) => [d.id, d]));
   const kennelsById = new Map(kennels.map((k) => [k.id, k]));
+  // Pairings that already have a litter recorded against them — precomputed once
+  // so the overdue-pairing rule below is a Set lookup, not a per-pairing query
+  // (getForPairing counts archived litters too, matching includeArchived above).
+  const pairingIdsWithLitter = new Set(litters.map((l) => l.pairing_id).filter(Boolean));
 
   const nudges = [];
 
@@ -171,8 +176,7 @@ export async function computeNudges() {
   // Litter" button uses).
   for (const p of pairings) {
     if (!PRE_WHELP_STATUSES.includes(p.status) || !p.expected_due_date || p.expected_due_date >= today) continue;
-    const litter = await litterRepo.getForPairing(p.id);
-    if (litter) continue;
+    if (pairingIdsWithLitter.has(p.id)) continue;
     nudges.push({
       key: `pairingoverdue:${p.id}`,
       title: `${pairingLabel(p, dogsById)} is past its expected due date`,

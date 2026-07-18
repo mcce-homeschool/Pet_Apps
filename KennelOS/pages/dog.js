@@ -530,8 +530,9 @@ function cancel() {
   renderView();
   renderProfileActions();
   renderRecordedCoiSection();
-  renderPlannedTestsSection();
-  renderHealthTestsSection();
+  const eventsP = viewDogEventsPromise();
+  renderPlannedTestsSection(eventsP);
+  renderHealthTestsSection(eventsP);
   renderTimelineSection();
   renderPairingsSection();
   renderSalesSection();
@@ -710,12 +711,21 @@ async function renderRecordedCoiSection() {
 // structured locus data the app doesn't model — door left open in §11). This is
 // the "genetic analysis" of Stage 5: surfacing what was recorded, nothing more.
 // Editing/adding these events stays in the Event History below.
+// A single events read for the current dog in view mode, or null otherwise —
+// so the health-test and planned-test sections can share one fetch when rendered
+// together, while each still self-fetches when re-rendered on its own.
+function viewDogEventsPromise() {
+  return (ctx.mode === 'view' && ctx.original)
+    ? eventRepo.getForSubject('dog', ctx.original.id)
+    : null;
+}
+
 const HEALTH_TEST_TYPES = ['genetic_test', 'ofa_pennhip', 'breed_specific_test'];
-async function renderHealthTestsSection() {
+async function renderHealthTestsSection(eventsP = null) {
   if (!els.healthTests) return;
   if (ctx.mode !== 'view' || !ctx.original) { els.healthTests.innerHTML = ''; return; }
   const d = ctx.original;
-  const events = await eventRepo.getForSubject('dog', d.id);
+  const events = await (eventsP || eventRepo.getForSubject('dog', d.id));
   const tests = events.filter((e) => HEALTH_TEST_TYPES.includes(e.event_type));
 
   const detailsSummary = (ev) => {
@@ -752,14 +762,14 @@ async function renderHealthTestsSection() {
 // case-insensitively/trimmed against this dog's own test events. Never a hard
 // fraction — matching can legitimately miss on drift, typos, or grain mismatch,
 // so the view nudges rather than scores.
-async function renderPlannedTestsSection() {
+async function renderPlannedTestsSection(eventsP = null) {
   if (!els.plannedTests) return;
   if (ctx.mode !== 'view' || !ctx.original) { els.plannedTests.innerHTML = ''; return; }
   const d = ctx.original;
   const planned = d.planned_tests || [];
 
   const [events, kennelVocab, seenTokens] = await Promise.all([
-    eventRepo.getForSubject('dog', d.id),
+    eventsP || eventRepo.getForSubject('dog', d.id),
     kennelRepo.getVocabulary(),
     eventRepo.getTestTokens()
   ]);
@@ -1029,8 +1039,11 @@ function renderAll() {
   if (ctx.mode === 'view') renderView();
   else renderEdit();
   renderRecordedCoiSection();
-  renderPlannedTestsSection();
-  renderHealthTestsSection();
+  // Health-test and planned-test sections both read this dog's events; share one
+  // fetch (a single promise) so it's queried once, not twice, per render.
+  const eventsP = viewDogEventsPromise();
+  renderPlannedTestsSection(eventsP);
+  renderHealthTestsSection(eventsP);
   renderTimelineSection();
   renderPairingsSection();
   renderSalesSection();
