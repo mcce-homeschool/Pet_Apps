@@ -18,11 +18,12 @@
   <main>
     <div class="page-header">
       <div>
-        <a class="muted" href="reports.html">← All reports</a>
         <h1>Financials</h1>
-        <p class="page-subtitle">Every expense across the program — costs on dogs, litters, pairings, and kennel-wide overhead, all from the one ledger. Filter, and export the visible rows to CSV.</p>
+        <p class="page-subtitle">Every expense across the program — costs on dogs, litters, pairings, and kennel-wide overhead, all from the one ledger. Add a cost against anything, filter, and export.</p>
       </div>
+      <button class="btn btn-primary" id="add-expense">+ Add Expense</button>
     </div>
+    <div id="page-error"></div>
     <section class="card" id="summary-section" style="margin-bottom:16px;">
       <div id="summary"></div>
     </section>
@@ -32,6 +33,6 @@
   </main>
 
   <script type="module" src="../app.js"></script>
-  <script type="module" src="./financials-report.js"></script>
+  <script type="module" src="./financials.js"></script>
 </body>
 </html>

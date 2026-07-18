@@ -12,7 +12,8 @@ export const NAV_ITEMS = [
   { label: 'Dogs',     path: 'pages/dogs.html' },
   { label: 'Breeding', path: 'pages/breeding.html' }, // pairings + litters + resulting puppies
   { label: 'People',   path: 'pages/contacts.html' }, // contacts + waitlist / buyers
-  { label: 'Placements & Contracts', path: 'pages/sales.html' } // sales + stud services + contracts
+  { label: 'Placements & Contracts', path: 'pages/sales.html' }, // sales + stud services + contracts
+  { label: 'Financials', path: 'pages/financials.html' } // the expense ledger — where the money lives
 ];
 
 // Back-of-house utilities — rarely opened, so they live behind a corner menu

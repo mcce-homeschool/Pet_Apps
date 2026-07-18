@@ -509,18 +509,21 @@ one implementation lives in `data/dateUtils.js`.
 
 ### Navigation (`nav.js`)
 
-Organized **by job, not by table**: five workflow hubs in the main bar —
-**Today / Dogs / Breeding / People / Placements & Contracts** — plus a "More" corner
-menu for **Reports**, **Companion** (§20), and **Import/Export**. Detail/edit/import pages are not nav
+Organized **by job, not by table**: six workflow hubs in the main bar —
+**Today / Dogs / Breeding / People / Placements & Contracts / Financials** — plus a
+"More" corner menu for **Reports**, **Companion** (§20), and **Import/Export**.
+Financials is a first-class hub, not a report (money is operational, Reports are
+analytics queries). Detail/edit/import pages are not nav
 entries; `HUB_CHILDREN` maps them to the hub tab that should light up. Links are
 stored app-root-relative and prefixed at render time so they resolve from `index.html`
 or `/pages/` and any GitHub Pages sub-path.
 
 ### Page catalog (`pages/`, one `.js` + `.html` each)
 
-Hubs & landing: `today`, `dogs`, `breeding`, `contacts`, `sales`, `reports`,
-`companion` (the Companion Messaging console, §20), `import-export`, plus root
-`index.html`.
+Hubs & landing: `today`, `dogs`, `breeding`, `contacts`, `sales`, `financials`
+(the Financials hub — the Expense ledger overview + a hub-level "+ Add Expense"
+against any subject, §21), `reports`, `companion` (the Companion Messaging console,
+§20), `import-export`, plus root `index.html`.
 Dogs: `dog` (detail), `roster`, `pedigree`.
 Breeding: `pairings`/`pairing`, `litters`/`litter`, `active-breeding`, `live-births`.
 People: `contact`, `kennels` (list) / `kennel` (detail — a lean read-only profile
@@ -530,7 +533,8 @@ Placements/contracts: `sale`/`sales`, `stud-service`/`stud-services`,
 `contract`/`contracts`.
 Today cluster: `dashboard`, `reminders`, `upcoming`, `board`, `scheduled-placements`.
 Reports: `litters-report`, `stud-services-report`, `placements-report`,
-`health-tests-report`, `financials-report` (the Financials/Expense ledger report, §21).
+`health-tests-report`. (Reports are analytics *queries*; the Financials ledger is
+its own top-level hub, not a report — see `financials` above and §21.)
 Import pages: `dog-import`, `contact-import`, `pairing-import`, `litter-import`,
 `sale-import`, `event-import`, `stud-service-import`, `kennel-tests-import`.
 
@@ -822,9 +826,11 @@ Revenue is **not** here (it stays on `Sale.price`/`deposit_amount` and
   add/edit/archive/delete, its own add-expense modal). Mounted on the dog, litter,
   pairing, and **kennel** detail pages (the last via the new lean `pages/kennel.*`,
   reached from the Kennels list's "Open →").
-- **`pages/financials-report.*`** — the program-wide report (summary card with grand
-  total + per-category breakdown, then the standard `reportView` table with
-  category/subject-type/year filters and CSV export). Linked from `pages/reports.html`.
+- **`pages/financials.*`** — the **Financials hub** (its own top-level nav tab, not a
+  report): a summary card (grand total + per-category breakdown) over the standard
+  `reportView` ledger table (category/subject-type/year filters + CSV export), plus a
+  hub-level **"+ Add Expense"** that logs a cost against **any** subject (dog / litter /
+  pairing / kennel) from one place. Analytics queries stay under Reports.
 
 ### Migration & safety
 
