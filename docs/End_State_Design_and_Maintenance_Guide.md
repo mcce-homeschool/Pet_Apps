@@ -403,7 +403,7 @@ declined (or after sample data is later cleared), offer kennel setup.
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v33`) + a `PRECACHE_URLS` list of **every**
+- `CACHE_NAME` (currently `kennelos-shell-v34`) + a `PRECACHE_URLS` list of **every**
   app file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed
   file fails the whole install). `activate` deletes old caches. Fetch is
@@ -454,6 +454,16 @@ one implementation lives in `data/dateUtils.js`.
 - **eventForm.js** — add/edit-event modal; renders the type's `fields` into `details`,
   handles spans/reminders, persists empty optional dates as `null` (important: keeps
   them out of the reminder index). Supports applying one payload to multiple subjects.
+  Also exports `openEventFromQuery(subjectType, subjectId, onSaved)` — since Event has
+  no standalone page (polymorphic subject, §2), this is how `pages/today.js`'s
+  Reminders and Due outs & upcoming rows deep-link "into" an event: each row's button
+  navigates to the subject's own page (`dog.html`/`pairing.html`/`litter.html`) with an
+  extra query param, and that page's `main()` calls this once after loading its record.
+  `openEvent=<id>` opens that exact event in edit mode (a due-out **is** the event, so
+  "Open →" edits it); `logEvent=<event_type>` opens a fresh event of that type (a
+  reminder nudges the *next* occurrence, so "Log new →" never re-edits the one that
+  fired it). Wired into `dog.js`/`pairing.js`/`litter.js` main() alongside their
+  existing `new=1` prefill params.
 - **puppyForm.js**, **importView.js**, **sampleDataUI.js**, **kennelSetupUI.js** —
   roster entry, the CSV dry-run/commit UI, and the two first-run prompt/banners.
 - **contactPicker.js** — `attachNewContactButton(selectEl, {onCreated})` decorates any

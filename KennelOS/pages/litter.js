@@ -10,7 +10,7 @@ import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX, descriptor } from '../d
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { renderTimeline } from '../assets/timeline.js';
 import { openAddPuppyForm, openAddPuppiesForm } from '../assets/puppyForm.js';
-import { openEventForm } from '../assets/eventForm.js';
+import { openEventForm, openEventFromQuery } from '../assets/eventForm.js';
 
 // Statuses that warrant the grow-out boarding prompt (Stage4.5 Addendum §C6).
 const GROW_OUT_STATUSES = ['ready', 'placed'];
@@ -572,6 +572,7 @@ async function main() {
   ctx.original = l;
   ctx.mode = 'view';
   renderAll();
+  openEventFromQuery('litter', l.id, renderTimelineSection);
 }
 
 main();

@@ -20,6 +20,7 @@ import {
 } from '../data/vocab.js';
 import { esc, badge, fmtDate, todayYMD, param, confirmAction } from '../assets/ui.js';
 import { renderTimeline } from '../assets/timeline.js';
+import { openEventFromQuery } from '../assets/eventForm.js';
 import { renderPedigree } from '../assets/pedigree.js';
 
 const OWNER_REQUIRED = ['external', 'leased_in'];
@@ -1074,6 +1075,7 @@ async function main() {
   ctx.original = dog;
   ctx.mode = 'view';
   renderAll();
+  openEventFromQuery('dog', dog.id, renderTimelineSection);
 }
 
 main();
