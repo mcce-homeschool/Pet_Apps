@@ -1,20 +1,25 @@
 // puppyForm.js — the "Add Puppy" / "Add N Puppies" flow launched from Litter
 // Detail (Stage 3 Brief §3). A puppy is NOT a separate entity — these create
 // ordinary Dog records via dogRepo.create(), with the litter-derived fields
-// (litter_id, dam_id, sire_id, breed, status:puppy, ownership_type:owned)
-// pre-filled. call_name and sex are the only per-puppy fields prompted, matching
-// Dog's "required to save" list; everything else is edited later on Dog Detail.
+// (litter_id, dam_id, sire_id, breed, date_of_birth, status:puppy,
+// ownership_type:owned) pre-filled. call_name and sex are the only per-puppy
+// fields prompted, matching Dog's "required to save" list; everything else is
+// edited later on Dog Detail.
 import { dogRepo } from '../data/dogRepo.js';
 import { SEX, DISPOSITION } from '../data/vocab.js';
-import { esc } from './ui.js';
+import { esc, fmtDate, todayYMD } from './ui.js';
 
-// Fields carried from the litter onto each new puppy record.
+// Fields carried from the litter onto each new puppy record. whelp_date only
+// carries into date_of_birth once it's an actual (not projected) date — a
+// litter can still be "Expected" with a future whelp_date when placeholders
+// get added, and Dog rejects a future date_of_birth outright.
 function baseFromLitter(litter, dam) {
   return {
     litter_id: litter.id,
     dam_id: litter.dam_id || null,
     sire_id: litter.sire_id || null,
     breed: dam?.breed || '',        // breed comes from the dam
+    date_of_birth: (litter.whelp_date && litter.whelp_date <= todayYMD()) ? litter.whelp_date : '',
     status: 'puppy',
     ownership_type: 'owned'
   };
@@ -61,7 +66,7 @@ export function openAddPuppyForm({ litter, dam, onSaved }) {
       <h2 style="margin:0;">Add puppy</h2>
       <button class="btn btn-sm" data-act="cancel">✕</button>
     </div>
-    <p class="muted" style="margin-top:0;">Litter parents, breed (${esc(base.breed)}), status “puppy” and owned ownership are filled in automatically. You can edit any of it later on the puppy's own record.</p>
+    <p class="muted" style="margin-top:0;">Litter parents, breed (${esc(base.breed)})${base.date_of_birth ? `, date of birth (${esc(fmtDate(base.date_of_birth))})` : ''}, status “puppy” and owned ownership are filled in automatically. You can edit any of it later on the puppy's own record.</p>
     <div class="form-grid">
       <div class="field"><label>Call name <span class="req">*</span></label>
         <input id="pf-call_name" type="text" placeholder="e.g. Green collar"></div>

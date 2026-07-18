@@ -162,7 +162,7 @@ export async function renderPedigree({ mount, rootId, generations = 3, onNavigat
       for (const pup of pups) {
         const otherParentId = pup.sire_id === rootId ? pup.dam_id : pup.sire_id;
         const otherParent = otherParentId ? byId.get(otherParentId) : null;
-        const role = pup.sire_id === rootId ? 'Sire' : 'Dam';
+        const role = pup.sire_id === rootId ? 'Dam' : 'Sire';
         const otherParentName = otherParent ? esc(otherParent.call_name || '(unnamed)') : '[Unknown parent]';
         const dob = pup.date_of_birth ? fmtDate(pup.date_of_birth) : '';
         const genderIndicator = pup.sex === 'male' ? 'M' : pup.sex === 'female' ? 'F' : '?';

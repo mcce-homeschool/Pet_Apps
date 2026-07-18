@@ -339,6 +339,18 @@ function renderEdit() {
     }
     renderEdit();
   });
+  // Convenience: linking a Litter prefills Date of birth from the litter's
+  // whelp date, if DOB is still empty — a prefill only, never an override. A
+  // DOB that already conflicts with the litter's whelp date surfaces as an
+  // actionable warning instead (updateWarnings).
+  document.getElementById('f-litter_id').addEventListener('change', (e) => {
+    ctx.draft = readForm();
+    const litter = e.target.value ? ctx.littersById.get(e.target.value) : null;
+    if (litter && litter.whelp_date && !ctx.draft.date_of_birth) {
+      ctx.draft.date_of_birth = litter.whelp_date;
+    }
+    renderEdit();
+  });
   updateWarnings();
 }
 
@@ -384,8 +396,45 @@ function updateWarnings() {
     warns.push(`An owner is required when ownership is “${OWNERSHIP_TYPE.find((o) => o.value === d.ownership_type)?.label}”.`);
   }
   if (d.date_of_death && d.status !== 'deceased') warns.push('Date of death is set but status is not Deceased.');
+
   const box = document.getElementById('form-warn');
-  if (box) box.innerHTML = warns.length ? `<div class="inline-warn">${warns.map(esc).join('<br>')}</div>` : '';
+  if (!box) return;
+
+  // Linked litter's whelp date vs. this dog's DOB: warn-only, never blocks
+  // save (an imported/historical record may legitimately disagree) — but
+  // offer the three fixes a mismatch could mean instead of just a message.
+  const litter = d.litter_id ? ctx.littersById.get(d.litter_id) : null;
+  const dobConflict = !!(litter && litter.whelp_date && d.date_of_birth && d.date_of_birth !== litter.whelp_date);
+
+  box.innerHTML =
+    (warns.length ? `<div class="inline-warn">${warns.map(esc).join('<br>')}</div>` : '') +
+    (dobConflict ? `
+      <div class="inline-warn">
+        Date of birth (${esc(fmtDate(d.date_of_birth))}) doesn't match this litter's whelp date (${esc(fmtDate(litter.whelp_date))}).
+        <div class="pill-row" style="margin-top:6px;">
+          <button type="button" class="btn btn-sm" id="warn-dob-use-litter">Update dog's DOB to match</button>
+          <button type="button" class="btn btn-sm" id="warn-dob-use-dog">Update litter's whelp date to match</button>
+          <button type="button" class="btn btn-sm" id="warn-dob-change-litter">Change litter</button>
+        </div>
+      </div>` : '');
+
+  if (dobConflict) {
+    document.getElementById('warn-dob-use-litter').onclick = () => {
+      ctx.draft = readForm();
+      ctx.draft.date_of_birth = litter.whelp_date;
+      renderEdit();
+    };
+    document.getElementById('warn-dob-use-dog').onclick = async () => {
+      const updated = await litterRepo.update(litter.id, { whelp_date: d.date_of_birth });
+      ctx.littersById.set(updated.id, updated);
+      updateWarnings();
+    };
+    document.getElementById('warn-dob-change-litter').onclick = () => {
+      ctx.draft = readForm();
+      ctx.draft.litter_id = null;
+      renderEdit();
+    };
+  }
 }
 
 // --- Actions -------------------------------------------------------------
