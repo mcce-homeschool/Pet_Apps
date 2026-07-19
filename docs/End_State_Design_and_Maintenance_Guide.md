@@ -778,8 +778,7 @@ view. The main app stays single-user/offline/all-local; this adds *recipients*.
     `flat_plus_pick`) — and a **Contract** section carrying the service's own
     governing/most-recent contract as `contract` = `{signedDate, documentUrl}` (shown
     "Not Signed" when the signed date is null, + a "View/sign contract here" link)),
-    `externalPairings` (pairings involving their external/leased-in dogs), and the
-    top-level `contracts` (lease/co_own/other contracts where `related_contact_id` =
+    and the top-level `contracts` (lease/co_own/other contracts where `related_contact_id` =
     them, each with `type`, `status`, `signedDate` — shown "Not Signed" when null —
     `terms`, and `document_url`; there is **no** contract `returned_date`, brief
     decision 2).

@@ -27,18 +27,15 @@
 // on a breaking shape change.
 import { dogRepo } from './dogRepo.js';
 import { saleRepo } from './saleRepo.js';
-import { contactRepo } from './contactRepo.js';
 import { contractRepo } from './contractRepo.js';
 import { studServiceRepo } from './studServiceRepo.js';
 import { eventRepo } from './eventRepo.js';
-import { pairingRepo } from './pairingRepo.js';
 import { litterRepo } from './litterRepo.js';
 import { getCompanionSettings } from './settings.js';
 
 export const COMPANION_BUNDLE_VERSION = 1;
 
 const FEE_STRUCTURES_WITH_PICK = ['pick_of_litter', 'flat_plus_pick'];
-const EXTERNAL_OWNERSHIP = ['external', 'leased_in'];
 
 // Curated per-type detail surfaced in a family's event history (brief decision
 // 4 — a scoped relaxation of the "fixed type label only" rule). One safe field
@@ -48,10 +45,6 @@ const FAMILY_EVENT_TYPES = ['vaccination', 'preventative', 'weight_check', 'mile
 
 function nonEmpty(v) {
   return v != null && v !== '' ? v : null;
-}
-
-function dogMini(d) {
-  return d ? { name: d.call_name || '', breed: d.breed || '' } : null;
 }
 
 // Parent identity for a family's parentage line — call + registered name only.
@@ -79,8 +72,8 @@ async function completedTests(dogId) {
   return out;
 }
 
-// Richer public projection of a dog than dogMini — registered/AKC name, call
-// name, a photos link, and completed tests. Named copy only, no record spread.
+// Public projection of a dog — registered/AKC name, call name, a photos link,
+// and completed tests. Named copy only, no record spread.
 async function dogCard(dog) {
   if (!dog) return null;
   return {
@@ -158,7 +151,7 @@ const FAMILY_KEYS = [
 ];
 const PARTNER_KEYS = [
   'bundleVersion', 'bundleType', 'kennelName', 'tagline', 'introText', 'announcement',
-  'personalNote', 'closer', 'partnerName', 'studServices', 'externalPairings', 'contracts', 'updatedAt'
+  'personalNote', 'closer', 'partnerName', 'studServices', 'contracts', 'updatedAt'
 ];
 
 // --- Prospective family: current availability, one card per litter with its
@@ -337,9 +330,8 @@ export async function buildFamilyBundle(contact) {
   return assertOnlyKeys(bundle, FAMILY_KEYS, 'family');
 }
 
-// --- Partner: stud services (labeled Stud/Dam cards with completed tests),
-// external-dog pairings, and lease/co_own/other contracts where this partner is
-// the counterparty. ---------------------------------------------------------
+// --- Partner: stud services (labeled Stud/Dam cards with completed tests) and
+// lease/co_own/other contracts where this partner is the counterparty. -------
 export async function buildPartnerBundle(contact) {
   const h = headerCopy('partner', contact);
 
@@ -380,29 +372,6 @@ export async function buildPartnerBundle(contact) {
     });
   }
 
-  // Pairings involving this partner's external/leased-in dogs.
-  const theirDogs = await contactRepo.getDogs(contact.id);
-  const externalDogIds = theirDogs
-    .filter((d) => EXTERNAL_OWNERSHIP.includes(d.ownership_type))
-    .map((d) => d.id);
-  const pairingsById = new Map();
-  for (const dogId of externalDogIds) {
-    for (const p of await pairingRepo.getForDog(dogId)) {
-      if (!p.is_archived) pairingsById.set(p.id, p);
-    }
-  }
-  const externalPairings = [];
-  for (const p of pairingsById.values()) {
-    const sire = p.sire_id ? await dogRepo.getById(p.sire_id) : null;
-    const dam = p.dam_id ? await dogRepo.getById(p.dam_id) : null;
-    externalPairings.push({
-      sire: dogMini(sire),
-      dam: dogMini(dam),
-      status: p.status || null,
-      plannedDate: p.planned_date || null
-    });
-  }
-
   const contracts = (await contractRepo.getByContact(contact.id))
     .filter((c) => !c.is_archived)
     .map((c) => ({
@@ -420,7 +389,6 @@ export async function buildPartnerBundle(contact) {
     ...h,
     partnerName: contact.name || '',
     studServices,
-    externalPairings,
     contracts,
     updatedAt: new Date().toISOString()
   };

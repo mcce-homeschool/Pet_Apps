@@ -517,19 +517,6 @@
         h += '</div>';
       }
 
-      var pairings = Array.isArray(b.externalPairings) ? b.externalPairings : [];
-      if (pairings.length) {
-        h += '<div class="card"><h2>Pairings</h2><ul class="clean">';
-        for (var j = 0; j < pairings.length; j++) {
-          var p = pairings[j];
-          var extra = [];
-          if (p.status) extra.push(esc(p.status));
-          if (p.plannedDate) extra.push(esc(fmtDate(p.plannedDate)));
-          h += '<li>' + pairLabel(p.sire, p.dam) + (extra.length ? ' <span class="chip">' + extra.join(' · ') + '</span>' : '') + '</li>';
-        }
-        h += '</ul></div>';
-      }
-
       var contracts = Array.isArray(b.contracts) ? b.contracts : [];
       if (contracts.length) {
         h += '<div class="card"><h2>Contracts</h2>';
