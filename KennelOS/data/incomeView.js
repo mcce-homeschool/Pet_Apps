@@ -112,6 +112,10 @@ export async function getIncomeRows({ includeArchived = false } = {}) {
       source_id: s.id,
       href: `sale.html?id=${encodeURIComponent(s.id)}`,
       dog: dogName(s.dog_id),
+      dog_id: s.dog_id,
+      // The puppy's litter (dog.litter_id) — lets income roll up per litter
+      // (litterFinances.js / the litter P&L report). Null for a non-litter dog.
+      litter_id: dogById.get(s.dog_id)?.litter_id || null,
       counterparty: contactName(s.buyer_contact_id),
       status: s.status,
       date: s.sale_date || s.deposit_date || s.balance_paid_date || '',
@@ -131,6 +135,8 @@ export async function getIncomeRows({ includeArchived = false } = {}) {
       source_id: s.id,
       href: `stud-service.html?id=${encodeURIComponent(s.id)}`,
       dog: dogName(s.our_dog_id),
+      dog_id: s.our_dog_id,
+      litter_id: null, // stud income is not a puppy sale — never litter-scoped
       counterparty: contactName(s.partner_contact_id),
       status: s.status,
       date: s.sent_date || s.returned_date || '',
