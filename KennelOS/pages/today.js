@@ -1,5 +1,5 @@
 // today.js — the consolidated "Today" home (Navigation Consolidation Plan v1 §4).
-// Action-first ordering, top → bottom: (1) reminders, (2) available puppies,
+// Action-first ordering, top → bottom: (1) reminders, (2) active litters,
 // (3) due-outs / upcoming, (4) who's away, (5) the slow-changing kennel
 // overview. This page is the single home for what used to be four separate
 // nav destinations (dashboard, reminders, upcoming, board), so it shows their
@@ -20,7 +20,7 @@ import { litterRepo } from '../data/litterRepo.js';
 import { pairingRepo } from '../data/pairingRepo.js';
 import { saleRepo } from '../data/saleRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
-import { EVENT_TYPES, DOG_STATUS } from '../data/vocab.js';
+import { EVENT_TYPES, DOG_STATUS, DISPOSITION } from '../data/vocab.js';
 import { esc, badge, fmtDate, cardShell } from '../assets/ui.js';
 import { todayYMD, daysFromToday } from '../data/dateUtils.js';
 
@@ -258,25 +258,79 @@ function renderBoard(rows) {
   });
 }
 
-// --- Available puppies feed (Data Integrity Brief §4.6) ---------------------
-// Non-archived dogs with disposition 'available' — the documented feed key
-// (vocab.js DISPOSITION comment). Distinct from DOG_STATUS 'for_sale', which
-// is the life-stage badge, not the breeder's placement intent.
-function renderAvailable(dogs) {
-  const rows = dogs.filter((d) => !d.is_archived && d.disposition === 'available');
-  const isEmpty = !rows.length;
-  const inner = rows.length
-    ? `<ul class="linked-list" style="margin:6px 0 0; padding:0; list-style:none;">
-        ${rows.map((d) => `
-          <li class="row-between" style="padding:9px 0; border-top:1px solid var(--border);">
-            <a href="dog.html?id=${encodeURIComponent(d.id)}"><strong>${esc(d.call_name)}</strong></a>
-            <a class="btn btn-sm" href="sale.html?new=1&dog=${encodeURIComponent(d.id)}">Add sale →</a>
-          </li>`).join('')}
-      </ul>`
-    : `<div class="empty-state">No dogs currently marked available.</div>`;
-  const title = `Available puppies${rows.length ? ` <span class="muted" style="font-size:14px;">(${rows.length})</span>` : ''}`;
-  const headerExtra = `<a class="btn btn-sm" href="sale.html?new=1">+ Add sale</a>`;
-  availableEl.innerHTML = cardShell(title, inner, { key: 'available', isEmpty, headerExtra, marginTop: true });
+// --- Active litters (per-litter availability) -------------------------------
+// Replaces the flat available-puppies feed: one block per NON-archived litter
+// that still has at least one 'available' puppy, each showing that litter's
+// selling roster grouped available → undecided → sold. The "selling roster" is
+// the litter's non-archived pups whose disposition is one of available/
+// undecided/placed ('keeping' pups and pups that have moved past the puppy
+// life-stage — disposition nulled — are excluded). "Sold" = disposition
+// 'placed' (the value sale.js sets when a sale is recorded); the per-litter
+// tally reads "<placed>/<roster> sold". Add-sale buttons appear on the still-
+// sellable pups (available/undecided), exactly as the old feed's did. Disposition
+// is the breeder's placement intent, distinct from DOG_STATUS 'for_sale' (the
+// life-stage badge).
+const SELLING_DISPOSITIONS = new Set(['available', 'undecided', 'placed']);
+// Display order within a litter: available first, undecided next, sold last.
+const DISPOSITION_ORDER = { available: 0, undecided: 1, placed: 2 };
+
+function litterLabel(l) {
+  const dam = ctx.dogsById.get(l.dam_id)?.call_name || '—';
+  const sire = ctx.dogsById.get(l.sire_id)?.call_name || '—';
+  return `${dam} × ${sire}`;
+}
+
+// One puppy row: name + its disposition badge on the left, an "Add sale →"
+// action pinned right for sellable pups (available/undecided). Sold pups carry
+// no action — their "Placed" badge already says so.
+function pupRow(d) {
+  const sellable = d.disposition !== 'placed';
+  const action = sellable
+    ? `<div class="pill-row"><a class="btn btn-sm" href="sale.html?new=1&dog=${encodeURIComponent(d.id)}">Add sale →</a></div>`
+    : '';
+  return `<li class="row-between" style="padding:8px 0 0;">
+      <span style="min-width:0;"><a href="dog.html?id=${encodeURIComponent(d.id)}"><strong>${esc(d.call_name)}</strong></a> ${badge(DISPOSITION, d.disposition)}</span>
+      ${action}
+    </li>`;
+}
+
+function renderAvailable(dogs, litters) {
+  // Group each litter's non-archived selling pups by litter_id.
+  const pupsByLitter = new Map();
+  for (const d of dogs) {
+    if (d.is_archived || !d.litter_id || !SELLING_DISPOSITIONS.has(d.disposition)) continue;
+    if (!pupsByLitter.has(d.litter_id)) pupsByLitter.set(d.litter_id, []);
+    pupsByLitter.get(d.litter_id).push(d);
+  }
+  // Active litter = non-archived litter with ≥1 'available' pup. Newest first.
+  const active = litters
+    .filter((l) => !l.is_archived)
+    .map((l) => ({ litter: l, pups: pupsByLitter.get(l.id) || [] }))
+    .filter((x) => x.pups.some((p) => p.disposition === 'available'))
+    .sort((a, b) => String(b.litter.whelp_date || '').localeCompare(String(a.litter.whelp_date || '')));
+
+  const isEmpty = !active.length;
+  const inner = active.length
+    ? active.map(({ litter, pups }, i) => {
+        const sold = pups.filter((p) => p.disposition === 'placed').length;
+        const ordered = [...pups].sort((a, b) =>
+          (DISPOSITION_ORDER[a.disposition] - DISPOSITION_ORDER[b.disposition])
+          || a.call_name.localeCompare(b.call_name));
+        // A rule between litters (skipped before the first) is the visual break.
+        const sep = i ? ' style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border);"' : '';
+        return `<div${sep}>
+          <div class="row-between">
+            <a href="litter.html?id=${encodeURIComponent(litter.id)}"><strong>${esc(litterLabel(litter))}</strong></a>
+            <span class="muted" style="white-space:nowrap;">${sold}/${pups.length} sold</span>
+          </div>
+          <ul class="linked-list" style="margin:2px 0 0; padding:0; list-style:none;">
+            ${ordered.map(pupRow).join('')}
+          </ul>
+        </div>`;
+      }).join('')
+    : `<div class="empty-state">No litters with available puppies.</div>`;
+  const title = `Active litters${active.length ? ` <span class="muted" style="font-size:14px;">(${active.length})</span>` : ''}`;
+  availableEl.innerHTML = cardShell(title, inner, { key: 'active-litters', isEmpty, marginTop: true });
 }
 
 // --- 4. Kennel overview (slow-changing; sits last) --------------------------
@@ -336,7 +390,7 @@ async function main() {
   // path for the two top cards). The remaining sections render synchronously
   // from the data main() already loaded.
   const asyncCards = Promise.all([renderNudges(), renderReminders()]);
-  renderAvailable(allDogs);
+  renderAvailable(allDogs, litters);
   renderUpcoming(upcoming);
   renderBoard(boardRows);
   renderOverview({ allDogs, litters, pairings, sales });
