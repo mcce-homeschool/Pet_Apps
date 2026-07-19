@@ -789,10 +789,29 @@ view. The main app stays single-user/offline/all-local; this adds *recipients*.
     (`panel_name`:`result`) **only when the result/rating is non-empty** (else `[]`,
     block omitted).
 
+- **Console is one package type at a time.** The **Companion Messaging console**
+  (`pages/companion.*`, in the "More" menu) is scoped by `?type=` seg-tabs — one per
+  `COMPANION_TYPES` value (Prospective families / Current families / Partners), the
+  same URL-param tab pattern as the Contacts group tabs; no param defaults to the
+  first type. The active tab drives the whole page: the single template card shown, a
+  plain-language **filter blurb** above it, the **recipients list** (only contacts that
+  match the type), and the bundle type "Prepare link" builds (there is no per-row type
+  picker — the tab **is** the type). Each recipient row is **collapsed by default** to
+  a one-line header (name + a `note` badge when `companion_note` is set + email/phone);
+  clicking the header reveals the note editor, Save note / Prepare link actions, and the
+  built link — so a long filtered list stays scannable. **Membership predicates** (`companion.js`): a
+  **prospective** is a Contact with `waitlist_status === 'active'`; a **family** is a
+  buyer with an **open** (non-terminal) sale — any non-archived Sale whose `status` is
+  not in `{delivered, returned, cancelled}`; a **partner** is a Contact who is the
+  `partner_contact_id` on a non-archived StudService whose `returned_date` is empty or
+  `>= today`, **or** the `related_contact_id` on a non-archived `lease` contract whose
+  `lease_end_date` is empty or `>= today`, **or** on any non-archived `co_own`/`other`
+  contract (no date gate). A Contact can appear under more than one tab — that's
+  expected. These are display filters only; they gate nothing in the bundle builder.
 - **Two-layer messaging.** Layer 1 is per-type config (`kennelName`/`tagline`/
   `introText`/`announcement`/`closer`) in `settings.js` under the `companion` key,
-  edited in the **Companion Messaging console** (`pages/companion.*`, in the "More"
-  menu). Layer 2 is **`Contact.companion_note`**, a per-recipient personal line.
+  edited in the console's template card (one per type). Layer 2 is
+  **`Contact.companion_note`**, a per-recipient personal line.
   Both are carried in the bundle **separately** — `announcement` (broadcast) and
   `personalNote` (the note) — and the shell shows them **alongside each other**, no
   longer an override. The shell **prepends the recipient's name** to the intro text
