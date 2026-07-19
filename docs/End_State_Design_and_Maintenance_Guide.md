@@ -247,6 +247,10 @@ Notable repo specifics:
 - **expenseRepo**: `getForSubject`, `getByEvent`/`getOneByEvent`, `total(rows)`, and
   the one-time `migrateEventCosts()` (folds legacy `Event.cost` into the ledger,
   guarded by the `expensesMigrated` settings flag; called from `app.js` boot). See §21.
+- **incomeView** (derived, not a repo/table): `getIncomeRows({includeArchived})` and
+  `summarize(rows)` — reads Sale + outgoing StudService and classifies each money
+  component earned/anticipated for the Financials Income & Overview views. Stores
+  nothing; recomputed on every load. See §21.
 - **contactRepo.ensureType(id, type)**: adds a `contact_type` role if missing (no-op
   otherwise). `saleRepo`/`studServiceRepo` call it on save to auto-tag a
   `referred_by_contact_id` as `buyer_referrer`/`stud_referrer`.
@@ -527,8 +531,9 @@ or `/pages/` and any GitHub Pages sub-path.
 ### Page catalog (`pages/`, one `.js` + `.html` each)
 
 Hubs & landing: `today`, `dogs`, `breeding`, `contacts`, `sales`, `financials`
-(the Financials hub — the Expense ledger overview + a hub-level "+ Add Expense"
-against any subject, §21), `reports`, `companion` (the Companion Messaging console,
+(the Financials hub — Overview / Income / Expenses toggle: derived income sectioned
+earned vs anticipated, the Expense ledger, a net Overview, and a hub-level
+"+ Add Expense" against any subject, §21), `reports`, `companion` (the Companion Messaging console,
 §20), `import-export`, plus root `index.html`.
 Dogs: `dog` (detail), `roster`, `pedigree`.
 Breeding: `pairings`/`pairing`, `litters`/`litter`, `active-breeding`, `live-births`.
@@ -926,20 +931,35 @@ composition + projection; no two-way pointers, every reverse stays a query.
 
 ---
 
-## 21. Financials — the Expense ledger
+## 21. Financials — income & the Expense ledger
+
+The Financials hub has **three views**, switched by a top toggle
+(`financials.html?view=overview|income|expenses`; a bare URL opens Overview, a
+`?bucket=` link still opens Expenses):
+
+- **Expenses** — the Expense ledger below (money spent).
+- **Income** — a **derived** view of money coming in (money-in), sectioned earned
+  vs anticipated. See "Income (derived)" below.
+- **Overview** — Earned income / Anticipated income / Total expenses / **Net
+  (earned − spent)** tiles, plus a component breakdown of income beside a category
+  breakdown of expenses.
+
+### The Expense ledger (money spent)
 
 The single home for money spent. One `expenses` table (§4/§5), polymorphic like
 Event: `subject_type ∈ {dog, litter, pairing, kennel}` + `subject_id`. Kennel-wide
 overhead (facility, bulk food, registration dues, marketing) lives on
 `subject_type='kennel'`; there is deliberately **no `general` subject** — program
 overhead is logged against your own kennel, so there is never a null `subject_id`.
-Revenue is **not** here (it stays on `Sale.price`/`deposit_amount` and
-`StudService.fee_amount`); this table is costs only. **Every money field in the app
-is a plain decimal — never cents** (`companionExport.js` states this explicitly:
-"Money is the app's native decimal, never cents — the shell formats it").
+Revenue is **not stored** here (it stays on `Sale.price`/`deposit_amount` and
+`StudService.fee_amount`); this table is costs only — the Income view *derives* its
+figures from those Sale/StudService fields and adds nothing to this table. **Every
+money field in the app is a plain decimal — never cents** (`companionExport.js`
+states this explicitly: "Money is the app's native decimal, never cents — the shell
+formats it").
 
 Buying a new dog is deliberately an **expense, never a Sale** — `Sale` and
-`StudService` stay strictly income (owner decision). `EXPENSE_CATEGORIES` carries a
+`StudService` stay strictly income-side records (owner decision). `EXPENSE_CATEGORIES` carries a
 `dog_purchase` ("New dog purchase") category for this; the dog's own `acquisition`
 event type (`EVENT_TYPES`, dog-subject, instant, `source` field for the seller) is
 an **option** on that dog's timeline, never auto-created, and its default Cost
@@ -962,6 +982,46 @@ amount upserts the linked `Expense` the normal event↔cost way (above).
   subject and, on save, back-fills the new event's id onto the expense. No mirror
   field — the reverse is always the `getByEvent` query.
 
+### Income (derived — `data/incomeView.js`)
+
+There is **no income table and no `is_earned` field.** `data/incomeView.js` is a
+read-only aggregator (same pattern as `awayBoard.js`): it reads the Sale table and
+the **outgoing** StudService table — the only two places money-in is recorded — and
+normalizes each into one view-model row per record, classifying every money
+component as **earned** or **anticipated** on each load. Storing this (or a mirror
+flag) would be a forbidden stored back-pointer (§7); it is always recomputed.
+
+Classification (owner decisions):
+
+- **Sale.** `price` splits into a deposit portion (`deposit_amount`) and a balance
+  portion (`price − deposit`); `transport_fee` and deferred-pickup boarding
+  (`deferred_boarding_amount × count`, the free-text count in
+  `deferred_boarding_duration_days`) ride with the balance. A component is **earned**
+  once its paid-date is recorded (`deposit_date` / `balance_paid_date`) or the status
+  has advanced past it (`deposit_paid`/`paid_in_full`/`delivered`), else
+  **anticipated**. On a **returned/cancelled** sale only amounts already recorded as
+  paid survive (as earned); the unpaid remainder is dropped, never anticipated
+  ("keep recorded paid amounts as earned"). A part-paid open sale therefore appears
+  in **both** the Earned and Anticipated boxes, each with its own portion.
+- **StudService (outgoing only** — incoming is money *we* pay, an expense). `fee_amount`
+  is **earned** when `completed`, **anticipated** while `arranged`/`in_progress`,
+  dropped when `failed`/`cancelled`. `pick_value_amount` is a **non-cash estimate**,
+  surfaced on its own `pick` line and kept **out** of the earned/anticipated cash
+  totals and the Net figure.
+
+Vocabs (`vocab.js`): `INCOME_STATES` (earned/anticipated badges), `INCOME_SOURCE_TYPES`
+(sale/stud badges), `INCOME_COMPONENTS` (deposit/balance/transport/boarding/stud_fee/
+pick — the summary's per-component breakdown, mirroring the expense category one).
+
+Income surfaces (`pages/financials.js`): the Income view shows a summary card
+(earned/anticipated totals + component breakdown) then **two grouped boxes** —
+**Earned** and **Anticipated** — each a `reportView` table (one row per sale/stud,
+source/year filters, CSV export), following the Active Breeding two-box pattern.
+Clicking a row opens a compact **Adjust** modal that writes the money/status/paid-date
+fields straight back through `saleRepo.update` / `studServiceRepo.update` (with an
+**Open full record →** link), so an anticipated amount can be flipped to earned from
+the hub. No new FK, table, or `referenceRegistry` entry — income is purely derived.
+
 ### Surfaces
 
 - **`assets/expensePanel.js`** — the reusable per-subject ledger panel (running total,
@@ -969,16 +1029,19 @@ amount upserts the linked `Expense` the normal event↔cost way (above).
   pairing, and **kennel** detail pages (the last via the new lean `pages/kennel.*`,
   reached from the Kennels list's "Open →").
 - **`pages/financials.*`** — the **Financials hub** (its own top-level nav tab, not a
-  report): a summary card (grand total + per-category breakdown) over the standard
-  `reportView` ledger table (category/subject-type/year filters + CSV export), plus a
-  hub-level **"+ Add Expense"** that logs a cost against **any** subject (dog / litter /
-  pairing / kennel) from one place. Analytics queries stay under Reports. **Sectioned by
-  category** (dogs.html bucket-tab pattern): a `seg-tabs` row built from `EXPENSE_CATEGORIES`
-  (never hand-listed, so a new category needs no second edit), one tab per category via
-  `financials.html?bucket=<value>` pre-filtering the loaded ledger to that category, plus
-  **All** last and the default (no `bucket` param). The ledger is always loaded
-  newest-to-oldest by `expense_date` before any bucket filter runs, so every tab — All
-  included — opens newest-first.
+  report), with the **Overview / Income / Expenses** top toggle (see the head of §21).
+  The **"+ Add Expense"** button (logs a cost against any dog / litter / pairing /
+  kennel) shows only on the Expenses view. Analytics queries stay under Reports.
+  - **Expenses view:** a summary card (grand total + per-category breakdown) over the
+    standard `reportView` ledger table (category/subject-type/year filters + CSV export).
+    **Sectioned by category** (dogs.html bucket-tab pattern): a `seg-tabs` row built from
+    `EXPENSE_CATEGORIES` (never hand-listed), one tab per category via
+    `financials.html?view=expenses&bucket=<value>` pre-filtering the loaded ledger, plus
+    **All** (default, no `bucket`). The ledger loads newest-to-oldest by `expense_date`
+    before any bucket filter, so every tab opens newest-first.
+  - **Income view:** summary card + two grouped Earned/Anticipated `reportView` boxes
+    with the row-level Adjust modal — see "Income (derived)" above.
+  - **Overview view:** the Net tiles + income/expense breakdown — see the head of §21.
 
 ### Migration & safety
 

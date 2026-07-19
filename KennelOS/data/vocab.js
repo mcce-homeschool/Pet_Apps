@@ -359,3 +359,42 @@ const EVENT_TYPE_EXPENSE_CATEGORY = {
 export function defaultExpenseCategoryFor(eventType) {
   return EVENT_TYPE_EXPENSE_CATEGORY[eventType] || 'other';
 }
+
+// --- Financials (the Income view) -----------------------------------------
+// Income is DERIVED, never stored: data/incomeView.js reads Sale + outgoing
+// StudService and classifies each money component as earned or anticipated —
+// there is no income table and no `is_earned` field (see §21). These three
+// vocabs give the Income view its badges and its per-component breakdown, in the
+// same value/label/badge shape every other vocab uses, so dropdowns/badges/
+// breakdown all read from one place and never drift.
+
+// The state a cash income component is in. `earned` = money already in hand
+// (a paid deposit, a completed stud fee); `anticipated` = expected but not yet
+// received (an unpaid balance on an open sale). Money that will never arrive —
+// the unpaid remainder of a returned/cancelled sale, a failed stud fee — is
+// simply dropped from both, not carried as a third state (owner decision, §21).
+export const INCOME_STATES = [
+  { value: 'earned',      label: 'Earned',      badge: 'badge-green' },
+  { value: 'anticipated', label: 'Anticipated', badge: 'badge-amber' }
+];
+
+// Where an income row comes from — a Sale placement or an outgoing StudService
+// (incoming stud is money WE pay, so it is an expense, never income).
+export const INCOME_SOURCE_TYPES = [
+  { value: 'sale', label: 'Sale',         badge: 'badge-blue' },
+  { value: 'stud', label: 'Stud service', badge: 'badge-purple' }
+];
+
+// The money components a row breaks into, for the Income summary's per-component
+// breakdown (mirrors the Expenses summary's per-category one). `pick` is a
+// NON-CASH estimate (StudService.pick_value_amount) — surfaced on its own line
+// but kept out of the earned/anticipated cash totals and the Net figure (owner
+// decision, §21).
+export const INCOME_COMPONENTS = [
+  { value: 'deposit',   label: 'Deposits',          badge: 'badge-amber' },
+  { value: 'balance',   label: 'Balance',           badge: 'badge-green' },
+  { value: 'transport', label: 'Transport',         badge: 'badge-blue' },
+  { value: 'boarding',  label: 'Deferred boarding',  badge: 'badge-amber' },
+  { value: 'stud_fee',  label: 'Stud fees',         badge: 'badge-purple' },
+  { value: 'pick',      label: 'Pick value (est.)', badge: 'badge-neutral' }
+];
