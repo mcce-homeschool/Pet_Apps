@@ -19,16 +19,17 @@
     <div class="page-header">
       <div>
         <h1>Financials</h1>
-        <p class="page-subtitle">Every expense across the program — costs on dogs, litters, pairings, and kennel-wide overhead, all from the one ledger. Add a cost against anything, filter, and export.</p>
+        <p class="page-subtitle" id="financials-subtitle"></p>
       </div>
-      <button class="btn btn-primary" id="add-expense">+ Add Expense</button>
+      <button class="btn btn-primary" id="add-expense" hidden>+ Add Expense</button>
     </div>
-    <nav class="seg-tabs" id="financials-bucket-tabs" aria-label="Expense categories"></nav>
+    <nav class="seg-tabs" id="financials-view-tabs" aria-label="Financials views"></nav>
+    <nav class="seg-tabs" id="financials-bucket-tabs" aria-label="Category / flow"></nav>
     <div id="page-error"></div>
     <section class="card" id="summary-section" style="margin-bottom:16px;">
       <div id="summary"></div>
     </section>
-    <section class="card">
+    <section class="card" id="report-section">
       <div id="report-mount"></div>
     </section>
   </main>
