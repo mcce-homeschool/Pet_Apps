@@ -485,5 +485,6 @@ IA. (Feeds Phase 0's "freeze the spine"; the wizard-runtime spec, Phase 5, consu
 ---
 
 *Companion to `Tutorial_Sample_Data_Coverage_Spec_v1.md` (the gap catalog this matrix
-classifies against) and the End-State guide §13 (page catalog) / §19 (nudges) / §20
-(companion). When the seed or IA changes, update this matrix and the spec together.*
+classifies against), `Wizard_Runtime_Spec_v1.md` (Phase 5 — the runtime that consumes
+§B/§F as its step catalog), and the End-State guide §13 (page catalog) / §19 (nudges) /
+§20 (companion). When the seed or IA changes, update this matrix and the spec together.*

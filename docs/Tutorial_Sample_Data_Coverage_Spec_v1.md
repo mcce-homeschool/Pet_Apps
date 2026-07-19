@@ -516,6 +516,15 @@ fire on a fresh seed (see the litter→close note under G-nudges below).
    - **§9.9** — `node --check data/sampleData.js` passes; the packet was served over
      HTTP and walked end-to-end in a browser after every change in this phase.
 6. **Phase 5 — Hand off to the wizard-runtime spec** with a frozen anchor list.
+   ✅ **Done → `Wizard_Runtime_Spec_v1.md`.** Resolves the trigger (auto-offer once after
+   seeding + a "Take the tour" nav re-entry), the coach-mark mechanic (hand-rolled CSS
+   spotlight overlay, no CDN), hub-to-hub advancement (wizard-driven navigation with a
+   free-navigation "resume tour" pill), and the Thornfield-seed gate (reuses the
+   sample-data-manifest signal `sampleDataUI.js` already reads). Defines the state model,
+   the step-catalog schema authored from this project's own §B/§F matrix, and the
+   per-page hook contract (`app.js`'s shared boot only — no page file becomes
+   wizard-aware). Runtime build itself (transcribing `WIZARD_STEPS`, wiring the modules)
+   is a later phase.
 
 ---
 
