@@ -10,15 +10,14 @@ import { contactRepo } from '../data/contactRepo.js';
 import { STUD_SERVICE_DIRECTION, STUD_SERVICE_STATUS, CONTRACT_TYPE, CONTRACT_STATUS, descriptor } from '../data/vocab.js';
 import { esc, badge, fmtDate } from '../assets/ui.js';
 
-const PAGE_SIZE = 5; // recent stud services shown before "Show more"
-
 const body = document.getElementById('stud-service-list');
 const errorBox = document.getElementById('page-error');
 
 function showError(msg) { errorBox.innerHTML = `<div class="inline-error">${esc(msg)}</div>`; }
 
-// StudService has no user-facing date field — recency is created_at only.
-function recencyKey(s) { return s.created_at || ''; }
+// Best available date for "recent", newest first. Sent date is optional, so
+// fall back to created_at for records that never got one.
+function recencyKey(s) { return s.sent_date || (s.created_at || '').slice(0, 10) || ''; }
 
 function contractRowHtml(c) {
   return `<div class="row-between" style="padding:6px 0;">
@@ -92,26 +91,30 @@ async function main() {
     return;
   }
 
-  const sorted = studServices.slice().sort((a, b) => recencyKey(b).localeCompare(recencyKey(a)));
-  const shown = sorted.slice(0, PAGE_SIZE);
-  const rest = sorted.slice(PAGE_SIZE);
-
   const cardHtml = (s) => studServiceCard(s, dogsById, contactsById, contractsByStud, linkableContracts);
-  const shownHtml = shown.map(cardHtml).join('');
-  const restHtml = rest.length
-    ? `<div id="stud-services-more" hidden>${rest.map(cardHtml).join('')}</div>
-       <div style="margin-top:14px;"><button class="btn" id="show-more-btn">Show ${rest.length} more stud service${rest.length === 1 ? '' : 's'} ▾</button></div>`
-    : '';
 
-  body.innerHTML = shownHtml + restHtml;
-
-  const btn = document.getElementById('show-more-btn');
-  if (btn) {
-    btn.addEventListener('click', () => {
-      document.getElementById('stud-services-more').hidden = false;
-      btn.remove();
-    });
+  // Group by our_dog_id (the kennel's own dog on either side of the service),
+  // each dog's records newest sent date first. Dog groups themselves are
+  // ordered by their own most recent record.
+  const byDog = new Map();
+  for (const s of studServices) {
+    const key = s.our_dog_id || '';
+    if (!byDog.has(key)) byDog.set(key, []);
+    byDog.get(key).push(s);
   }
+  const dogGroups = [...byDog.entries()].map(([dogId, list]) => ({
+    dog: dogsById.get(dogId),
+    services: list.slice().sort((a, b) => recencyKey(b).localeCompare(recencyKey(a)))
+  }));
+  dogGroups.sort((a, b) => recencyKey(b.services[0]).localeCompare(recencyKey(a.services[0])));
+
+  const sections = dogGroups.map((g, idx) => {
+    const name = esc(g.dog?.call_name || '(unknown dog)');
+    const heading = g.dog ? `<a href="dog.html?id=${encodeURIComponent(g.dog.id)}">${name}</a>` : name;
+    return `<h2 style="margin-top:${idx === 0 ? '0' : '26px'};">${heading}</h2>${g.services.map(cardHtml).join('')}`;
+  });
+
+  body.innerHTML = sections.join('');
 }
 
 body.addEventListener('click', async (e) => {

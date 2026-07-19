@@ -6,10 +6,9 @@ import { saleRepo } from '../data/saleRepo.js';
 import { contractRepo } from '../data/contractRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
+import { litterRepo } from '../data/litterRepo.js';
 import { PLACEMENT_TYPE, SALE_STATUS, CONTRACT_TYPE, CONTRACT_STATUS, descriptor } from '../data/vocab.js';
 import { esc, badge, fmtDate } from '../assets/ui.js';
-
-const PAGE_SIZE = 5; // recent sales shown before "Show more"
 
 const body = document.getElementById('sale-list');
 const errorBox = document.getElementById('page-error');
@@ -72,15 +71,36 @@ function saleCard(s, dogsById, contactsById, contractsBySale, linkableContracts)
     </section>`;
 }
 
+// A litter's group header label: "Dam × Sire — whelp date" (dog.js litterLabel convention).
+function litterHeaderLabel(litter, dogsById) {
+  const dam = dogsById.get(litter.dam_id)?.call_name || '—';
+  const sire = dogsById.get(litter.sire_id)?.call_name || '—';
+  return `${dam} × ${sire}${litter.whelp_date ? ` — ${fmtDate(litter.whelp_date)}` : ''}`;
+}
+
+// Sales within a group (litter or External Acquisitions), ordered by dog
+// name, each dog's own sales newest first.
+function dogEntriesHtml(byDog, dogsById, cardHtml) {
+  const entries = [...byDog.entries()]
+    .map(([dogId, list]) => ({
+      dog: dogsById.get(dogId),
+      sales: list.slice().sort((a, b) => recencyKey(b).localeCompare(recencyKey(a)))
+    }))
+    .sort((a, b) => (a.dog?.call_name || '').localeCompare(b.dog?.call_name || ''));
+  return entries.flatMap((e) => e.sales).map(cardHtml).join('');
+}
+
 async function main() {
-  const [sales, dogs, contacts, contracts] = await Promise.all([
+  const [sales, dogs, contacts, contracts, litters] = await Promise.all([
     saleRepo.getAll({ includeArchived: false }),
     dogRepo.getAll({ includeArchived: true }),
     contactRepo.getAll({ includeArchived: true }),
-    contractRepo.getAll({ includeArchived: false })
+    contractRepo.getAll({ includeArchived: false }),
+    litterRepo.getAll({ includeArchived: true })
   ]);
   const dogsById = new Map(dogs.map((d) => [d.id, d]));
   const contactsById = new Map(contacts.map((c) => [c.id, c]));
+  const littersById = new Map(litters.map((l) => [l.id, l]));
   state.sales = sales;
   state.dogsById = dogsById;
   state.contactsById = contactsById;
@@ -102,26 +122,40 @@ async function main() {
     return;
   }
 
-  const sorted = sales.slice().sort((a, b) => recencyKey(b).localeCompare(recencyKey(a)));
-  const shown = sorted.slice(0, PAGE_SIZE);
-  const rest = sorted.slice(PAGE_SIZE);
-
   const cardHtml = (s) => saleCard(s, dogsById, contactsById, contractsBySale, linkableContracts);
-  const shownHtml = shown.map(cardHtml).join('');
-  const restHtml = rest.length
-    ? `<div id="sales-more" hidden>${rest.map(cardHtml).join('')}</div>
-       <div style="margin-top:14px;"><button class="btn" id="show-more-btn">Show ${rest.length} more sale${rest.length === 1 ? '' : 's'} ▾</button></div>`
-    : '';
 
-  body.innerHTML = shownHtml + restHtml;
-
-  const btn = document.getElementById('show-more-btn');
-  if (btn) {
-    btn.addEventListener('click', () => {
-      document.getElementById('sales-more').hidden = false;
-      btn.remove();
-    });
+  // Group by litter (derived via the sold dog's litter_id), then by dog within
+  // the litter. Dogs with no litter link (external acquisitions) go together
+  // in one bucket at the end, never mixed into a real litter's group.
+  const litterGroups = new Map(); // litterId -> byDog map
+  const externalByDog = new Map();
+  for (const s of sales) {
+    const dog = dogsById.get(s.dog_id);
+    const litter = dog && dog.litter_id ? littersById.get(dog.litter_id) : null;
+    let byDog = externalByDog;
+    if (litter) {
+      if (!litterGroups.has(litter.id)) litterGroups.set(litter.id, new Map());
+      byDog = litterGroups.get(litter.id);
+    }
+    const dogKey = s.dog_id || '';
+    if (!byDog.has(dogKey)) byDog.set(dogKey, []);
+    byDog.get(dogKey).push(s);
   }
+
+  const orderedLitters = [...litterGroups.keys()]
+    .map((id) => littersById.get(id))
+    .sort((a, b) => (b.whelp_date || '').localeCompare(a.whelp_date || ''));
+
+  const sections = orderedLitters.map((litter, idx) => {
+    const byDog = litterGroups.get(litter.id);
+    return `<h2 style="margin-top:${idx === 0 ? '0' : '26px'};"><a href="litter.html?id=${encodeURIComponent(litter.id)}">${esc(litterHeaderLabel(litter, dogsById))}</a></h2>${dogEntriesHtml(byDog, dogsById, cardHtml)}`;
+  });
+
+  if (externalByDog.size) {
+    sections.push(`<h2 style="margin-top:${sections.length ? '26px' : '0'};">External Acquisitions</h2>${dogEntriesHtml(externalByDog, dogsById, cardHtml)}`);
+  }
+
+  body.innerHTML = sections.join('');
 }
 
 // Delegated on the container (not per-card) so re-renders never leak listeners.
