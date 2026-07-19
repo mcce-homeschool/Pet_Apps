@@ -249,8 +249,13 @@ Notable repo specifics:
   guarded by the `expensesMigrated` settings flag; called from `app.js` boot). See §21.
 - **incomeView** (derived, not a repo/table): `getIncomeRows({includeArchived})` and
   `summarize(rows)` — reads Sale + outgoing StudService and classifies each money
-  component earned/anticipated for the Financials Income & Overview views. Stores
-  nothing; recomputed on every load. See §21.
+  component earned/anticipated for the Financials Income & Overview views. Each sale
+  row also carries `dog_id`/`litter_id` (the puppy's litter) so income can roll up
+  per litter. Stores nothing; recomputed on every load. See §21.
+- **litterFinances** (derived, not a repo/table): `getLitterFinances()` — one P&L row
+  per litter for the **Litter P&L** report: puppy-sale income (earned/anticipated via
+  incomeView, grouped by `litter_id`) vs the full litter cost (litter-subject expenses
+  **plus** each puppy's dog-subject expenses) and the net. Stores nothing. See §21.
 - **contactRepo.ensureType(id, type)**: adds a `contact_type` role if missing (no-op
   otherwise). `saleRepo`/`studServiceRepo` call it on save to auto-tag a
   `referred_by_contact_id` as `buyer_referrer`/`stud_referrer`.
@@ -546,8 +551,10 @@ Placements/contracts: `sale`/`sales`, `stud-service`/`stud-services`,
 `contract`/`contracts`.
 Today cluster: `dashboard`, `reminders`, `upcoming`, `board`, `scheduled-placements`.
 Reports: `litters-report`, `stud-services-report`, `placements-report`,
-`health-tests-report`. (Reports are analytics *queries*; the Financials ledger is
-its own top-level hub, not a report — see `financials` above and §21.)
+`health-tests-report`, `litter-finances-report` (Litter P&L — per-litter sale
+income vs cost + net; `data/litterFinances.js`). (Reports are analytics *queries*;
+the Financials ledger is its own top-level hub, not a report — see `financials`
+above and §21.)
 Import pages: `dog-import`, `contact-import`, `pairing-import`, `litter-import`,
 `sale-import`, `event-import`, `stud-service-import`, `kennel-tests-import`.
 
@@ -1021,6 +1028,14 @@ Clicking a row opens a compact **Adjust** modal that writes the money/status/pai
 fields straight back through `saleRepo.update` / `studServiceRepo.update` (with an
 **Open full record →** link), so an anticipated amount can be flipped to earned from
 the hub. No new FK, table, or `referenceRegistry` entry — income is purely derived.
+
+**Per-litter income** (sales reach a litter via the puppy's `dog.litter_id`): the
+**Litter detail page** has a deliberately simple "Sales & Income" panel — each puppy
+sale's **total value** (`price + transport + deferred boarding`) and status, with a
+total, and **no** earned/anticipated split or net (owner decision — that detail lives
+only on the report). The **Litter P&L report** (`litter-finances-report`,
+`data/litterFinances.js`) is the full picture: earned/anticipated income vs the litter's
+own expenses **plus** each puppy's dog-subject expenses, and the net.
 
 ### Surfaces
 

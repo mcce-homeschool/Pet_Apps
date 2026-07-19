@@ -6,8 +6,10 @@
 import { litterRepo, ReferenceBlockedError } from '../data/litterRepo.js';
 import { pairingRepo } from '../data/pairingRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
-import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX, descriptor } from '../data/vocab.js';
-import { esc, badge, fmtDate, todayYMD, param, confirmModal } from '../assets/ui.js';
+import { saleRepo } from '../data/saleRepo.js';
+import { contactRepo } from '../data/contactRepo.js';
+import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX, SALE_STATUS, descriptor } from '../data/vocab.js';
+import { esc, badge, fmtDate, fmtMoney, todayYMD, param, confirmModal } from '../assets/ui.js';
 import { addDaysToYMD } from '../data/dateUtils.js';
 import { renderTimeline } from '../assets/timeline.js';
 import { renderExpensePanel } from '../assets/expensePanel.js';
@@ -29,7 +31,8 @@ const els = {
   error: document.getElementById('page-error'),
   roster: document.getElementById('roster-section'),
   timeline: document.getElementById('timeline-section'),
-  expenses: document.getElementById('expenses-section')
+  expenses: document.getElementById('expenses-section'),
+  income: document.getElementById('income-section')
 };
 
 const blankLitter = () => ({
@@ -331,6 +334,7 @@ function enterEdit() {
   renderRosterSection();
   renderTimelineSection();
   renderExpensesSection();
+  renderIncomeSection();
 }
 
 function cancel() {
@@ -342,6 +346,7 @@ function cancel() {
   renderRosterSection();
   renderTimelineSection();
   renderExpensesSection();
+  renderIncomeSection();
 }
 
 // Empty numeric strings become null so we don't persist '' where a number belongs.
@@ -515,6 +520,76 @@ function renderExpensesSection() {
   }
 }
 
+// Deliberately simple, per owner decision: this litter's puppy sales and their
+// total sale value (price + transport + deferred boarding, when present). No
+// earned/anticipated split and no net here — that lives on the litter P&L report
+// (litter-finances-report). Sales reach the litter via the puppy's dog_id.
+const saleNum = (v) => (v == null || v === '' ? 0 : Number(v)) || 0;
+function saleBoardingCount(s) {
+  const n = parseInt(s.deferred_boarding_duration_days, 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+function saleValue(s) {
+  return saleNum(s.price) + saleNum(s.transport_fee) + saleNum(s.deferred_boarding_amount) * saleBoardingCount(s);
+}
+
+async function renderIncomeSection() {
+  if (!els.income) return;
+  if (ctx.mode !== 'view' || !ctx.original) { els.income.innerHTML = ''; return; }
+
+  const puppies = await dogRepo.getByLitter(ctx.original.id);
+  const salesArrays = await Promise.all(puppies.map((p) => saleRepo.getByDog(p.id)));
+  const sales = salesArrays.flat().filter((s) => !s.is_archived);
+  sales.sort((a, b) => (b.sale_date || '').localeCompare(a.sale_date || ''));
+
+  const puppyById = new Map(puppies.map((d) => [d.id, d]));
+  const contacts = await contactRepo.getAll({ includeArchived: true });
+  const contactById = new Map(contacts.map((c) => [c.id, c]));
+  const total = sales.reduce((t, s) => t + saleValue(s), 0);
+
+  const rowsHtml = sales.length
+    ? `<ul class="linked-list" style="margin:14px 0 0; padding:0; list-style:none;">` + sales.map((s) => {
+        const puppy = puppyById.get(s.dog_id);
+        const buyer = contactById.get(s.buyer_contact_id)?.name || '—';
+        const t = saleNum(s.transport_fee);
+        const b = saleNum(s.deferred_boarding_amount) * saleBoardingCount(s);
+        const extras = [t ? `transport ${fmtMoney(t)}` : '', b ? `boarding ${fmtMoney(b)}` : ''].filter(Boolean).join(', ');
+        return `<li class="row-between" style="padding:8px 0; border-top:1px solid var(--border); gap:12px;">
+          <span><a href="sale.html?id=${encodeURIComponent(s.id)}">${esc(puppy?.call_name || 'Puppy')}</a> <span class="faint">→ ${esc(buyer)}</span> ${badge(SALE_STATUS, s.status)}</span>
+          <span style="text-align:right;"><strong>${esc(fmtMoney(saleValue(s)))}</strong>${extras ? `<br><span class="faint" style="font-size:12px;">${esc('incl. ' + extras)}</span>` : ''}</span>
+        </li>`;
+      }).join('') + `</ul>`
+    : `<p class="muted" style="margin:14px 0 0;">No sales recorded for this litter's puppies yet.</p>`;
+
+  els.income.innerHTML = `
+    <section class="card" style="margin-top:16px;">
+      <div class="row-between">
+        <div class="collapsible-header" style="flex:1; display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;" data-toggle="inc-toggle">
+          <span class="collapsible-arrow" style="transform: rotate(90deg); display:inline-block; transition:transform 0.2s; font-size:12px;">▶</span>
+          <h2 style="margin:0;">Sales &amp; Income${sales.length ? ` <span class="faint">(${sales.length})</span>` : ''}</h2>
+        </div>
+        ${sales.length ? `<strong style="font-size:18px;">${esc(fmtMoney(total))}</strong>` : ''}
+      </div>
+      <div class="collapsible-content" id="inc-content" style="display:block; margin-top:12px;">
+        <p class="muted" style="margin:0; font-size:13px;">Total sale value (price + transport + boarding). Earned-vs-anticipated and net live on the litter P&amp;L report.</p>
+        ${rowsHtml}
+      </div>
+    </section>`;
+
+  // Collapsible header — same behavior as the Expenses/Timeline cards.
+  const header = els.income.querySelector('[data-toggle="inc-toggle"]');
+  const content = els.income.querySelector('#inc-content');
+  const arrow = header?.querySelector('.collapsible-arrow');
+  let isExpanded = true;
+  if (header) {
+    header.addEventListener('click', () => {
+      isExpanded = !isExpanded;
+      content.style.display = isExpanded ? 'block' : 'none';
+      if (arrow) arrow.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+    });
+  }
+}
+
 // --- Top-level render ----------------------------------------------------
 function renderTitle() {
   if (ctx.mode === 'new') {
@@ -546,6 +621,7 @@ function renderAll() {
   renderRosterSection();
   renderTimelineSection();
   renderExpensesSection();
+  renderIncomeSection();
 }
 
 async function main() {
