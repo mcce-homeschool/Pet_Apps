@@ -118,7 +118,7 @@ and commonly blank at entry time.
 | **Kennel** | `kennel_name` | `is_own_kennel`, `prefix`, `location`, `website` (plain, unindexed — a link for this kennel, e.g. its public site or listing; mirrors `Dog.url`), `logo_data_url` (plain, unindexed — a downscaled PNG/SVG **data URL** for this kennel's logo, uploaded/removed on the kennel detail page and rendered on its invoices/receipts (§24) and puppy records (§23); rides the JSON backup like any other field, so no schema/index change), `preferred_tests[]`, `preferred_breeds[]`, `promote_nudge_enabled` (bool, default off), `promote_age_male_months`/`promote_age_female_months` (numbers — the promote-lifecycle nudge's per-kennel thresholds, §19). Lightweight; added inline from Contact form. |
 | **Pairing** | `sire_id`, `dam_id`, `pairing_type`, `status` | `method`, `planned_date` (displayed as "Planned first date" — the first planned/tie date), `last_observed_date` (plain, unindexed — a subsequent observed tie/breeding date), `expected_due_date` (prefilled on the detail page as 63 days after `planned_date` when still empty, never clobbering a deliberate edit), `notes`. Sire ≠ dam (hard block). |
 | **Litter** | `dam_id`, `sire_id`, `status` | `nickname` (plain, unindexed — optional friendly label for the litter, e.g. “Party of Five”; when set it leads the detail-page title and shows as its own column on the Litters list and report, searchable across all three; falls back to `dam × sire` when blank), `pairing_id`, `whelp_date`, `accept_deposits_date` (plain, unindexed — the date the breeder begins accepting deposits on this litter; on the detail page it sits between `whelp_date` and `estimated_ready_date`, and it surfaces in the **prospective** companion bundle only, rendered between "Born" and "Estimated ready" when set, §20), `estimated_ready_date` (plain, unindexed — prefilled on the detail page as 8 weeks/56 days after `whelp_date` when still empty, never clobbering a deliberate edit), `litter_registration_number`, `puppies_born_total/alive/deceased/abnormalities` (the last a count, not mutually exclusive with alive/deceased — an alive or deceased puppy may also count here), `expected_price_male`/`expected_price_female`/`expected_deposit_male`/`expected_deposit_female` (plain, unindexed — per-litter defaults, grouped by sex on the detail page; `sale.js` prefills a new Sale's `price` and `deposit_amount` from the matching-sex pair by the puppy's `sex`, only into fields still empty, never clobbering a value already entered), `notes`. Litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
-| **Sale** | `dog_id`, `buyer_contact_id`, `placement_type`, `status` | `sale_date`, `price`, `deposit_amount`, `deposit_date`, `balance_due_date`, `balance_paid_date`, `transport_fee` (plain, unindexed — a flat delivery/transport charge, decimal amount), `deferred_boarding_amount`/`deferred_boarding_frequency`/`deferred_boarding_duration_days` (plain, unindexed — a boarding rate for a buyer who delayed pickup, decimal amount + `BOARDING_FREQUENCY_OPTIONS` Day/Week/Month + a free-text **count of frequency units** (despite the `_days` field name, the value is the number of frequency units — e.g. `2` with frequency `Week` means two weeks; owner decision), rendered on one line as "amount per frequency × count"; the **family companion bundle** multiplies `amount × count` into a deferred-pickup total that feeds the computed remaining balance (§20); never cents, and never an Expense — see §21), `lead_source`, `referred_by_contact_id` (indexed FK → the Contact who referred this buyer; `CONTACT_REFERENCES`; on save `saleRepo` auto-tags that contact with the `buyer_referrer` role via `contactRepo.ensureType`), `payment_method`/`payment_reference`/`invoice_number`/`invoice_notes` (plain, unindexed — the invoice/receipt document fields, set from the Financials generator modal and read back by the invoice page; `payment_method` suggests from `PAYMENT_METHODS`; see §24), `notes`. On the detail page (`sale.js`), all fee fields (price, deposit amount, transport fee, deferred boarding) render/edit above all date fields (sale date, deposit date, balance due date, balance paid date). Its own table (not a Dog field) so reserve/return/re-place stay distinct facts. |
+| **Sale** | `dog_id`, `buyer_contact_id`, `placement_type`, `status` | `sale_date`, `price`, `deposit_amount`, `deposit_date`, `balance_due_date`, `balance_paid_date`, `transport_fee` (plain, unindexed — a flat delivery/transport charge, decimal amount), `deferred_boarding_amount`/`deferred_boarding_frequency`/`deferred_boarding_duration_days` (plain, unindexed — a boarding rate for a buyer who delayed pickup, decimal amount + `BOARDING_FREQUENCY_OPTIONS` Day/Week/Month + a free-text **count of frequency units** (despite the `_days` field name, the value is the number of frequency units — e.g. `2` with frequency `Week` means two weeks; owner decision), rendered on one line as "amount per frequency × count"; the **family companion bundle** multiplies `amount × count` into a deferred-pickup total that feeds the computed remaining balance (§20); never cents, and never an Expense — see §21), `lead_source`, `referred_by_contact_id` (indexed FK → the Contact who referred this buyer; `CONTACT_REFERENCES`; on save `saleRepo` auto-tags that contact with the `buyer_referrer` role via `contactRepo.ensureType`), `payment_method`/`payment_reference`/`invoice_number`/`invoice_notes` (plain, unindexed — invoice/receipt document fields set from the Financials generator modal: `invoice_number`/`invoice_notes` for both doc types, `payment_method`/`payment_reference` the **receipt's** method-used (suggests from `PAYMENT_METHODS`); see §24), `notes`. On the detail page (`sale.js`), all fee fields (price, deposit amount, transport fee, deferred boarding) render/edit above all date fields (sale date, deposit date, balance due date, balance paid date). Its own table (not a Dog field) so reserve/return/re-place stay distinct facts. |
 | **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `related_dog_id` (canonical Dog link, used only for `lease`/`co_own`/`other` types — where no linked Sale/StudService already reaches a dog; forced `null` for other types via `contractRepo.DOG_LINK_TYPES`/`normalizeLinks`), `related_contact_id` (canonical counterparty link — lessee/co-owner/partner — for the same `lease`/`co_own`/`other` types via `CONTACT_LINK_TYPES`; sale/stud contracts reach their counterparty through the linked Sale/StudService, so it stays `null` there and never double-sources; scopes a contract into the **partner** companion bundle, §20), `document_url` (plain, unindexed — a share link to the signed document, e.g. a Drive "anyone with the link" URL; carried as a *pointer* into the buyer bundle, §20), `signed_date`, `lease_start_date`/`lease_end_date` (lease type; UI shows them and hides Related sale/stud fields when `contract_type='lease'`), `title`, `terms_summary`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf for its own hard-delete (nothing points *at* a contract), but a contract itself points *at* its Dog via `related_dog_id` (guarded under `DOG_REFERENCES`) and its counterparty via `related_contact_id` (guarded under `CONTACT_REFERENCES`) — neither under `CONTRACT_REFERENCES`. |
 | **StudService** | `direction`, `our_dog_id`, `partner_dog_id`, `partner_contact_id`, `status` | `pairing_id`, `fee_amount`, `fee_structure`, `pick_status` (plain, unindexed — suggested `pending`/`claimed`, free text allowed; meaningful **only** when `fee_structure ∈ {pick_of_litter, flat_plus_pick}`, forced `null` otherwise so a `flat_fee`/`other` arrangement never shows a stray pick; feeds the partner companion bundle's compensation, §20), `pick_value_amount` (plain, unindexed, decimal — the breeder's own estimated dollar value of the pick puppy, for income tracking; gated the same way as `pick_status` (meaningful only when `fee_structure ∈ {pick_of_litter, flat_plus_pick}`, forced `null` otherwise); deliberately **separate** from `fee_amount`, which is the actual cash changing hands; internal only — not surfaced in the partner companion bundle), `result_notes`, `type` (`in_person`/`ai` — coarse physical-travel flag; `in_person` + `sent_date`/`returned_date` window feeds the away-board, §19), `referred_by_contact_id` (indexed FK → the Contact who referred this arrangement; `CONTACT_REFERENCES`; on save `studServiceRepo` auto-tags that contact with the `stud_referrer` role via `contactRepo.ensureType`), `payment_method`/`payment_reference`/`invoice_number`/`invoice_notes` (plain, unindexed — the invoice/receipt document fields, mirroring Sale's; only the outgoing direction is invoiceable, since incoming stud is an expense; see §24), plus optional logistics dates. Covers both `incoming` and `outgoing`. |
 | **Event** | `subject_type`, `subject_id`, `event_type`, `event_date`, `title` | `event_end_date`, `reminder_date`, `reminder_dismissed`, `related_dog_id`, `related_contact_id`, `details{}`, `notes`. See §8. **No `cost` field** — a cost entered on the event form is written to the Expense ledger (`expenses.event_id` = the event) and read back via `expenseRepo.getByEvent`; see the Expense row below and §21. |
@@ -426,7 +426,9 @@ migration-requiring way.
   `sampleDataManifest`, `sampleDataCleared`, `myKennelId`, `myContactId`,
   `myKennelSetupSkipped`, `companion` (the Companion feature's per-type message
   templates — Layer 1, §20 — stored as one JSON object keyed by recipient type via
-  `getCompanionSettings`/`setCompanionSettings`). `clearAllSettings()` drops them all
+  `getCompanionSettings`/`setCompanionSettings`), `invoiceDefaults` (the invoice
+  generator's default accepted payment methods, §24, via `getInvoiceDefaults`/
+  `setInvoiceDefaults`). `clearAllSettings()` drops them all
   (used by Reset App).
 - **nudgeState.js** — a second, deliberately separate `localStorage` module (one key,
   `kennelOS.nudgeDismissals`): the derived-nudge dismissal ledger (§19). Kept out of
@@ -455,7 +457,7 @@ declined (or after sample data is later cleared), offer kennel setup.
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v65`) + a `PRECACHE_URLS` list of **every**
+- `CACHE_NAME` (currently `kennelos-shell-v66`) + a `PRECACHE_URLS` list of **every**
   app file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed
   file fails the whole install). `activate` deletes old caches. Fetch is
@@ -1127,34 +1129,57 @@ kennel name when one is set.
 
 ## 24. Invoice & Receipt (print-only PDF)
 
-`pages/invoice.html`/`.js` (`?source=sale|stud&id=<id>&doc=invoice|receipt&items=<keys>`)
+`pages/invoice.html`/`.js` (`?source=sale|stud&id=<id>&doc=invoice|receipt&cfg=<json>`)
 is a printable one-page financial document for a single income record, covering **all
-five cash income types** — deposit, balance, transport, deferred boarding (the four
-Sale components) and stud fee (the outgoing StudService component). Non-cash `pick`
-value is never billable, so it never appears. Reads only, through
+five cash income types** — **Deposit, Remaining Purchase Price, Transport Fee, Boarding
+Fee** (the four Sale components) and **Stud Fee** (the outgoing StudService component;
+customer-facing labels from `INVOICE_LINE_LABELS`, distinct from the Financials-view
+`INCOME_COMPONENTS` labels). Non-cash `pick` value is never billable, so it never
+appears. Reads only, through
 `saleRepo`/`studServiceRepo`/`dogRepo`/`contactRepo`/`litterRepo`/`kennelRepo` (layering
 rule §2) — no new repo or table. "Download" is the browser's own **Print → Save as PDF**
 (`window.print()`, gated by an `@media print` block), same posture as the Puppy Record —
 no vendored PDF library.
 
-- **Line items** come from `incomeView.incomeLineItems(source, record)` (§6/§21), so the
-  document can never show a component the Income view wouldn't classify; the `items`
-  query param narrows them to the set the generator modal checked. Each line carries its
-  earned/anticipated **state**: an **invoice** shows a Paid/Due status column, a Subtotal,
-  Amount paid, and Balance due; a **receipt** drops the status column, stamps **Paid**,
-  and totals "Total paid".
+- **Line base amounts** come from `incomeView.incomeLineItems(source, record)` (§6/§21),
+  so the document can never show a component the Income view wouldn't classify. The
+  per-line **choices** ride the `cfg` param (a compact URL-encoded JSON the generator
+  modal builds): each included line carries `{ key, mode: 'full'|'partial', collected,
+  dueDate }`.
+- **Full vs Partial** (per line, owner's model): **Partial** prints "<Name> (partial)"
+  with the entered `collected` as its amount; **Full** prints the record's full base
+  amount, and `collected` is treated as *already collected* — on an **invoice** it is
+  subtracted in the totals (Subtotal → "Less amount already collected" → **Balance**), on
+  a **receipt** the line shows the remaining `base − collected` and the collected figure
+  is not printed. There is no payment ledger, so `collected` defaults to 0 for manual
+  entry (not pulled from prior receipts).
+- **Invoice specifics:** no Paid/Due status column; a per-line **Due by** date (the modal
+  prefills the *soonest* of the sale's `balance_due_date` and any scheduled `placement`
+  event date for the puppy, still editable per line); footnote markers on **sale**
+  invoices (`*` on Deposit, `**` on Remaining Purchase Price / Transport / Boarding —
+  stud fees carry neither) render the two standing disclaimers (deposit non-refundability;
+  balance-due-date basis) in the footer; the payment block reads **"Payment may be made
+  using one of the following methods:"** over a checkbox-style list of the **accepted
+  methods** — a global default in `settings.getInvoiceDefaults().acceptedMethods`,
+  editable per document in the modal (checkbox set from `PAYMENT_METHODS`) with a **Save
+  as my default** button (`setInvoiceDefaults`).
+- **Receipt specifics:** keeps the **Payment received** box (method used / reference /
+  date) and stamps **Paid**; totals "Total paid".
 - **Issuer** is the resolving own kennel (`dog.kennel_id` if own, else the first own
   kennel — the Puppy Record fallback), with its `logo_data_url`, `location`, `website`,
   and the owner Contact's name/email/phone (via `getMyContactId`). **Recipient** is the
   sale's buyer or the stud partner contact. A document number defaults to a stable
   `INV-/RCT-<yyyymmdd>-<id>` when `invoice_number` is blank.
-- **Configurable fields** (`payment_method`, `payment_reference`, `invoice_number`,
-  `invoice_notes`) are **persisted on the Sale / StudService** (§4) and set from the
-  Financials hub's **"Invoice / Receipt" generator modal** (`financials.js`), which lists
-  every income record (from `getIncomeRows`), lets the owner pick Invoice vs Receipt,
-  check which line items to include, and set those fields (prefilled from the record),
-  then opens the print page with `?autoprint=1`. Nothing here is a new FK, table, or
-  `referenceRegistry` entry — the fields are plain and the document is pure projection.
+- **Persisted fields** (`invoice_number`, `invoice_notes`, and — for receipts —
+  `payment_method`/`payment_reference`, §4) are written on the Sale / StudService by the
+  generator modal so they prefill next time and ride backups. Everything else (Full/
+  Partial, collected, due dates, accepted methods) is per-generation and rides `cfg` /
+  `settings`. Nothing here is a new FK, table, or `referenceRegistry` entry — the fields
+  are plain and the document is pure projection.
+
+The generator modal lives on the Financials hub (`financials.js`, the "Invoice /
+Receipt" button on every view), lists every income record (from `getIncomeRows`), and
+opens the print page with `?autoprint=1`.
 
 ---
 

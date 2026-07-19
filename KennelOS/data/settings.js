@@ -11,6 +11,7 @@ const KEYS = {
   myContactId: 'kennelOS.myContactId',
   myKennelSetupSkipped: 'kennelOS.myKennelSetupSkipped',
   companion: 'kennelOS.companion',
+  invoiceDefaults: 'kennelOS.invoiceDefaults',
   expensesMigrated: 'kennelOS.expensesMigrated'
 };
 
@@ -193,6 +194,27 @@ export function setCompanionSettings(type, values) {
   store[type] = merged;
   localStorage.setItem(KEYS.companion, JSON.stringify(store));
   return getCompanionSettings(type);
+}
+
+// --- Invoice / receipt defaults (§24) --------------------------------------
+// Global config for the invoice generator: the default set of accepted payment
+// methods offered on an invoice ("Payment may be made using one of the
+// following methods:"). The generator modal prefills from this and can override
+// per document, or save the current selection back here as the new default.
+const INVOICE_DEFAULTS = {
+  acceptedMethods: ['Cash', 'Check', 'Bank transfer', 'Venmo', 'Zelle']
+};
+
+export function getInvoiceDefaults() {
+  const raw = localStorage.getItem(KEYS.invoiceDefaults);
+  if (!raw) return { ...INVOICE_DEFAULTS };
+  try { return { ...INVOICE_DEFAULTS, ...(JSON.parse(raw) || {}) }; } catch { return { ...INVOICE_DEFAULTS }; }
+}
+
+export function setInvoiceDefaults(values) {
+  const merged = { ...getInvoiceDefaults(), ...values };
+  localStorage.setItem(KEYS.invoiceDefaults, JSON.stringify(merged));
+  return merged;
 }
 
 // Financials migration flag — set once the one-time Event.cost → Expense fold

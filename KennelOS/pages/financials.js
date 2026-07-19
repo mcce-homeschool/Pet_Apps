@@ -23,13 +23,15 @@ import { dogRepo } from '../data/dogRepo.js';
 import { litterRepo } from '../data/litterRepo.js';
 import { pairingRepo } from '../data/pairingRepo.js';
 import { kennelRepo } from '../data/kennelRepo.js';
+import { eventRepo } from '../data/eventRepo.js';
 import { getIncomeRows, summarize, incomeLineItems } from '../data/incomeView.js';
+import { getInvoiceDefaults, setInvoiceDefaults } from '../data/settings.js';
 import { createReportView } from '../assets/reportView.js';
 import { esc, badge, fmtDate, fmtMoney, todayYMD, param } from '../assets/ui.js';
 import {
   EXPENSE_CATEGORIES, EXPENSE_SUBJECT_TYPES, INCOME_SOURCE_TYPES, INCOME_COMPONENTS,
   INCOME_STATES, SALE_STATUS, STUD_SERVICE_STATUS, BOARDING_FREQUENCY_OPTIONS,
-  PAYMENT_METHODS, descriptor
+  PAYMENT_METHODS, INVOICE_LINE_LABELS, descriptor
 } from '../data/vocab.js';
 
 const SUBJECT_PAGE = { dog: 'dog.html', litter: 'litter.html', pairing: 'pairing.html', kennel: 'kennel.html' };
@@ -565,10 +567,25 @@ async function initOverview() {
 
 // A source record is any income row (a Sale or an outgoing StudService that
 // carries money — exactly what getIncomeRows returns). The modal lets the owner
-// pick one, choose Invoice vs Receipt, check which of the five income types to
-// include, and set/confirm the payment method and other document fields. Those
-// fields persist on the record; doc type + item selection ride the URL.
+// pick one, choose Invoice vs Receipt, then per line item choose Full vs Partial
+// and enter an "already collected" amount (and, on invoices, a per-line due
+// date). Full/Partial + collected drives the money math (see the invoice page);
+// the volatile per-line choices ride the URL as a compact `cfg` JSON, while the
+// document number/notes/receipt-method persist on the record for next time.
 const PAYMENT_METHOD_LIST = PAYMENT_METHODS.map((m) => `<option value="${esc(m)}"></option>`).join('');
+
+// Soonest of the sale's balance-due date and any scheduled placement (drop-off)
+// date for the puppy — the per-line due-date prefill on an invoice.
+async function soonestDueFor(record) {
+  const dates = [];
+  if (record.balance_due_date) dates.push(record.balance_due_date);
+  if (record.dog_id) {
+    const evs = await eventRepo.getForSubject('dog', record.dog_id);
+    for (const e of evs) if (e.event_type === 'placement' && e.event_date) dates.push(e.event_date);
+  }
+  dates.sort();
+  return dates[0] || '';
+}
 
 async function openGenerateModal() {
   const rows = await getIncomeRows({ includeArchived: false });
@@ -585,7 +602,7 @@ async function openGenerateModal() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:640px;">
       <div class="row-between" style="margin-bottom:12px;">
         <h2 style="margin:0;">Invoice / Receipt</h2>
         <button class="btn btn-sm" data-act="cancel">✕</button>
@@ -629,68 +646,159 @@ async function openGenerateModal() {
   const genBtn = modal.querySelector('[data-act="generate"]');
   if (!sourceSel) return; // no rows — nothing to wire
 
-  let current = null; // { source, record }
+  // Everything the config section holds, so a doc-type toggle can re-render
+  // without losing typed values.
+  const st = {
+    doc: 'invoice', source: null, record: null, order: [], lines: {},
+    accepted: new Set(getInvoiceDefaults().acceptedMethods),
+    number: '', notes: '', payMethod: '', payReference: ''
+  };
 
-  async function loadConfig() {
-    const key = sourceSel.value;
-    const row = key ? rowByKey.get(key) : null;
-    if (!row) { current = null; configEl.innerHTML = ''; genBtn.disabled = true; return; }
-    const record = row.source_type === 'sale'
-      ? await saleRepo.getById(row.source_id)
-      : await studServiceRepo.getById(row.source_id);
-    current = { source: row.source_type, record };
-    const items = incomeLineItems(row.source_type, record);
-    const itemRows = items.map((it) => `
-      <label class="check-inline" style="display:flex; align-items:center; gap:8px; margin:5px 0;">
-        <input type="checkbox" class="gen-item" value="${esc(it.component)}" checked>
-        <span style="flex:1;">${esc(it.label)}</span>
-        <span>${badge(INCOME_STATES, it.state)}</span>
-        <strong>${esc(fmtMoney(it.amount))}</strong>
-      </label>`).join('');
+  // Pull the current DOM state back into `st` before any re-render.
+  function syncFromDom() {
+    configEl.querySelectorAll('.gen-line').forEach((el) => {
+      const ln = st.lines[el.dataset.key];
+      if (!ln) return;
+      ln.include = el.querySelector('.ln-include').checked;
+      ln.mode = el.querySelector('.ln-mode:checked')?.value || 'full';
+      ln.collected = el.querySelector('.ln-collected').value;
+      const due = el.querySelector('.ln-due');
+      if (due) ln.dueDate = due.value;
+    });
+    const num = configEl.querySelector('#gen-num'); if (num) st.number = num.value;
+    const notes = configEl.querySelector('#gen-notes'); if (notes) st.notes = notes.value;
+    const pm = configEl.querySelector('#gen-pm'); if (pm) st.payMethod = pm.value;
+    const ref = configEl.querySelector('#gen-ref'); if (ref) st.payReference = ref.value;
+    const acc = configEl.querySelectorAll('.acc-method');
+    if (acc.length) st.accepted = new Set([...acc].filter((c) => c.checked).map((c) => c.value));
+  }
+
+  function lineRowHtml(key) {
+    const ln = st.lines[key];
+    const label = INVOICE_LINE_LABELS[key] || key;
+    const dueField = st.doc === 'invoice'
+      ? `<label class="check-inline" style="gap:4px;">Due by <input type="date" class="ln-due" value="${esc(ln.dueDate || '')}"></label>`
+      : '';
+    return `<div class="gen-line" data-key="${esc(key)}" style="border-top:1px solid var(--border); padding:8px 0;">
+      <label class="check-inline" style="gap:8px;"><input type="checkbox" class="ln-include"${ln.include ? ' checked' : ''}> <strong>${esc(label)}</strong> <span class="faint">${esc(fmtMoney(ln.base))}</span></label>
+      <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-top:5px; padding-left:24px;">
+        <label class="check-inline" style="gap:4px;"><input type="radio" name="mode-${esc(key)}" class="ln-mode" value="full"${ln.mode !== 'partial' ? ' checked' : ''}> Full</label>
+        <label class="check-inline" style="gap:4px;"><input type="radio" name="mode-${esc(key)}" class="ln-mode" value="partial"${ln.mode === 'partial' ? ' checked' : ''}> Partial</label>
+        <label class="check-inline" style="gap:4px;">Already collected <input type="number" class="ln-collected" min="0" step="0.01" value="${esc(ln.collected || '')}" style="width:100px;"></label>
+        ${dueField}
+      </div>
+    </div>`;
+  }
+
+  function paymentSectionHtml() {
+    if (st.doc === 'invoice') {
+      const boxes = PAYMENT_METHODS.map((m) =>
+        `<label class="check-inline" style="gap:4px;"><input type="checkbox" class="acc-method" value="${esc(m)}"${st.accepted.has(m) ? ' checked' : ''}> ${esc(m)}</label>`).join('');
+      return `<div class="field field-wide">
+        <label>Accepted payment methods <span class="faint">(shown on the invoice)</span></label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:4px;">${boxes}</div>
+        <div class="pill-row" style="margin-top:6px; align-items:center;">
+          <button class="btn btn-sm" data-act="save-default" type="button">Save as my default</button>
+          <span id="gen-default-saved" class="field-hint"></span>
+        </div>
+      </div>`;
+    }
+    return `<div class="field"><label>Payment method used</label>
+        <input id="gen-pm" type="text" list="gen-pm-list" value="${esc(st.payMethod)}" placeholder="e.g. Check, Venmo…">
+        <datalist id="gen-pm-list">${PAYMENT_METHOD_LIST}</datalist>
+      </div>
+      <div class="field"><label>Reference</label>
+        <input id="gen-ref" type="text" value="${esc(st.payReference)}" placeholder="Check #, transaction id…">
+      </div>`;
+  }
+
+  function renderConfig() {
+    if (!st.record) { configEl.innerHTML = ''; genBtn.disabled = true; return; }
+    const lineRows = st.order.map(lineRowHtml).join('');
+    const hint = st.doc === 'invoice'
+      ? 'Full bills the whole amount and subtracts anything already collected; Partial bills only the amount you enter and prints "(partial)".'
+      : 'Full receipts the remaining amount (line total minus anything already collected); Partial receipts only the amount you enter and prints "(partial)".';
     configEl.innerHTML = `
-      <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
-        <label style="font-weight:600;">Line items to include</label>
-        <p class="field-hint" style="margin:2px 0 6px;">Covers all five income types — deposit, balance, transport, deferred boarding, and stud fee — as they apply to this record.</p>
-        ${itemRows || '<p class="faint">No billable amounts on this record.</p>'}
+      <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
+        <label style="font-weight:600;">Line items</label>
+        <p class="field-hint" style="margin:2px 0 4px;">${esc(hint)}</p>
+        ${lineRows || '<p class="faint">No billable amounts on this record.</p>'}
       </div>
       <div class="form-grid" style="margin-top:12px;">
-        <div class="field"><label>Payment method</label>
-          <input id="gen-pm" type="text" list="gen-pm-list" value="${esc(record.payment_method || '')}" placeholder="e.g. Check, Venmo…">
-          <datalist id="gen-pm-list">${PAYMENT_METHOD_LIST}</datalist>
-        </div>
-        <div class="field"><label>Reference</label>
-          <input id="gen-ref" type="text" value="${esc(record.payment_reference || '')}" placeholder="Check #, transaction id…">
-        </div>
+        ${paymentSectionHtml()}
         <div class="field"><label>Document #</label>
-          <input id="gen-num" type="text" value="${esc(record.invoice_number || '')}" placeholder="Auto (INV-…)">
+          <input id="gen-num" type="text" value="${esc(st.number)}" placeholder="Auto (${st.doc === 'receipt' ? 'RCT' : 'INV'}-…)">
         </div>
         <div class="field field-wide"><label>Notes on document</label>
-          <textarea id="gen-notes" placeholder="Optional message shown on the invoice/receipt">${esc(record.invoice_notes || '')}</textarea>
+          <textarea id="gen-notes" placeholder="Optional message shown on the ${st.doc}">${esc(st.notes)}</textarea>
         </div>
       </div>`;
     genBtn.disabled = false;
+
+    const saveDefault = configEl.querySelector('[data-act="save-default"]');
+    if (saveDefault) saveDefault.addEventListener('click', () => {
+      syncFromDom();
+      setInvoiceDefaults({ acceptedMethods: [...st.accepted] });
+      const note = configEl.querySelector('#gen-default-saved');
+      if (note) note.textContent = 'Saved as default.';
+    });
   }
 
-  sourceSel.addEventListener('change', () => { loadConfig().catch((e) => { modal.querySelector('#gen-error').innerHTML = `<div class="inline-error">${esc(e.message || String(e))}</div>`; }); });
+  async function onSourceChange() {
+    const key = sourceSel.value;
+    const row = key ? rowByKey.get(key) : null;
+    if (!row) { st.record = null; renderConfig(); return; }
+    const record = row.source_type === 'sale'
+      ? await saleRepo.getById(row.source_id)
+      : await studServiceRepo.getById(row.source_id);
+    const items = incomeLineItems(row.source_type, record);
+    const soonest = row.source_type === 'sale' ? await soonestDueFor(record) : '';
+    st.source = row.source_type;
+    st.record = record;
+    st.order = items.map((it) => it.component);
+    st.lines = {};
+    for (const it of items) st.lines[it.component] = { base: it.amount, include: true, mode: 'full', collected: '', dueDate: soonest };
+    st.number = record.invoice_number || '';
+    st.notes = record.invoice_notes || '';
+    st.payMethod = record.payment_method || '';
+    st.payReference = record.payment_reference || '';
+    renderConfig();
+  }
+
+  sourceSel.addEventListener('change', () => {
+    onSourceChange().catch((e) => { modal.querySelector('#gen-error').innerHTML = `<div class="inline-error">${esc(e.message || String(e))}</div>`; });
+  });
+
+  // Doc-type toggle re-renders the config (invoice-only vs receipt-only fields)
+  // without losing what's typed.
+  modal.querySelectorAll('input[name="gen-doc"]').forEach((r) => r.addEventListener('change', (e) => {
+    if (!e.target.checked) return;
+    syncFromDom();
+    st.doc = e.target.value;
+    renderConfig();
+  }));
 
   genBtn.addEventListener('click', async () => {
     const errBox = modal.querySelector('#gen-error');
     errBox.innerHTML = '';
-    if (!current) return;
-    const items = [...modal.querySelectorAll('.gen-item:checked')].map((cb) => cb.value);
-    if (!items.length) { errBox.innerHTML = `<div class="inline-error">Select at least one line item.</div>`; return; }
-    const doc = modal.querySelector('input[name="gen-doc"]:checked').value;
-    const trimOrNull = (id) => (modal.querySelector(id).value.trim() || null);
+    if (!st.record) return;
+    syncFromDom();
+    const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+    const lines = st.order.filter((k) => st.lines[k].include).map((k) => {
+      const ln = st.lines[k];
+      return { key: k, mode: ln.mode === 'partial' ? 'partial' : 'full', collected: num(ln.collected), dueDate: ln.dueDate || '' };
+    });
+    if (!lines.length) { errBox.innerHTML = `<div class="inline-error">Include at least one line item.</div>`; return; }
+    const cfg = { number: st.number.trim(), notes: st.notes.trim(), lines };
+    if (st.doc === 'invoice') cfg.methods = [...st.accepted];
+    else { cfg.payMethod = st.payMethod.trim(); cfg.payReference = st.payReference.trim(); }
     try {
-      const repo = current.source === 'sale' ? saleRepo : studServiceRepo;
-      await repo.update(current.record.id, {
-        payment_method: trimOrNull('#gen-pm'),
-        payment_reference: trimOrNull('#gen-ref'),
-        invoice_number: trimOrNull('#gen-num'),
-        invoice_notes: trimOrNull('#gen-notes')
-      });
-      const url = `invoice.html?source=${encodeURIComponent(current.source)}&id=${encodeURIComponent(current.record.id)}`
-        + `&doc=${encodeURIComponent(doc)}&items=${encodeURIComponent(items.join(','))}&autoprint=1`;
+      const repo = st.source === 'sale' ? saleRepo : studServiceRepo;
+      const persist = { invoice_number: st.number.trim() || null, invoice_notes: st.notes.trim() || null };
+      if (st.doc === 'receipt') { persist.payment_method = st.payMethod.trim() || null; persist.payment_reference = st.payReference.trim() || null; }
+      await repo.update(st.record.id, persist);
+      const url = `invoice.html?source=${encodeURIComponent(st.source)}&id=${encodeURIComponent(st.record.id)}`
+        + `&doc=${encodeURIComponent(st.doc)}&cfg=${encodeURIComponent(JSON.stringify(cfg))}&autoprint=1`;
       window.open(url, '_blank');
       close();
     } catch (e) {
