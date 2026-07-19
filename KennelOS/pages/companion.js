@@ -213,7 +213,7 @@ async function prepareLink(row, contact) {
     // Email is the default channel (larger bundles ride it comfortably); SMS is
     // offered only when the payload is under the SMS ceiling.
     const emailAnchor = overEmail
-      ? `<span class="inline-warn">Bundle is too large even for email (${hash.length} chars). Trim it — the vet-visit list is the usual culprit.</span>`
+      ? `<span class="inline-warn">Bundle is too large even for email (${hash.length} chars). Trim it — a family's per-pup event history is the usual culprit.</span>`
       : `<a class="btn btn-primary btn-sm" href="${esc(mailto)}">✉️ Send via email</a>`;
     const smsAnchor = overSms
       ? `<span class="muted">SMS unavailable — payload ${hash.length} chars exceeds the ${MAX_SMS_HASH_LEN}-char SMS limit; use email.</span>`

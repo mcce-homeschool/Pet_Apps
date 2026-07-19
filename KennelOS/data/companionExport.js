@@ -7,12 +7,19 @@
 //   - No object spread of a record ({...dog}), no Object.assign from a record,
 //     no "take the record and delete the private keys."
 //   - Reads go through repos, never db.<table> directly (layering rule).
-//   - No second family's data, no internal notes, no Event.details/notes, no
-//     lead/source fields, no financials beyond the one stud fee_amount.
+//   - No second family's data, no internal notes, no freeform Event.notes, no
+//     lead/source fields. Money is limited to the recipient's OWN figures:
+//     a prospect sees the litter's per-sex list price + deposit; a family sees
+//     their own sale price/deposit/balance; a partner sees the one stud
+//     fee_amount. (The prospective "NO price" rule was reversed by owner
+//     decision — see the Companion Packages Enhancement Brief, decision 1.)
 //   - A new field added to a source table does NOT appear in a bundle until
 //     someone adds it here by name. Silence is the safe default.
 // After building, assertOnlyKeys() runs a POSITIVE allow-list check (not a
 // deny-list): if any unexpected top-level key is present, the send is aborted.
+// Enrichment nested inside an allowed top-level key (a pup, a litter, a stud
+// service) is safe as long as the top-level allow-lists stay exact and every
+// nested field is likewise copied BY NAME.
 //
 // All three bundles are anchored on a Contact (the recipient) and discriminated
 // by bundleType. Money is the app's native decimal, never cents — the shell
@@ -27,24 +34,91 @@ import { eventRepo } from './eventRepo.js';
 import { pairingRepo } from './pairingRepo.js';
 import { litterRepo } from './litterRepo.js';
 import { getCompanionSettings } from './settings.js';
-import { EVENT_TYPES } from './vocab.js';
 
 export const COMPANION_BUNDLE_VERSION = 1;
 
-// Health/vet event types safe to surface to a family, projected to {date, label}
-// with the FIXED type label only — never Event.details/notes, which can hold
-// internal remarks (e.g. an illness diagnosis or vet findings). Deliberately
-// excludes illness/injury/evaluation and every non-health type.
-const HEALTH_VISIT_TYPES = ['vaccination', 'preventative', 'vet_visit', 'surgery'];
 const FEE_STRUCTURES_WITH_PICK = ['pick_of_litter', 'flat_plus_pick'];
 const EXTERNAL_OWNERSHIP = ['external', 'leased_in'];
 
-function typeLabel(value) {
-  return (EVENT_TYPES.find((t) => t.value === value) || {}).label || value;
+// Curated per-type detail surfaced in a family's event history (brief decision
+// 4 — a scoped relaxation of the "fixed type label only" rule). One safe field
+// per type, never the freeform top-level notes, never illness/injury/evaluation
+// or any other type not listed here.
+const FAMILY_EVENT_TYPES = ['vaccination', 'preventative', 'weight_check', 'milestone', 'note'];
+
+function nonEmpty(v) {
+  return v != null && v !== '' ? v : null;
 }
 
 function dogMini(d) {
   return d ? { name: d.call_name || '', breed: d.breed || '' } : null;
+}
+
+// Parent identity for a family's parentage line — call + registered name only.
+function parentName(d) {
+  return d ? { registeredName: d.registered_name || '', callName: d.call_name || '' } : null;
+}
+
+// Completed breed-specific / health tests for a dog, projected to {name, result}
+// and surfaced only when the result/rating is non-empty. Returns [] when nothing
+// qualifies so callers omit the block entirely (no placeholder). Reads through
+// eventRepo, never db.*.
+async function completedTests(dogId) {
+  const events = await eventRepo.getForSubject('dog', dogId);
+  const out = [];
+  for (const e of events) {
+    const d = e.details || {};
+    if (e.event_type === 'breed_specific_test' && nonEmpty(d.result) != null) {
+      out.push({ name: d.test_name || '', result: d.result });
+    } else if (e.event_type === 'ofa_pennhip' && nonEmpty(d.rating) != null) {
+      out.push({ name: d.joint || '', result: d.rating });
+    } else if (e.event_type === 'genetic_test' && nonEmpty(d.result) != null) {
+      out.push({ name: d.panel_name || '', result: d.result });
+    }
+  }
+  return out;
+}
+
+// Richer public projection of a dog than dogMini — registered/AKC name, call
+// name, a photos link, and completed tests. Named copy only, no record spread.
+async function dogCard(dog) {
+  if (!dog) return null;
+  return {
+    registeredName: dog.registered_name || '',
+    callName: dog.call_name || '',
+    photosUrl: dog.url || '',
+    tests: await completedTests(dog.id)
+  };
+}
+
+// Whole weeks + trailing days between a YYYY-MM-DD birth date and an as-of
+// calendar date. Ships the derived age, never the raw DOB.
+function ageFrom(dob, asOfYMD) {
+  if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob)) return null;
+  const start = new Date(dob + 'T00:00:00');
+  const end = new Date(asOfYMD + 'T00:00:00');
+  const days = Math.floor((end.getTime() - start.getTime()) / 86400000);
+  if (isNaN(days) || days < 0) return null;
+  return { ageWeeks: Math.floor(days / 7), ageDays: days % 7 };
+}
+
+// One curated safe detail string per family-visible event type (brief decision
+// 4). Never the freeform top-level notes. Returns null when the detail is empty
+// (note carries a title only).
+function familyEventDetail(e) {
+  const d = e.details || {};
+  switch (e.event_type) {
+    case 'vaccination': return nonEmpty(d.vaccine);
+    case 'preventative': return nonEmpty(d.product);
+    case 'weight_check': {
+      const lbs = nonEmpty(d.weight_lbs);
+      const oz = nonEmpty(d.weight_oz);
+      if (lbs == null && oz == null) return null;
+      return [lbs != null ? `${lbs} lb` : null, oz != null ? `${oz} oz` : null].filter(Boolean).join(' ');
+    }
+    case 'milestone': return nonEmpty(d.description);
+    default: return null;
+  }
 }
 
 // Positive allow-list assertion — abort the send rather than emit a superset.
@@ -73,33 +147,52 @@ function headerCopy(type, contact) {
 
 const PROSPECTIVE_KEYS = [
   'bundleVersion', 'bundleType', 'kennelName', 'tagline', 'introText', 'announcement',
-  'familyName', 'availablePups', 'litters', 'updatedAt'
+  'familyName', 'litters', 'updatedAt'
 ];
 const FAMILY_KEYS = [
   'bundleVersion', 'bundleType', 'kennelName', 'tagline', 'introText', 'announcement',
-  'familyName', 'pups', 'litters', 'pickupDates', 'vetVisits', 'contractUrls', 'updatedAt'
+  'familyName', 'pups', 'contractUrls', 'updatedAt'
 ];
 const PARTNER_KEYS = [
   'bundleVersion', 'bundleType', 'kennelName', 'tagline', 'introText', 'announcement',
   'partnerName', 'studServices', 'externalPairings', 'contracts', 'updatedAt'
 ];
 
-// --- Prospective family: current availability (NO per-recipient private data,
-// NO price). Scoped to available puppies + the litters they came from. -------
+// --- Prospective family: current availability, one card per litter with its
+// available pups nested inside. Carries the litter's per-sex list price + deposit
+// (owner decision 1 reversed the old "NO price" rule); still NO per-recipient
+// private data — every prospect sees the same availability. -----------------
 export async function buildProspectiveBundle(contact) {
   const h = headerCopy('prospective', contact);
   const dogs = await dogRepo.getAll();
   const available = dogs.filter((d) => d.status === 'puppy' && d.disposition === 'available');
-  const availablePups = available.map((d) => ({ name: d.call_name || '', breed: d.breed || '', sex: d.sex || '' }));
 
   const litterIds = [...new Set(available.map((d) => d.litter_id).filter(Boolean))];
   const litters = [];
   for (const id of litterIds) {
     const l = await litterRepo.getById(id);
     if (!l) continue;
+    const sireDog = l.sire_id ? await dogRepo.getById(l.sire_id) : null;
+    const damDog = l.dam_id ? await dogRepo.getById(l.dam_id) : null;
+    const pups = available
+      .filter((d) => d.litter_id === id)
+      .map((d) => ({
+        sex: d.sex || '',
+        callName: d.call_name || '',
+        markings: d.color_markings || '',
+        price: d.sex === 'male' ? nonEmpty(l.expected_price_male)
+          : d.sex === 'female' ? nonEmpty(l.expected_price_female) : null,
+        deposit: d.sex === 'male' ? nonEmpty(l.expected_deposit_male)
+          : d.sex === 'female' ? nonEmpty(l.expected_deposit_female) : null
+      }));
     litters.push({
+      nickname: l.nickname || '',
+      breed: (damDog && damDog.breed) || (sireDog && sireDog.breed) || '',
       whelpDate: l.whelp_date || null,
-      availableCount: available.filter((d) => d.litter_id === id).length
+      readyDate: l.estimated_ready_date || null,
+      sire: await dogCard(sireDog),
+      dam: await dogCard(damDog),
+      pups
     });
   }
 
@@ -108,48 +201,78 @@ export async function buildProspectiveBundle(contact) {
     bundleType: 'prospective',
     ...h,
     familyName: contact.name || '',
-    availablePups,
     litters,
     updatedAt: new Date().toISOString()
   };
   return assertOnlyKeys(bundle, PROSPECTIVE_KEYS, 'prospective');
 }
 
-// --- Current family: their placed dog(s), the litter, pickup, sanitized vet
-// visits, and a pointer to the governing contract document. -----------------
+// --- Current family: their placed dog(s), each with parentage, a computed age,
+// ready/placement info, their own sale facts, and a curated per-type event
+// history. A pointer to the governing contract document rides alongside. ------
 export async function buildFamilyBundle(contact) {
   const h = headerCopy('family', contact);
   const sales = (await saleRepo.getByBuyer(contact.id)).filter((s) => !s.is_archived);
+  const updatedAt = new Date().toISOString();
+  const asOf = updatedAt.slice(0, 10);
 
   const pups = [];
-  const littersByWhelp = new Map();
-  const pickupDates = [];
-  const vetVisits = [];
   const contractUrls = [];
 
   for (const sale of sales) {
     const dog = await dogRepo.getById(sale.dog_id);
     if (dog) {
-      pups.push({ name: dog.call_name || '', breed: dog.breed || '', sex: dog.sex || '' });
-      if (dog.litter_id) {
-        const l = await litterRepo.getById(dog.litter_id);
-        if (l) littersByWhelp.set(l.id, { whelpDate: l.whelp_date || null });
-      }
+      const litter = dog.litter_id ? await litterRepo.getById(dog.litter_id) : null;
+      const sireDog = litter && litter.sire_id ? await dogRepo.getById(litter.sire_id) : null;
+      const damDog = litter && litter.dam_id ? await dogRepo.getById(litter.dam_id) : null;
+
       // getForSubject excludes archived and returns newest-first.
       const events = await eventRepo.getForSubject('dog', dog.id);
       const placement = events.find((e) => e.event_type === 'placement' && e.event_date);
-      if (placement) pickupDates.push(placement.event_date);
-      for (const e of events) {
-        if (HEALTH_VISIT_TYPES.includes(e.event_type) && e.event_date) {
-          vetVisits.push({ date: e.event_date, label: typeLabel(e.event_type) });
-        }
+
+      const eventSections = [];
+      for (const t of FAMILY_EVENT_TYPES) {
+        const items = events
+          .filter((e) => e.event_type === t && e.event_date)
+          .map((e) => ({ date: e.event_date, title: e.title || '', detail: familyEventDetail(e) }));
+        if (items.length) eventSections.push({ type: t, items });
       }
+
+      const price = nonEmpty(sale.price);
+      const deposit = nonEmpty(sale.deposit_amount);
+      const remainingBalance = (price != null && deposit != null)
+        ? Number(price) - Number(deposit) : null;
+
+      const pup = {
+        callName: dog.call_name || '',
+        sex: dog.sex || '',
+        photosUrl: dog.url || '',
+        sire: parentName(sireDog),
+        dam: parentName(damDog),
+        age: ageFrom(dog.date_of_birth, asOf),
+        placementType: nonEmpty(sale.placement_type),
+        saleStatus: nonEmpty(sale.status),
+        price,
+        deposit,
+        remainingBalance,
+        eventSections
+      };
+      if (litter && litter.nickname) pup.litterNickname = litter.nickname;
+      if (placement) {
+        const pd = placement.details || {};
+        pup.placement = {
+          date: placement.event_date,
+          time: nonEmpty(pd.placement_time),
+          method: nonEmpty(pd.dropoff_method)
+        };
+      } else if (litter && litter.estimated_ready_date) {
+        pup.estimatedReadyDate = litter.estimated_ready_date;
+      }
+      pups.push(pup);
     }
     const gov = contractRepo.governingContract(await contractRepo.getBySale(sale.id));
     if (gov && gov.document_url) contractUrls.push(gov.document_url);
   }
-
-  vetVisits.sort((a, b) => a.date.localeCompare(b.date));
 
   const bundle = {
     bundleVersion: COMPANION_BUNDLE_VERSION,
@@ -157,17 +280,15 @@ export async function buildFamilyBundle(contact) {
     ...h,
     familyName: contact.name || '',
     pups,
-    litters: [...littersByWhelp.values()],
-    pickupDates,
-    vetVisits,
     contractUrls,
-    updatedAt: new Date().toISOString()
+    updatedAt
   };
   return assertOnlyKeys(bundle, FAMILY_KEYS, 'family');
 }
 
-// --- Partner: stud services, external-dog pairings, and lease/co_own/other
-// contracts where this partner is the counterparty. -------------------------
+// --- Partner: stud services (labeled Stud/Dam cards with completed tests),
+// external-dog pairings, and lease/co_own/other contracts where this partner is
+// the counterparty. ---------------------------------------------------------
 export async function buildPartnerBundle(contact) {
   const h = headerCopy('partner', contact);
 
@@ -191,13 +312,15 @@ export async function buildPartnerBundle(contact) {
 
     const hasPick = FEE_STRUCTURES_WITH_PICK.includes(ss.fee_structure);
     studServices.push({
-      studDog: dogMini(studDog),
-      damDog: dogMini(damDog),
+      studDog: await dogCard(studDog),
+      damDog: await dogCard(damDog),
       breedingDates,
       compensation: {
         fee_structure: ss.fee_structure || null,
-        fee_amount: ss.fee_amount != null && ss.fee_amount !== '' ? ss.fee_amount : null,
-        pick_status: hasPick ? (ss.pick_status || null) : null
+        fee_amount: nonEmpty(ss.fee_amount),
+        pick_status: hasPick ? (ss.pick_status || null) : null,
+        sentDate: ss.sent_date || null,
+        returnedDate: ss.returned_date || null
       }
     });
   }
@@ -231,6 +354,8 @@ export async function buildPartnerBundle(contact) {
       type: c.contract_type || null,
       title: c.title || null,
       status: c.status || null,
+      signedDate: c.signed_date || null,
+      terms: c.terms_summary || null,
       document_url: c.document_url || null
     }));
 

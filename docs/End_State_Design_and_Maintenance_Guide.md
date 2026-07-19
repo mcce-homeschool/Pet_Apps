@@ -730,22 +730,47 @@ view. The main app stays single-user/offline/all-local; this adds *recipients*.
 ### What it is
 
 - **Three bundle types**, all **anchored on a Contact** (the recipient) and
-  discriminated by `bundleType`:
+  discriminated by `bundleType`. All three were enriched by the Companion Packages
+  Enhancement (see `docs/Companion_Packages_Enhancement_Brief_v1.md`); two owner
+  **policy changes** landed with it and are called out below:
   - **`prospective`** — a prospective family (a client/waitlister with no sale):
-    current availability. `availablePups` (`Dog` where `status='puppy'` +
-    `disposition='available'`, projected to `{name, breed, sex}`) + the litters
-    they came from. **No price, no per-recipient private data** — it's shared
-    availability, the same for every prospect.
-  - **`family`** — a current family (a buyer with a sale): their placed dog(s)
-    (`saleRepo.getByBuyer` → dog), the litter, `pickupDates` (the pup's `placement`
-    event), sanitized `vetVisits` (`{date, label}` with a **fixed type label only**,
-    never `Event.details`/`notes`), and `contractUrls` (the governing contract's
-    `document_url`).
-  - **`partner`** — a stud/lease/co-own partner: `studServices` (compensation =
-    full four-value `fee_structure` + native-decimal `fee_amount` + `pick_status`,
-    with `breedingDates` from the linked pairing's `breeding_tie` events),
-    `externalPairings` (pairings involving their external/leased-in dogs), and
-    `contracts` (lease/co_own/other contracts where `related_contact_id` = them).
+    current availability as **one card per litter with its available pups nested
+    inside** (`litters[]`, each with `nickname`, `breed`, `whelpDate`, `readyDate`,
+    a `dogCard` for `sire`/`dam`, and `pups[]`). Each pup carries `sex`, `callName`,
+    `markings`, and its **sex-keyed list `price` + `deposit`** (`Litter.expected_price_*`
+    / `expected_deposit_*`). **⚠ Policy reversal (brief decision 1):** prospective
+    bundles **now carry price** — this reverses the earlier "prospective = shared
+    availability, NO price" invariant. Still **no per-recipient private data**: the
+    availability is the same for every prospect.
+  - **`family`** — a current family (a buyer with a sale): **one rich card per placed
+    pup** (`pups[]`, from `saleRepo.getByBuyer` → dog). Each pup carries `callName`,
+    `sex`, `photosUrl` (`Dog.url`), `litterNickname` (when set), `sire`/`dam` (call +
+    registered name), a **computed `age` `{ageWeeks, ageDays}`** as-of the generation
+    date (**never the raw DOB**), a `placement` block or an `estimatedReadyDate`,
+    sale facts (`placementType`, `saleStatus`, `price`, `deposit`, `remainingBalance`),
+    and an `eventSections[]` **curated per-type event history**. Plus top-level
+    `contractUrls` (the governing contract's `document_url`). **⚠ Scoped relaxation
+    (brief decision 4):** event history surfaces a **title + one curated safe field
+    per type** — `vaccination`→`vaccine`, `preventative`→`product`, `weight_check`→
+    weight, `milestone`→`description`, `note`→title only. This relaxes the earlier
+    "fixed type label only" rule, but **never** the freeform top-level `notes` and
+    **never** illness/injury/evaluation or any type not on that list.
+  - **`partner`** — a stud/lease/co-own partner: `studServices` (labeled **Stud/Dam
+    `dogCard` blocks** carrying registered/call name + completed tests;
+    `compensation` = four-value `fee_structure` + native-decimal `fee_amount` +
+    `pick_status` + `sentDate`/`returnedDate` from `StudService`; `breedingDates`
+    from the linked pairing's `breeding_tie` events), `externalPairings` (pairings
+    involving their external/leased-in dogs), and `contracts` (lease/co_own/other
+    contracts where `related_contact_id` = them, each with `type`, `status`,
+    `signedDate` — shown "Not Signed" when null — `terms`, and `document_url`; there
+    is **no** contract `returned_date`, brief decision 2).
+  - **`dogCard` / completed tests** (shared projection): prospective sire/dam and
+    partner stud/dam use `dogCard(dog)` → `{registeredName, callName, photosUrl,
+    tests}`, where `tests` is `completedTests(dogId)` reading
+    `eventRepo.getForSubject('dog', …)` and projecting `breed_specific_test`
+    (`test_name`:`result`), `ofa_pennhip` (`joint`:`rating`), and `genetic_test`
+    (`panel_name`:`result`) **only when the result/rating is non-empty** (else `[]`,
+    block omitted).
 
 - **Two-layer messaging.** Layer 1 is per-type config (`kennelName`/`tagline`/
   `introText`/`announcement`) in `settings.js` under the `companion` key, edited in
@@ -764,8 +789,12 @@ repos (never `db.*`), copying **only** listed fields — **no record spread, no
 filter-over-a-record**. After building, `assertOnlyKeys()` runs a **positive**
 allow-list check and **aborts the send** if any unexpected top-level key is present.
 A new field added to a source table does **not** appear in a bundle until someone
-adds it here by name. No second family's data, no internal notes, no lead/source
-fields, no financials beyond the one stud `fee_amount`.
+adds it here by name — including fields **nested** inside a pup/litter/service, which
+are safe only because each is copied by name and the **top-level** `*_KEYS` allow-lists
+stay exact. No second family's data, no internal notes, no lead/source fields. Money
+is limited to the recipient's **own** figures: a prospect sees the litter's per-sex
+list price/deposit, a family sees their own sale price/deposit/balance, a partner sees
+the one stud `fee_amount`.
 
 ### Transport & the shell
 

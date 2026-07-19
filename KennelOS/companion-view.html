@@ -72,6 +72,19 @@
       border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 0.85rem;
     }
     .fatal { text-align: center; color: var(--muted); margin-top: 40px; }
+    .disclaimer { color: var(--muted); font-size: 0.82rem; font-style: italic; margin-top: 6px; }
+    .parents { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .parent { flex: 1 1 220px; background: var(--chip); border-radius: 10px; padding: 10px 12px; }
+    .parent .role { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .parent .pname { font-weight: 600; margin: 2px 0; }
+    .parent .callname { font-weight: 400; color: var(--muted); }
+    .pup { padding: 12px 0; border-top: 1px solid var(--border); }
+    .pup:first-child { border-top: 0; }
+    .pup .pname { font-weight: 600; font-size: 1.02rem; }
+    .subhead { color: var(--muted); font-size: 0.9rem; margin: 2px 0 8px; }
+    .evt-group { margin-top: 14px; }
+    .evt-group h3 { margin: 0 0 4px; font-size: 0.98rem; }
+    .tests { margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -111,6 +124,41 @@
     };
     function sexLabel(s) { return s === 'male' ? '♂' : s === 'female' ? '♀' : ''; }
 
+    // Hardcoded disclaimer copy (brief §3/§5 — lives in the shell, never the bundle).
+    var READY_DISCLAIMER = 'This is an estimate and may be subject to change depending on veterinary status.';
+    var DEPOSIT_DISCLAIMER = "Deposits must be received and cleared through the seller's financial institution before puppies will be updated to a reserved status. All puppies are considered available until then. Deposits are first come, first serve.";
+
+    function has(o, k) { return o && Object.prototype.hasOwnProperty.call(o, k); }
+
+    function renderTests(tests) {
+      if (!Array.isArray(tests) || !tests.length) return '';
+      var h = '<div class="tests">';
+      for (var i = 0; i < tests.length; i++) {
+        var t = tests[i];
+        var name = t.name ? esc(t.name) : '';
+        var res = t.result ? esc(t.result) : '';
+        h += '<span class="chip">' + (name ? name + ': ' : '') + res + '</span>';
+      }
+      return h + '</div>';
+    }
+
+    // A parent/dog card: registered name, call name, a photos link, and any
+    // completed tests. Used by prospective litters and partner stud services.
+    function renderDogCard(role, dc, photosLabel) {
+      if (!dc) return '';
+      var name = dc.registeredName ? esc(dc.registeredName) : '';
+      var call = dc.callName ? esc(dc.callName) : '';
+      var line = name;
+      if (call) line += (name ? ' ' : '') + '<span class="callname">“' + call + '”</span>';
+      if (!line) line = '<span class="callname">—</span>';
+      var h = '<div class="parent">';
+      h += '<div class="role">' + esc(role) + '</div>';
+      h += '<div class="pname">' + line + '</div>';
+      if (dc.photosUrl) h += '<a class="doc" href="' + esc(dc.photosUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(photosLabel || 'See photos here') + ' →</a>';
+      h += renderTests(dc.tests);
+      return h + '</div>';
+    }
+
     function row(k, v) {
       if (v == null || v === '') return '';
       return '<div class="row"><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>';
@@ -142,7 +190,59 @@
       var greeting = b.familyName ? 'Hi ' + esc(b.familyName) + ' — here are the puppies we have available right now.' : 'Here are the puppies we have available right now.';
       h += '<div class="card"><p class="intro" style="margin-top:0;">' + greeting + '</p></div>';
 
-      h += '<div class="card"><h2>Available puppies</h2>';
+      var litters = Array.isArray(b.litters) ? b.litters : [];
+      // Legacy links carry a flat availablePups list; new links nest pups inside
+      // each litter. Fall back to the old flat layout when no litter has pups.
+      if (Array.isArray(b.availablePups)) return h + renderProspectiveLegacy(b, litters);
+
+      if (!litters.length) {
+        h += '<div class="card"><p class="empty">No puppies are marked available at the moment.</p></div>';
+        return h + renderUpdated(b);
+      }
+
+      for (var j = 0; j < litters.length; j++) {
+        var l = litters[j];
+        var title = l.nickname ? '“' + esc(l.nickname) + '” Litter' : (l.breed ? esc(l.breed) + ' Litter' : 'Litter');
+        h += '<div class="card"><h2>' + title + '</h2>';
+        if (l.breed) h += '<span class="chip">' + esc(l.breed) + '</span>';
+        var meta = '';
+        meta += row('Born', l.whelpDate ? esc(fmtDate(l.whelpDate)) : '');
+        meta += row('Estimated ready', l.readyDate ? esc(fmtDate(l.readyDate)) : '');
+        if (meta) h += '<div style="margin-top:8px;">' + meta + '</div>';
+        if (l.readyDate) h += '<p class="disclaimer">*' + esc(READY_DISCLAIMER) + '</p>';
+
+        if (l.sire || l.dam) {
+          h += '<div class="parents">';
+          h += renderDogCard('Sire', l.sire, 'See photos here');
+          h += renderDogCard('Dam', l.dam, 'See photos here');
+          h += '</div>';
+        }
+
+        var pups = Array.isArray(l.pups) ? l.pups : [];
+        if (pups.length) {
+          h += '<div style="margin-top:14px;"><div class="subhead">Available puppies</div>';
+          for (var i = 0; i < pups.length; i++) {
+            var p = pups[i];
+            h += '<div class="pup">';
+            h += '<div class="pname">' + esc(sexLabel(p.sex)) + ' ' + (p.callName ? esc(p.callName) : 'Puppy') + (p.markings ? ' <span class="chip">' + esc(p.markings) + '</span>' : '') + '</div>';
+            var pm = '';
+            pm += row('Price', money(p.price) ? esc(money(p.price)) : '');
+            pm += row('Deposit', money(p.deposit) ? esc(money(p.deposit)) : '');
+            if (pm) h += pm;
+            h += '</div>';
+          }
+          h += '<p class="disclaimer">' + esc(DEPOSIT_DISCLAIMER) + '</p></div>';
+        }
+        h += '</div>';
+      }
+      h += renderUpdated(b);
+      return h;
+    }
+
+    // Legacy prospective layout (bundleVersion 1 links sent before the packages
+    // enhancement): flat availablePups + a flat litters list.
+    function renderProspectiveLegacy(b, litters) {
+      var h = '<div class="card"><h2>Available puppies</h2>';
       var pups = Array.isArray(b.availablePups) ? b.availablePups : [];
       if (!pups.length) h += '<p class="empty">No puppies are marked available at the moment.</p>';
       else {
@@ -154,8 +254,6 @@
         h += '</ul>';
       }
       h += '</div>';
-
-      var litters = Array.isArray(b.litters) ? b.litters : [];
       if (litters.length) {
         h += '<div class="card"><h2>Litters</h2><ul class="clean">';
         for (var j = 0; j < litters.length; j++) {
@@ -165,18 +263,107 @@
         }
         h += '</ul></div>';
       }
-      h += renderUpdated(b);
-      return h;
+      return h + renderUpdated(b);
     }
 
     // --- family ------------------------------------------------------------
+    var FAMILY_EVENT_LABELS = {
+      vaccination: 'Vaccinations', preventative: 'Preventatives',
+      weight_check: 'Weight checks', milestone: 'Milestones', note: 'Notes'
+    };
+
+    function renderContractLinks(b) {
+      var urls = Array.isArray(b.contractUrls) ? b.contractUrls : [];
+      if (!urls.length) return '';
+      var h = '<div class="card"><h2>Your contract</h2>';
+      for (var u = 0; u < urls.length; u++) {
+        h += '<p><a class="doc" href="' + esc(urls[u]) + '" target="_blank" rel="noopener noreferrer">View your signed contract →</a></p>';
+      }
+      return h + '</div>';
+    }
+
     function renderFamily(b) {
       var h = renderHeader(b);
       var greeting = b.familyName ? 'Hi ' + esc(b.familyName) + ' — here is your puppy’s latest info.' : 'Here is your puppy’s latest info.';
       h += '<div class="card"><p class="intro" style="margin-top:0;">' + greeting + '</p></div>';
 
-      h += '<div class="card"><h2>Your puppies</h2>';
       var pups = Array.isArray(b.pups) ? b.pups : [];
+      // Legacy links carry {name, breed, sex} pups + flat litters/pickup/vet
+      // lists; new links carry rich per-pup cards. Fall back when none is rich.
+      var isNew = pups.some(function (p) { return has(p, 'callName'); });
+      if (!isNew) return h + renderFamilyLegacy(b, pups);
+
+      if (!pups.length) {
+        h += '<div class="card"><p class="empty">No puppies linked yet.</p></div>';
+        return h + renderUpdated(b);
+      }
+
+      // Age was computed as-of the generation date (the day portion of
+      // updatedAt), so show that same date — not the full timestamp.
+      var asOf = b.updatedAt ? fmtDate(String(b.updatedAt).slice(0, 10)) : '';
+      for (var i = 0; i < pups.length; i++) {
+        var p = pups[i];
+        h += '<div class="card">';
+        h += '<h2>' + esc(sexLabel(p.sex)) + ' ' + (p.callName ? esc(p.callName) : 'Your puppy') + '</h2>';
+        if (p.litterNickname) h += '<p class="subhead">From the ' + esc(p.litterNickname) + ' litter</p>';
+
+        var sireCall = p.sire && p.sire.callName ? esc(p.sire.callName) : '';
+        var damCall = p.dam && p.dam.callName ? esc(p.dam.callName) : '';
+        if (sireCall || damCall) {
+          h += '<p class="subhead">Sire ' + (sireCall ? '“' + sireCall + '”' : '—') + ' × Dam ' + (damCall ? '“' + damCall + '”' : '—') + '</p>';
+        }
+        if (p.photosUrl) h += '<p><a class="doc" href="' + esc(p.photosUrl) + '" target="_blank" rel="noopener noreferrer">View pictures here →</a></p>';
+
+        if (p.age && p.age.ageWeeks != null) {
+          h += '<p class="intro" style="margin:8px 0 0;">As of ' + esc(asOf) + ', your puppy is ' + esc(p.age.ageWeeks) + ' weeks, ' + esc(p.age.ageDays) + ' days.</p>';
+        }
+
+        var ready = '';
+        if (p.placement) {
+          ready += row('Ready / drop-off', p.placement.date ? esc(fmtDate(p.placement.date)) : '');
+          ready += row('Time', p.placement.time ? esc(p.placement.time) : '');
+          ready += row('Method', p.placement.method ? esc(p.placement.method) : '');
+        } else if (p.estimatedReadyDate) {
+          ready += row('Estimated ready date', esc(fmtDate(p.estimatedReadyDate)));
+        }
+        if (ready) {
+          h += '<div style="margin-top:10px;">' + ready + '</div>';
+          h += '<p class="disclaimer">*' + esc(READY_DISCLAIMER) + '</p>';
+        }
+
+        var facts = '';
+        facts += row('Placement type', p.placementType ? esc(String(p.placementType).replace(/_/g, ' ')) : '');
+        facts += row('Status', p.saleStatus ? esc(String(p.saleStatus).replace(/_/g, ' ')) : '');
+        facts += row('Price', money(p.price) ? esc(money(p.price)) : '');
+        facts += row('Deposit', money(p.deposit) ? esc(money(p.deposit)) : '');
+        facts += row('Remaining balance', money(p.remainingBalance) ? esc(money(p.remainingBalance)) : '');
+        if (facts) h += '<div style="margin-top:10px;">' + facts + '</div>';
+
+        var sections = Array.isArray(p.eventSections) ? p.eventSections : [];
+        for (var s = 0; s < sections.length; s++) {
+          var sec = sections[s];
+          var items = Array.isArray(sec.items) ? sec.items : [];
+          if (!items.length) continue;
+          h += '<div class="evt-group"><h3>' + esc(FAMILY_EVENT_LABELS[sec.type] || String(sec.type).replace(/_/g, ' ')) + '</h3><ul class="clean">';
+          for (var it = 0; it < items.length; it++) {
+            var e = items[it];
+            var main = e.title || e.detail || '';
+            var extra = e.title && e.detail ? ' — ' + esc(e.detail) : '';
+            h += '<li><span class="k">' + esc(fmtDate(e.date)) + '</span> ' + esc(main) + extra + '</li>';
+          }
+          h += '</ul></div>';
+        }
+        h += '</div>';
+      }
+
+      h += renderContractLinks(b);
+      h += renderUpdated(b);
+      return h;
+    }
+
+    // Legacy family layout (links sent before the packages enhancement).
+    function renderFamilyLegacy(b, pups) {
+      var h = '<div class="card"><h2>Your puppies</h2>';
       if (!pups.length) h += '<p class="empty">No puppies linked yet.</p>';
       else {
         h += '<ul class="clean">';
@@ -206,17 +393,8 @@
         }
         h += '</ul></div>';
       }
-
-      var urls = Array.isArray(b.contractUrls) ? b.contractUrls : [];
-      if (urls.length) {
-        h += '<div class="card"><h2>Your contract</h2>';
-        for (var u = 0; u < urls.length; u++) {
-          h += '<p><a class="doc" href="' + esc(urls[u]) + '" target="_blank" rel="noopener noreferrer">View your signed contract →</a></p>';
-        }
-        h += '</div>';
-      }
-      h += renderUpdated(b);
-      return h;
+      h += renderContractLinks(b);
+      return h + renderUpdated(b);
     }
 
     // --- partner -----------------------------------------------------------
@@ -235,14 +413,27 @@
         h += '<div class="card"><h2>Stud services</h2>';
         for (var i = 0; i < services.length; i++) {
           var s = services[i];
-          h += '<div style="padding:10px 0; border-top:1px solid var(--border);">';
-          h += '<div style="font-weight:600;">' + pairLabel(s.studDog, s.damDog) + '</div>';
+          h += '<div style="padding:12px 0; border-top:1px solid var(--border);">';
+          // New links carry dogCards (Stud/Dam labeled blocks with tests); legacy
+          // links carry flat minis — fall back to the pair label.
+          if (has(s.studDog, 'callName') || has(s.damDog, 'callName')) {
+            h += '<div class="parents" style="margin-top:0;">';
+            h += renderDogCard('Stud', s.studDog, 'See photos here');
+            h += renderDogCard('Dam', s.damDog, 'See photos here');
+            h += '</div>';
+          } else {
+            h += '<div style="font-weight:600;">' + pairLabel(s.studDog, s.damDog) + '</div>';
+          }
           var comp = s.compensation || {};
-          if (comp.fee_structure) h += row('Terms', esc(FEE_LABELS[comp.fee_structure] || comp.fee_structure));
-          if (comp.fee_amount != null) h += row('Fee', esc(money(comp.fee_amount)));
-          if (comp.pick_status) h += row('Pick status', esc(comp.pick_status));
+          var rows = '';
+          if (comp.fee_structure) rows += row('Terms', esc(FEE_LABELS[comp.fee_structure] || comp.fee_structure));
+          if (comp.fee_amount != null) rows += row('Fee', esc(money(comp.fee_amount)));
+          if (comp.pick_status) rows += row('Pick status', esc(comp.pick_status));
+          if (comp.sentDate) rows += row('Sent', esc(fmtDate(comp.sentDate)));
+          if (comp.returnedDate) rows += row('Returned', esc(fmtDate(comp.returnedDate)));
           var dates = Array.isArray(s.breedingDates) ? s.breedingDates : [];
-          if (dates.length) h += row('Breeding date' + (dates.length > 1 ? 's' : ''), dates.map(function (d) { return esc(fmtDate(d)); }).join(', '));
+          if (dates.length) rows += row('Breeding date' + (dates.length > 1 ? 's' : ''), dates.map(function (d) { return esc(fmtDate(d)); }).join(', '));
+          if (rows) h += '<div style="margin-top:8px;">' + rows + '</div>';
           h += '</div>';
         }
         h += '</div>';
@@ -263,15 +454,19 @@
 
       var contracts = Array.isArray(b.contracts) ? b.contracts : [];
       if (contracts.length) {
-        h += '<div class="card"><h2>Contracts</h2><ul class="clean">';
+        h += '<div class="card"><h2>Contracts</h2>';
         for (var c = 0; c < contracts.length; c++) {
           var ct = contracts[c];
-          var title = ct.title || (ct.type ? ct.type.replace(/_/g, ' ') : 'Contract');
-          var line = '<strong>' + esc(title) + '</strong>' + (ct.status ? ' <span class="chip">' + esc(ct.status) + '</span>' : '');
-          if (ct.document_url) line += ' — <a class="doc" href="' + esc(ct.document_url) + '" target="_blank" rel="noopener noreferrer">View →</a>';
-          h += '<li>' + line + '</li>';
+          var title = ct.title || (ct.type ? String(ct.type).replace(/_/g, ' ') : 'Contract');
+          h += '<div style="padding:10px 0; border-top:1px solid var(--border);">';
+          h += '<div><strong>' + esc(title) + '</strong>' + (ct.status ? ' <span class="chip">' + esc(String(ct.status).replace(/_/g, ' ')) + '</span>' : '') + '</div>';
+          // signedDate is present only on new links; show "Not Signed" when null.
+          if (has(ct, 'signedDate')) h += row('Signed', ct.signedDate ? esc(fmtDate(ct.signedDate)) : 'Not Signed');
+          if (ct.terms) h += row('Terms', esc(ct.terms));
+          if (ct.document_url) h += '<p style="margin:6px 0 0;"><a class="doc" href="' + esc(ct.document_url) + '" target="_blank" rel="noopener noreferrer">View contract here →</a></p>';
+          h += '</div>';
         }
-        h += '</ul></div>';
+        h += '</div>';
       }
       h += renderUpdated(b);
       return h;

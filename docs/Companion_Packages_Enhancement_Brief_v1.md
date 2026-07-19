@@ -1,8 +1,8 @@
 # Companion Packages Enhancement — Build Brief v1
 
-**Status:** planned, not yet built. This brief is an execution spec for a follow-up
-session. It does **not** describe current behavior — the End-State guide (§20) still
-reflects what ships today and must be updated *when this work lands*, not before.
+**Status:** **BUILT** — landed on branch `claude/companion-apps-updates-fw42g4`. This
+brief was the execution spec; the current-state reference is now the End-State guide
+(§20), which was updated in the same change. Kept as historical record of intent.
 
 **Scope:** enrich all three Companion share-out bundles (prospective / partner /
 current family) with substantially more of the recipient's own data. Pure
