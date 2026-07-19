@@ -389,6 +389,10 @@ function openEventFormAwait(opts) {
 async function promptDisposition(sale, { title, message, defaultValue }) {
   const dog = await dogRepo.getById(sale.dog_id);
   if (!dog) return;
+  // Disposition is a puppy-only field (vocab.js) — never offer to set one on a
+  // dog that's moved past the puppy life-stage (e.g. a sale delivered as
+  // External flips the dog to external_reference just above this call).
+  if (dog.status !== 'puppy') return;
   const choice = await selectModal({
     title, message, label: 'Disposition',
     options: DISPOSITION, defaultValue, confirmLabel: 'Update', cancelLabel: 'Skip'

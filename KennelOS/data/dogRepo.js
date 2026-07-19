@@ -79,19 +79,35 @@ async function validateDog(candidate, existingId = null) {
   }
 }
 
+// Disposition is a puppy-only field (vocab.js): the stored record must never
+// carry one unless status is 'puppy'. Enforced centrally here so every writer —
+// the dog form, sale-side disposition offers, CSV import — lands the same
+// invariant, and a life-stage change out of 'puppy' clears any lingering value.
+function nullDispositionIfNotPuppy(record) {
+  return record.status !== 'puppy' && record.disposition != null
+    ? { ...record, disposition: null }
+    : record;
+}
+
 export const dogRepo = {
   ...base,
 
   async create(data) {
     await validateDog(data);
-    return base.create(data);
+    return base.create(nullDispositionIfNotPuppy(data));
   },
 
   async update(id, changes) {
     const existing = await db.dogs.get(id);
     if (!existing) throw new Error(`dogs: no record with id ${id}`);
+    const merged = { ...existing, ...changes };
     // Validate the merged result so partial updates are checked against the whole.
-    await validateDog({ ...existing, ...changes }, id);
+    await validateDog(merged, id);
+    // Force disposition null in the write when the resulting status isn't puppy —
+    // covers both an explicit status change and a stale value on an unrelated edit.
+    if (merged.status !== 'puppy' && merged.disposition != null) {
+      changes = { ...changes, disposition: null };
+    }
     return base.update(id, changes);
   },
 

@@ -285,7 +285,7 @@ function renderView() {
       ${row('Co-owners', coOwners)}
       ${KENNEL_FIELD_HIDDEN_FOR.includes(d.ownership_type) ? '' : row('Kennel', esc(kennelName(d.kennel_id)))}
       ${row('Status', badge(DOG_STATUS, d.status) + (d.status_date ? ` <span class="faint">since ${esc(fmtDate(d.status_date))}</span>` : ''))}
-      ${row('Disposition', d.disposition ? badge(DISPOSITION, d.disposition) : '')}
+      ${d.status === 'puppy' ? row('Disposition', d.disposition ? badge(DISPOSITION, d.disposition) : '') : ''}
       ${row('Notes', d.notes ? esc(d.notes).replace(/\n/g, '<br>') : '')}
     </dl>`;
 }
@@ -324,7 +324,7 @@ function renderEdit() {
       ${field('URL', `<input id="f-url" type="url" value="${esc(d.url || '')}" placeholder="https://…">`)}
       ${field('Ownership', `<select id="f-ownership_type">${vocabOptions(OWNERSHIP_TYPE, d.ownership_type, 'Select…')}</select>`, { required: true })}
       ${field('Status', `<select id="f-status">${vocabOptions(DOG_STATUS, d.status, 'Select…')}</select>`, { required: true })}
-      ${field('Disposition', `<select id="f-disposition">${vocabOptions(DISPOSITION, d.disposition || 'undecided')}</select>`, { hint: 'Keeping this dog or offering it? Drives the prospective-families view. Independent of Status.' })}
+      ${d.status === 'puppy' ? field('Disposition', `<select id="f-disposition">${vocabOptions(DISPOSITION, d.disposition || 'undecided')}</select>`, { hint: 'Keeping this puppy or offering it? Drives the prospective-families view. Puppy-only — clears when Status moves past Puppy.' }) : ''}
       ${field('Sire', `<select id="f-sire_id">${dogOptions(d.sire_id, ctx.original?.id, 'male')}</select>`)}
       ${field('Dam', `<select id="f-dam_id">${dogOptions(d.dam_id, ctx.original?.id, 'female')}</select>`)}
       ${field('Litter', `<select id="f-litter_id">${litterOptions(d.litter_id)}</select>`, { hint: 'The litter this dog was born into, if born in-house.' })}
@@ -371,6 +371,13 @@ function renderEdit() {
   // kennel from the litter's dam — but only when the dam is your own dog
   // (owned/co-owned); a litter whose dam belongs to someone else (e.g. a
   // stud service out) says nothing about which of your kennels bred it.
+  // Status drives whether Disposition (puppy-only) is shown at all. Re-render on
+  // change so the field appears when Status becomes Puppy and disappears — with
+  // its value nulled by readForm — when it moves to any other life-stage.
+  document.getElementById('f-status').addEventListener('change', () => {
+    ctx.draft = readForm();
+    renderEdit();
+  });
   document.getElementById('f-litter_id').addEventListener('change', (e) => {
     ctx.draft = readForm();
     const litter = e.target.value ? ctx.littersById.get(e.target.value) : null;
@@ -407,7 +414,11 @@ function readForm() {
     url: val('f-url').trim(),
     ownership_type: val('f-ownership_type'),
     status: val('f-status'),
-    disposition: val('f-disposition'),
+    // Disposition is a puppy-only field (vocab.js): only a `puppy`-status dog
+    // carries one. Force it null for any other status so it can't linger from a
+    // prior life-stage, and default it to 'undecided' when the field is present
+    // (e.g. Status was just switched to Puppy and the select hasn't rendered).
+    disposition: val('f-status') === 'puppy' ? (val('f-disposition') || 'undecided') : null,
     sire_id: val('f-sire_id') || null,
     dam_id: val('f-dam_id') || null,
     litter_id: val('f-litter_id') || null,
