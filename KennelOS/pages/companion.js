@@ -22,7 +22,8 @@ import { saleRepo } from '../data/saleRepo.js';
 import { studServiceRepo } from '../data/studServiceRepo.js';
 import { contractRepo } from '../data/contractRepo.js';
 import {
-  getCompanionSettings, setCompanionSettings, COMPANION_TYPES, companionTypeLabel
+  getCompanionSettings, setCompanionSettings, COMPANION_TYPES, companionTypeLabel,
+  companionIncludeKeys
 } from '../data/settings.js';
 import { buildBundle } from '../data/companionExport.js';
 import { compressToEncodedURIComponent } from '../vendor/lz-string.min.mjs';
@@ -85,6 +86,66 @@ function filterBlurb() {
 function showError(msg) { els.error.innerHTML = `<div class="inline-error">${esc(msg)}</div>`; }
 function clearError() { els.error.innerHTML = ''; }
 
+// The "What to include" checkboxes shown in each template card. A flat list
+// where a `master` names the flag that gates a row: a child is disabled (and
+// treated as off) whenever its master is unchecked. The `key`s must match the
+// include flags in settings.js (companionIncludeKeys). The builder honours the
+// same master-AND-child rule, so what's checked here is exactly what's emitted.
+const INCLUDE_OPTIONS = {
+  prospective: [
+    { key: 'parents', label: 'Sire & Dam profiles' },
+    { key: 'parentRegisteredName', label: 'Registered name', master: 'parents' },
+    { key: 'parentCallName', label: 'Call name', master: 'parents' },
+    { key: 'parentPhotos', label: 'Photo links', master: 'parents' },
+    { key: 'parentTests', label: 'Health testing', master: 'parents' },
+    { key: 'pricing', label: 'Puppy pricing & deposits' },
+    { key: 'pricingPrice', label: 'Price', master: 'pricing' },
+    { key: 'pricingDeposit', label: 'Deposit', master: 'pricing' },
+    { key: 'litterDates', label: 'Litter dates (born, accepting deposits, estimated ready)' },
+    { key: 'markings', label: 'Puppy markings' }
+  ],
+  family: [
+    { key: 'age', label: 'Puppy age' },
+    { key: 'parentage', label: 'Parentage (Sire × Dam)' },
+    { key: 'photos', label: 'Photo link' },
+    { key: 'readyPlacement', label: 'Ready / placement details' },
+    { key: 'financials', label: 'Financials (price, deposit, fees, balance)' },
+    { key: 'histVaccination', label: 'History — Vaccinations' },
+    { key: 'histPreventative', label: 'History — Preventatives' },
+    { key: 'histWeight', label: 'History — Weight checks' },
+    { key: 'histMilestone', label: 'History — Milestones' },
+    { key: 'histNote', label: 'History — Notes' },
+    { key: 'histBoarding', label: 'Deferred pickup boarding' },
+    { key: 'contract', label: 'Contract link' }
+  ],
+  partner: [
+    { key: 'studServices', label: 'Stud services' },
+    { key: 'studRegisteredName', label: 'Registered name', master: 'studServices' },
+    { key: 'studCallName', label: 'Call name', master: 'studServices' },
+    { key: 'studPhotos', label: 'Photo links', master: 'studServices' },
+    { key: 'studTests', label: 'Health testing', master: 'studServices' },
+    { key: 'studAgreement', label: 'Agreement & fee details', master: 'studServices' },
+    { key: 'studContract', label: 'Contract link', master: 'studServices' },
+    { key: 'contracts', label: 'Lease / co-own / other contracts' }
+  ]
+};
+
+function includeChecklist(type, include) {
+  const rows = (INCLUDE_OPTIONS[type] || []).map((o) => {
+    const on = include[o.key] !== false;
+    const pad = o.master ? ' padding-left:22px;' : '';
+    return `<label class="check-inline" style="display:block; margin:4px 0;${pad}">
+      <input type="checkbox" class="t-inc" data-key="${esc(o.key)}"${o.master ? ` data-master="${esc(o.master)}"` : ''}${on ? ' checked' : ''}> ${esc(o.label)}
+    </label>`;
+  }).join('');
+  return `
+    <div class="field field-wide" style="margin-top:8px;">
+      <label>What to include on the recipient's page</label>
+      <div class="include-list">${rows}</div>
+      <span class="field-hint">Unchecking a component leaves it off the page entirely — the rest stays clean. A sub-option greys out when its group is off.</span>
+    </div>`;
+}
+
 // --- Layer 1: message template cards --------------------------------------
 function templateCard(type) {
   const s = getCompanionSettings(type);
@@ -97,6 +158,7 @@ function templateCard(type) {
         <div class="field field-wide"><label>Intro text</label><textarea class="t-introText">${esc(s.introText)}</textarea><span class="field-hint">Sets the "not live" expectation on the recipient's page.</span></div>
         <div class="field field-wide"><label>Announcement</label><textarea class="t-announcement">${esc(s.announcement)}</textarea><span class="field-hint">A broadcast line for everyone of this type (e.g. "Spring litter arrives in June!"). Shown alongside a recipient's personal note, not overridden by it.</span></div>
         <div class="field field-wide"><label>Closer</label><textarea class="t-closer">${esc(s.closer)}</textarea><span class="field-hint">A sign-off shown at the very bottom of the page, just above the snapshot date (e.g. "Thanks for being part of our program!").</span></div>
+        ${includeChecklist(type, s.include || {})}
       </div>
       <div style="margin-top:8px;"><button class="btn btn-primary btn-sm t-save">Save ${esc(companionTypeLabel(type))} template</button> <span class="t-saved muted"></span></div>
     </div>`;
@@ -122,13 +184,35 @@ function renderTemplates() {
   els.templates.innerHTML = templateCard(activeType);
   els.templates.querySelectorAll('[data-type]').forEach((card) => {
     const type = card.dataset.type;
+
+    // Grey out a sub-option whenever its master is unchecked (still keeps its own
+    // checked state, so re-enabling the master restores the prior selection).
+    const incBoxes = Array.from(card.querySelectorAll('.t-inc'));
+    const syncDisabled = () => {
+      const state = {};
+      incBoxes.forEach((b) => { state[b.dataset.key] = b.checked; });
+      incBoxes.forEach((b) => {
+        const m = b.dataset.master;
+        b.disabled = m ? !state[m] : false;
+        b.closest('label').style.opacity = b.disabled ? '0.5' : '';
+      });
+    };
+    incBoxes.forEach((b) => b.addEventListener('change', syncDisabled));
+    syncDisabled();
+
     card.querySelector('.t-save').addEventListener('click', () => {
+      const include = {};
+      companionIncludeKeys(type).forEach((key) => {
+        const box = card.querySelector(`.t-inc[data-key="${key}"]`);
+        include[key] = box ? box.checked : true;
+      });
       setCompanionSettings(type, {
         kennelName: card.querySelector('.t-kennelName').value.trim(),
         tagline: card.querySelector('.t-tagline').value.trim(),
         introText: card.querySelector('.t-introText').value,
         announcement: card.querySelector('.t-announcement').value,
-        closer: card.querySelector('.t-closer').value
+        closer: card.querySelector('.t-closer').value,
+        include
       });
       const saved = card.querySelector('.t-saved');
       saved.textContent = 'Saved.';

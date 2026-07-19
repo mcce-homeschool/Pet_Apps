@@ -834,8 +834,9 @@ view. The main app stays single-user/offline/all-local; this adds *recipients*.
   `contracts` block filters on the same `isLivePartnerContract`), so membership and
   bundle contents stay in lockstep.
 - **Two-layer messaging.** Layer 1 is per-type config (`kennelName`/`tagline`/
-  `introText`/`announcement`/`closer`) in `settings.js` under the `companion` key,
-  edited in the console's template card (one per type). Layer 2 is
+  `introText`/`announcement`/`closer`, plus the `include` component map — see
+  below) in `settings.js` under the `companion` key, edited in the console's
+  template card (one per type). Layer 2 is
   **`Contact.companion_note`**, a per-recipient personal line.
   Both are carried in the bundle **separately** — `announcement` (broadcast) and
   `personalNote` (the note) — and the shell shows them **alongside each other**, no
@@ -845,6 +846,35 @@ view. The main app stays single-user/offline/all-local; this adds *recipients*.
   and the `closer` sign-off as the final card **just above the snapshot date**. The
   bundle copies the resolved copy inline, so header/landing text updates without a
   shell deploy.
+- **Per-type component allow-list (`include`).** A third piece of Layer-1 config:
+  a flat map of boolean flags, one set per bundle type, stored under
+  `companion[type].include` and edited as the "What to include" checkboxes in each
+  template card. **All flags default `true`** — everything shows, matching the
+  pre-feature behaviour — and `getCompanionSettings` deep-merges the map over the
+  defaults so a flag the owner never set (or one **added in a later version**) falls
+  back to on, never silently hiding a component after an upgrade. Each builder reads
+  its type's `include` and **only ever subtracts**: a disabled component's field is
+  emitted `null`/`''`/`[]` (or the section is skipped), never a new key — so the
+  allow-list invariant below is untouched and no `COMPANION_BUNDLE_VERSION` bump is
+  needed. **Master/child flags:** a master gates a group (`parents`, `pricing`,
+  `studServices`) and the builder ANDs each child with its master, so a child only
+  emits when both are on; the console greys out a child whose master is unchecked.
+  The flags, by type:
+  - **prospective:** `parents` (→ `parentRegisteredName`, `parentCallName`,
+    `parentPhotos`, `parentTests` — the Sire/Dam `dogCard` fields, each independently
+    toggleable), `pricing` (→ `pricingPrice`, `pricingDeposit` — the per-pup price and
+    deposit, split), `litterDates` (born / accept-deposits / estimated-ready), `markings`.
+    When every `dogCard` field is off the card is omitted entirely (no empty "—"
+    block); when no pup carries a price/deposit the shell drops the deposit disclaimer.
+  - **family:** `age`, `parentage`, `photos`, `readyPlacement`, `financials` (price,
+    deposit, transport, deferred-pickup, remaining balance, balance-due — **not**
+    placement type / sale status, which always show), the five history flags
+    `histVaccination`/`histPreventative`/`histWeight`/`histMilestone`/`histNote`,
+    `histBoarding` (deferred-pickup boarding section), `contract`.
+  - **partner:** `studServices` (master → `studRegisteredName`, `studCallName`,
+    `studPhotos`, `studTests` for the Stud/Dam cards, plus `studAgreement` for the
+    Agreement Details/compensation and `studContract` for the per-service contract),
+    and top-level `contracts` (lease / co-own / other).
 
 ### The load-bearing invariant: the allow-list builder
 

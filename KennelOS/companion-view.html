@@ -276,6 +276,7 @@
         var pups = Array.isArray(l.pups) ? l.pups : [];
         if (pups.length) {
           h += '<div style="margin-top:14px;"><div class="subhead">Available puppies</div>';
+          var anyMoney = false;
           for (var i = 0; i < pups.length; i++) {
             var p = pups[i];
             h += '<div class="pup">';
@@ -283,10 +284,13 @@
             var pm = '';
             pm += row('Price', money(p.price) ? esc(money(p.price)) : '');
             pm += row('Deposit', money(p.deposit) ? esc(money(p.deposit)) : '');
-            if (pm) h += pm;
+            if (pm) { h += pm; anyMoney = true; }
             h += '</div>';
           }
-          h += '<p class="disclaimer">' + esc(DEPOSIT_DISCLAIMER) + '</p></div>';
+          // The deposit disclaimer only reads as coherent when a price/deposit is
+          // actually shown — omit it when the owner has turned pricing off.
+          if (anyMoney) h += '<p class="disclaimer">' + esc(DEPOSIT_DISCLAIMER) + '</p>';
+          h += '</div>';
         }
         h += '</div>';
       }
@@ -507,7 +511,9 @@
             h += renderDogCard('Stud', s.studDog, 'See photos here');
             h += renderDogCard('Dam', s.damDog, 'See photos here');
             h += '</div>';
-          } else {
+          } else if (s.studDog || s.damDog) {
+            // Legacy flat minis (carry a .name); new bundles null both cards when
+            // the owner hides dog profiles, so render nothing in that case.
             h += '<div style="font-weight:600;">' + pairLabel(s.studDog, s.damDog) + '</div>';
           }
           // Agreement Details — directly under the dog info. Type, the Begins/Ends
