@@ -119,7 +119,7 @@ function kennelOptions(current) {
 function renderEdit() {
   const c = ctx.draft;
   const typeChecks = CONTACT_TYPE.map((t) => `
-    <label class="check-inline" style="margin-right:14px;">
+    <label class="check-inline">
       <input type="checkbox" data-type="${esc(t.value)}"${(c.contact_type || []).includes(t.value) ? ' checked' : ''}> ${esc(t.label)}
     </label>`).join('');
   const waitlistOpts = `<option value="">— none —</option>` + WAITLIST_STATUS.filter((w) => w.value !== 'none')
@@ -139,7 +139,7 @@ function renderEdit() {
       <div class="field"><label>Email</label><input id="f-email" type="email" value="${esc(c.email)}"></div>
       <div class="field"><label>Waitlist</label><select id="f-waitlist_status">${waitlistOpts}</select></div>
       <div class="field"><label>First contact source</label><input id="f-first_contact_source" type="text" list="source-list" value="${esc(c.first_contact_source)}"><datalist id="source-list">${sourceList}</datalist></div>
-      <div class="field field-wide"><label>Type</label><div class="pill-row" style="gap:0;">${typeChecks}</div></div>
+      <div class="field field-wide"><label>Type</label><div class="check-group">${typeChecks}</div></div>
       <div class="field field-wide"><label>Address</label><textarea id="f-address">${esc(c.address)}</textarea></div>
       <div class="field field-wide"><label>Notes</label><textarea id="f-notes">${esc(c.notes)}</textarea></div>
       <div class="field field-wide"><label>Companion note</label><textarea id="f-companion_note" placeholder="A personal line shown to this recipient on their companion link (overrides the per-type announcement). Leave blank to use the default.">${esc(c.companion_note || '')}</textarea><span class="field-hint">Meant for the recipient’s eyes — distinct from the private Notes above. Appears on their companion share page.</span></div>

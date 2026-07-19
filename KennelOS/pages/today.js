@@ -191,8 +191,8 @@ function renderUpcoming(rows) {
           // directly (edit mode) on the subject's page.
           const openHref = subjectHref(ev, `&openEvent=${encodeURIComponent(ev.id)}`);
           return `<li class="row-between" style="padding:9px 0; border-top:1px solid var(--border);">
-            <div><a href="${subjectHref(ev)}"><strong>${esc(subjectLabel(ev))}</strong></a> — ${badge(EVENT_TYPES, ev.event_type)} ${esc(ev.title || '')}${contact ? ` <span class="muted">· ${esc(contact)}</span>` : ''}</div>
-            <div class="pill-row" style="align-items:center;">
+            <div style="min-width:0;"><a href="${subjectHref(ev)}"><strong>${esc(subjectLabel(ev))}</strong></a> — ${badge(EVENT_TYPES, ev.event_type)} ${esc(ev.title || '')}${contact ? ` <span class="muted">· ${esc(contact)}</span>` : ''}</div>
+            <div class="pill-row" style="align-items:center; justify-content:flex-end; flex:0 0 auto;">
               <span class="muted" style="font-size:13px; white-space:nowrap;">${esc(fmtDate(ev.event_date))}</span>
               <a class="btn btn-sm" href="${esc(openHref)}">Open →</a>
             </div>
