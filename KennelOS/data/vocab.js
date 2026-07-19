@@ -69,7 +69,7 @@ export const LITTER_STATUS = [
   { value: 'whelped',  label: 'Whelped',  badge: 'badge-green' },
   { value: 'weaning',  label: 'Weaning',  badge: 'badge-amber' },
   { value: 'ready',    label: 'Ready',    badge: 'badge-green' },
-  { value: 'placed',   label: 'Placed',   badge: 'badge-neutral' },
+  { value: 'sold',     label: 'Sold',     badge: 'badge-neutral' },
   { value: 'closed',   label: 'Closed',   badge: 'badge-gray' }
 ];
 

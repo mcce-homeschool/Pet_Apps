@@ -238,7 +238,7 @@ Edges worth calling out:
 | puppies_born_alive | integer | | |
 | puppies_born_deceased | integer | | |
 | puppies_born_abnormalities | integer | | count of puppies born with an abnormality; overlaps alive/deceased rather than adding to them (an alive or deceased puppy may also be counted here) |
-| status | enum: expected / whelped / weaning / ready / placed / closed | ✓ | |
+| status | enum: expected / whelped / weaning / ready / sold / closed | ✓ | |
 | expected_price_male | decimal | | per-litter default; `sale.js` prefills a new Sale's `price` with this when the sold dog's `sex = male` and its `litter_id` points here, only if `price` is still empty |
 | expected_price_female | decimal | | same as above, for `sex = female` |
 | expected_deposit_male | decimal | | per-litter default; prefills a new Sale's `deposit_amount` when the sold dog's `sex = male`, only if still empty |
