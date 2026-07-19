@@ -9,6 +9,7 @@ import { dogRepo } from '../data/dogRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
 import { litterRepo } from '../data/litterRepo.js';
 import { eventRepo } from '../data/eventRepo.js';
+import { kennelRepo } from '../data/kennelRepo.js';
 import { descriptor, SEX, EVENT_TYPES } from '../data/vocab.js';
 import { esc, param } from '../assets/ui.js';
 
@@ -144,7 +145,7 @@ async function parentCard(role, dog) {
 
 function puppyInfoCard(dog, litter) {
   const rows = [
-    row('Call name', dog.call_name ? esc(dog.call_name) : ''),
+    row('Call name', dog.call_name ? `<strong>${esc(dog.call_name)}</strong>` : ''),
     row('Registered name', dog.registered_name ? esc(dog.registered_name) : ''),
     row('Sex', dog.sex ? esc(descriptor(SEX, dog.sex).label) : ''),
     row('Date of birth', dog.date_of_birth ? esc(fmtDateMDY(dog.date_of_birth)) : ''),
@@ -209,13 +210,20 @@ async function main() {
   }
   document.getElementById('pr-back').href = `sale.html?id=${encodeURIComponent(sale.id)}`;
 
-  const [buyer, sire, dam, litter, events] = await Promise.all([
+  const [buyer, sire, dam, litter, events, kennels] = await Promise.all([
     sale.buyer_contact_id ? contactRepo.getById(sale.buyer_contact_id) : null,
     dog.sire_id ? dogRepo.getById(dog.sire_id) : null,
     dog.dam_id ? dogRepo.getById(dog.dam_id) : null,
     dog.litter_id ? litterRepo.getById(dog.litter_id) : null,
-    eventRepo.getForSubject('dog', dog.id)
+    eventRepo.getForSubject('dog', dog.id),
+    kennelRepo.getAll({ includeArchived: true })
   ]);
+  // The puppy's own kennel when it's one of the user's own; otherwise the
+  // first own-kennel on record (same "which own kennel" fallback other pages
+  // use — dog.js, kennel-tests-import.js).
+  const ownKennel = (dog.kennel_id && kennels.find((k) => k.id === dog.kennel_id))
+    || kennels.find((k) => k.is_own_kennel && !k.is_archived)
+    || null;
 
   const byType = new Map();
   for (const e of events) {
@@ -232,7 +240,7 @@ async function main() {
 
   root.innerHTML = `
     <div class="pr-header">
-      <h1>${esc(titleName)}${dog.registered_name && dog.call_name ? ` <span class="pr-kennel">(${esc(dog.registered_name)})</span>` : ''}</h1>
+      <h1>${esc(ownKennel?.kennel_name || 'Puppy Record')}</h1>
       <div class="pr-kennel">Puppy Record</div>
       <div class="pr-generated">Generated ${esc(fmtDateMDY(new Date().toISOString().slice(0, 10)))}</div>
     </div>
