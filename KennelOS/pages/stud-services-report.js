@@ -7,6 +7,8 @@ import { contactRepo } from '../data/contactRepo.js';
 import { createReportView } from '../assets/reportView.js';
 import { STUD_SERVICE_DIRECTION, STUD_SERVICE_STATUS, descriptor } from '../data/vocab.js';
 
+const FEE_STRUCTURES_WITH_PICK = ['pick_of_litter', 'flat_plus_pick'];
+
 async function init() {
   const [services, dogs, contacts] = await Promise.all([
     studServiceRepo.getAll({ includeArchived: false }),
@@ -32,6 +34,7 @@ async function init() {
       { header: 'Partner dog', value: (s) => dogName(s.partner_dog_id) },
       { header: 'Partner contact', value: (s) => contactName(s.partner_contact_id) },
       { header: 'Status', value: (s) => s.status || '', badge: STUD_SERVICE_STATUS, csv: (s) => s.status ? descriptor(STUD_SERVICE_STATUS, s.status).label : '' },
+      { header: 'Pick value', value: (s) => (FEE_STRUCTURES_WITH_PICK.includes(s.fee_structure) && s.pick_value_amount != null ? `$${Number(s.pick_value_amount).toFixed(2)}` : '') },
       { header: 'Pairing', value: (s) => (s.pairing_id ? 'linked' : ''), csv: (s) => (s.pairing_id ? 'linked' : '') }
     ],
     onRowClick: (s) => { location.href = `stud-service.html?id=${encodeURIComponent(s.id)}`; },

@@ -10,11 +10,26 @@ import { litterRepo } from '../data/litterRepo.js';
 import { pairingRepo } from '../data/pairingRepo.js';
 import { kennelRepo } from '../data/kennelRepo.js';
 import { createReportView } from '../assets/reportView.js';
-import { esc, badge, fmtDate, fmtMoney, todayYMD } from '../assets/ui.js';
+import { esc, badge, fmtDate, fmtMoney, todayYMD, param } from '../assets/ui.js';
 import { EXPENSE_CATEGORIES, EXPENSE_SUBJECT_TYPES, descriptor } from '../data/vocab.js';
 
 const SUBJECT_PAGE = { dog: 'dog.html', litter: 'litter.html', pairing: 'pairing.html', kennel: 'kennel.html' };
 const CATEGORY_OPTIONS = EXPENSE_CATEGORIES.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join('');
+
+// Bucket tabs (dogs.html pattern): one per expense category, "All" last and
+// default. Read from EXPENSE_CATEGORIES so a new category never needs a
+// second edit here.
+const bucket = param('bucket');
+const bucketLabel = bucket ? descriptor(EXPENSE_CATEGORIES, bucket).label : null;
+
+function renderTabs() {
+  const tabs = document.getElementById('financials-bucket-tabs');
+  if (!tabs) return;
+  const catTabs = EXPENSE_CATEGORIES.map((c) =>
+    `<a class="seg-tab${c.value === bucket ? ' active' : ''}" href="financials.html?bucket=${encodeURIComponent(c.value)}">${esc(c.label)}</a>`
+  ).join('');
+  tabs.innerHTML = catTabs + `<a class="seg-tab${bucket ? '' : ' active'}" href="financials.html">All</a>`;
+}
 
 const ref = { dogs: [], litters: [], pairings: [], kennels: [] };
 const maps = { dogsById: new Map(), littersById: new Map(), pairingsById: new Map(), kennelsById: new Map() };
@@ -129,20 +144,23 @@ function renderSummary(expenses) {
     </li>`).join('');
   summary.innerHTML = `
     <div class="row-between" style="align-items:baseline;">
-      <h2 style="margin:0;">Total spent</h2>
+      <h2 style="margin:0;">Total spent${bucket ? ` — ${esc(bucketLabel)}` : ''}</h2>
       <strong style="font-size:22px;">${esc(fmtMoney(grand))}</strong>
     </div>
     <p class="muted" style="margin:4px 0 0; font-size:13px;">Across ${expenses.length} expense${expenses.length === 1 ? '' : 's'} (active only).</p>
     ${catRows ? `<ul class="linked-list" style="margin:12px 0 0; padding:0; list-style:none;">${catRows}</ul>` : ''}`;
 }
 
+// Newest-to-oldest is the default order everywhere here — the full ledger,
+// every category tab, and the All tab all read off this one sorted list.
 async function loadExpenses() {
   const expenses = await expenseRepo.getAll({ includeArchived: false });
   expenses.sort((a, b) => (b.expense_date || '').localeCompare(a.expense_date || ''));
-  return expenses;
+  return bucket ? expenses.filter((x) => x.category === bucket) : expenses;
 }
 
 async function init() {
+  renderTabs();
   const [dogs, litters, pairings, kennels] = await Promise.all([
     dogRepo.getAll({ includeArchived: true }),
     litterRepo.getAll({ includeArchived: true }),
@@ -160,7 +178,7 @@ async function init() {
 
   const view = createReportView({
     mount: document.getElementById('report-mount'),
-    csvFilename: `financials-${new Date().toISOString().slice(0, 10)}.csv`,
+    csvFilename: `financials-${bucket ? bucket + '-' : ''}${new Date().toISOString().slice(0, 10)}.csv`,
     search: { placeholder: 'Search subject, vendor, or notes…', text: (x) => `${subjectLabel(x)} ${x.vendor || ''} ${x.notes || ''}` },
     filters: [
       { id: 'category', label: 'Category', options: EXPENSE_CATEGORIES, match: (x, v) => x.category === v },
@@ -195,7 +213,7 @@ async function init() {
       }
       return expenses;
     },
-    emptyText: 'No expenses recorded yet. Use “+ Add Expense” to log one.'
+    emptyText: bucket ? `No ${bucketLabel} expenses recorded yet.` : 'No expenses recorded yet. Use “+ Add Expense” to log one.'
   });
 
   document.getElementById('add-expense').addEventListener('click', () => openAddExpense(() => view.refresh()));

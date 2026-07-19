@@ -29,7 +29,7 @@ const els = {
 
 const blankStudService = () => ({
   direction: '', our_dog_id: '', partner_dog_id: '', partner_contact_id: '',
-  fee_amount: '', fee_structure: '', pick_status: '', pairing_id: '', status: '', result_notes: '', notes: '',
+  fee_amount: '', fee_structure: '', pick_status: '', pick_value_amount: '', pairing_id: '', status: '', result_notes: '', notes: '',
   sent_date: '', returned_date: '', type: '', referred_by_contact_id: ''
 });
 
@@ -167,6 +167,7 @@ function renderView() {
       ${row('Partner contact', s.partner_contact_id ? `<a href="contact.html?id=${encodeURIComponent(s.partner_contact_id)}">${esc(contactName(s.partner_contact_id) || '—')}</a>` : '')}
       ${row('Fee', esc(money(s.fee_amount)) + (s.fee_structure ? ` <span class="faint">(${esc((FEE_STRUCTURE.find(f => f.value === s.fee_structure) || {}).label || s.fee_structure)})</span>` : ''))}
       ${feeHasPick(s.fee_structure) ? row('Pick status', s.pick_status ? esc(s.pick_status) : '') : ''}
+      ${feeHasPick(s.fee_structure) ? row('Pick value', esc(money(s.pick_value_amount))) : ''}
       ${row('Linked pairing', pairingHtml)}
       ${row('Status', badge(STUD_SERVICE_STATUS, s.status))}
       ${row('Referred by', s.referred_by_contact_id ? `<a href="contact.html?id=${encodeURIComponent(s.referred_by_contact_id)}">${esc(contactName(s.referred_by_contact_id) || '—')}</a>` : '')}
@@ -198,6 +199,7 @@ function renderEdit() {
       ${field('Fee amount', `<input id="f-fee_amount" type="number" min="0" step="0.01" value="${esc(s.fee_amount)}">`)}
       ${field('Fee structure', `<select id="f-fee_structure">${vocabOptions(FEE_STRUCTURE, s.fee_structure, '— none —')}</select>`)}
       ${feeHasPick(s.fee_structure) ? field('Pick status', `<input id="f-pick_status" type="text" list="pick-status-suggestions" value="${esc(s.pick_status || '')}" placeholder="pending / claimed"><datalist id="pick-status-suggestions"><option value="pending"><option value="claimed"></datalist>`, { hint: 'Has the partner claimed their pick yet? Suggested: pending / claimed (free text allowed).' }) : ''}
+      ${feeHasPick(s.fee_structure) ? field('Pick value', `<input id="f-pick_value_amount" type="number" min="0" step="0.01" value="${esc(s.pick_value_amount || '')}">`, { hint: 'Estimated dollar value of the pick puppy, for your own income tracking — separate from Fee amount, which is cash actually changing hands.' }) : ''}
       ${field('Linked pairing', `<select id="f-pairing_id">${pairingOptions(s.pairing_id)}</select>`, { hint: 'Optional — the actual breeding record and outcome.' })}
       ${field('Status', `<select id="f-status">${vocabOptions(STUD_SERVICE_STATUS, s.status, 'Select…')}</select>`, { required: true })}
       ${field('Referred by', `<select id="f-referred_by_contact_id">${referrerContactOptions(s.referred_by_contact_id)}</select>`, { hint: 'The contact who referred this arrangement. Tags them as a Stud referrer automatically.' })}
@@ -252,6 +254,7 @@ function readForm() {
     // value otherwise so a brief non-pick selection mid-edit doesn't clobber it.
     // normalizeMoney nulls it out on save when the final structure has no pick.
     pick_status: document.getElementById('f-pick_status') ? val('f-pick_status').trim() : (ctx.draft.pick_status || ''),
+    pick_value_amount: document.getElementById('f-pick_value_amount') ? val('f-pick_value_amount') : (ctx.draft.pick_value_amount || ''),
     pairing_id: val('f-pairing_id') || null,
     status: val('f-status'),
     type: val('f-type') || '',
@@ -275,12 +278,14 @@ function updateWarnings() {
   if (box) box.innerHTML = warns.length ? `<div class="inline-warn">${warns.map(esc).join('<br>')}</div>` : '';
 }
 
-// Empty numeric strings become null; pick_status is meaningful only for a
-// pick-bearing fee structure, forced null otherwise so it never rides along on a
-// flat_fee/other arrangement (Companion feature §1).
+// Empty numeric strings become null; pick_status and pick_value_amount are
+// meaningful only for a pick-bearing fee structure, forced null otherwise so
+// neither rides along on a flat_fee/other arrangement (Companion feature §1).
 function normalizeMoney(candidate) {
   candidate.fee_amount = candidate.fee_amount === '' || candidate.fee_amount == null ? null : Number(candidate.fee_amount);
   candidate.pick_status = feeHasPick(candidate.fee_structure) && candidate.pick_status ? candidate.pick_status : null;
+  candidate.pick_value_amount = feeHasPick(candidate.fee_structure) && candidate.pick_value_amount !== '' && candidate.pick_value_amount != null
+    ? Number(candidate.pick_value_amount) : null;
   return candidate;
 }
 

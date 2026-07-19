@@ -237,12 +237,14 @@ export async function seedSampleData() {
   // sample's away-board row now — an ongoing in-person stay. The parallel
   // "Boarding for stud service" event that used to duplicate this trip is
   // gone; the board reads this record directly via studServiceRepo.getBoardRows().
-  // fee_structure/pick_status (Companion feature §1/§20): a flat_plus_pick
-  // arrangement so the partner companion bundle exercises both a cash fee_amount
-  // and a pick_status. `pending` — Ellen hasn't claimed her pick yet.
+  // fee_structure/pick_status/pick_value_amount (Companion feature §1/§20): a
+  // flat_plus_pick arrangement so the partner companion bundle exercises both a
+  // cash fee_amount and a pick_status. `pending` — Ellen hasn't claimed her pick
+  // yet. pick_value_amount is the breeder's own income-tracking estimate of
+  // what that pick puppy is worth, separate from the cash fee_amount.
   const studServiceBirch = await studServiceRepo.create({
     direction: 'outgoing', our_dog_id: birch.id, partner_dog_id: nell.id, partner_contact_id: ellen.id,
-    fee_amount: 800, fee_structure: 'flat_plus_pick', pick_status: 'pending',
+    fee_amount: 800, fee_structure: 'flat_plus_pick', pick_status: 'pending', pick_value_amount: 1500,
     pairing_id: pairingP3.id, type: 'in_person', sent_date: daysFromToday(-3),
     // referred_by (Referral tracking): Dana sent this arrangement our way — the
     // repo auto-tags her contact as a 'stud_referrer'.
