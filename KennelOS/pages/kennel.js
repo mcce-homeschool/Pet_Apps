@@ -41,6 +41,7 @@ function renderProfile(k) {
       ${row('Name', esc(k.kennel_name))}
       ${row('Prefix', esc(k.prefix))}
       ${row('Location', esc(k.location))}
+      ${row('Website', k.website ? `<a href="${esc(k.website)}" target="_blank" rel="noopener noreferrer">${esc(k.website)}</a>` : '')}
     </dl>
     <p class="field-hint" style="margin-top:10px;">Edit a kennel's name, prefix, or
       location from the <a href="kennels.html">Kennels list</a>. Program settings

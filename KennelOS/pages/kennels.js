@@ -36,6 +36,7 @@ function editRow(k) {
         <div class="field"><label>Kennel name <span class="req">*</span></label><input id="e-name" type="text" value="${esc(k.kennel_name)}"></div>
         <div class="field"><label>Prefix</label><input id="e-prefix" type="text" value="${esc(k.prefix || '')}"></div>
         <div class="field"><label>Location</label><input id="e-location" type="text" value="${esc(k.location || '')}"></div>
+        <div class="field"><label>Website</label><input id="e-website" type="url" value="${esc(k.website || '')}" placeholder="https://…"></div>
         <div class="field field-wide"><label class="check-inline"><input id="e-own" type="checkbox"${k.is_own_kennel ? ' checked' : ''}> This is one of my own kennels</label></div>
       </div>
       <p class="field-hint">Preferred tests and lifecycle nudges live on the kennel's own page — use <strong>Open →</strong>.</p>
@@ -94,9 +95,10 @@ async function saveEdit(kennel) {
   const kennel_name = document.getElementById('e-name').value.trim();
   const prefix = document.getElementById('e-prefix').value.trim();
   const location = document.getElementById('e-location').value.trim();
+  const website = document.getElementById('e-website').value.trim();
   const is_own_kennel = document.getElementById('e-own').checked;
   try {
-    await kennelRepo.update(kennel.id, { kennel_name, prefix, location, is_own_kennel });
+    await kennelRepo.update(kennel.id, { kennel_name, prefix, location, website, is_own_kennel });
     editingId = null;
     render();
   } catch (e) {
@@ -109,12 +111,14 @@ document.getElementById('k-add').addEventListener('click', async () => {
   const name = document.getElementById('k-name').value.trim();
   const prefix = document.getElementById('k-prefix').value.trim();
   const location = document.getElementById('k-location').value.trim();
+  const website = document.getElementById('k-website').value.trim();
   const is_own_kennel = document.getElementById('k-own').checked;
   try {
-    await kennelRepo.create({ kennel_name: name, prefix, location, is_own_kennel });
+    await kennelRepo.create({ kennel_name: name, prefix, location, website, is_own_kennel });
     document.getElementById('k-name').value = '';
     document.getElementById('k-prefix').value = '';
     document.getElementById('k-location').value = '';
+    document.getElementById('k-website').value = '';
     document.getElementById('k-own').checked = false;
     render();
   } catch (e) {
