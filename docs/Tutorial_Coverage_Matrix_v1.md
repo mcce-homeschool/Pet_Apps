@@ -50,15 +50,18 @@ plan must be built on — this was the main point of Phase 1.
      is redundant); **Financials → `financials.html`**.
 2. **"Nudges" is a card on `today.html`, not a page.** It renders **nothing** when no
    nudge fires — confirmed empty on a fresh seed (browser, §E). That is exactly G1.
-3. **`today.html` card order** (DOM): Nudges · Reminders · Available puppies · Due outs
+3. **`today.html` card order** (DOM): Nudges · Reminders · Active litters · Due outs
    & upcoming · Away from home · Kennel overview · This year. (Spec §4.1's ordering and
    "status tiles first" was wrong.)
 4. **Dog Detail is far richer than §4.2 lists** — 12 sections, most collapsible, several
    **conditionally hidden** (Contracts/Sales/Stud Services/Pairings/Litters appear only
    when relevant or non-empty). Full list in §B-Dogs.
-5. **Kennels have no detail-page editor.** Editing (incl. `preferred_tests`, promote-
-   nudge config) happens **inline on `kennels.html`**; `kennel.html` is a read-only
-   profile that only hosts the kennel Expenses ledger. **`preferred_breeds` has no UI
+5. **Kennel program config lives on the kennel *detail* page.** `kennels.html` is the
+   list — identity CRUD only (name/prefix/location/own-flag/website + archive/delete).
+   A kennel's **program configuration** — the **preferred-tests panel** (and its nested
+   "Apply to dogs…") and the **lifecycle-nudge thresholds** (`promote_nudge_enabled` +
+   `promote_age_*`) — is edited on **`kennel.html`** (own kennels only), which also hosts
+   the kennel Expenses ledger and a `logo_data_url` logo. **`preferred_breeds` has no UI
    editor at all** — it's set by seed/import only (matters for D2/G12).
 6. **Contracts split across two surfaces.** Sale/stud-service contracts live inline on
    the `sales.html`/`stud-services.html` cards; `contracts.html` lists only the
@@ -87,7 +90,7 @@ Shared components referenced below (each is an **expandable surface** the tour o
 | Nudges | Derived suggestions; nothing changes until you act | (one live nudge per rule) | collapsible; per-nudge action + Dismiss | ≥1 live nudge of each rule on seed day | ❌ G1 |
 | Reminders | Reminders live on events; snooze *is* a date edit | Juniper (overdue), Percy (due-soon), Birch (upcoming) | collapsible; inline **Snooze** date-swap; "Log new →"; Dismiss | overdue/due-soon/upcoming each ≥1 | ✅ |
 | — Show dismissed | Dismissed reminders aren't gone | Fern (dismissed) | (reminder Show-dismissed) | ≥1 dismissed reminder | ✅ |
-| Available puppies | `disposition='available'` feeds this + prospective bundle | Fern | collapsible; "Add sale →" | ≥1 available dog | ✅ |
+| Active litters | Per-litter availability: one block per non-archived litter with ≥1 `available` pup, its selling roster ordered available→undecided→sold with an `<sold>/<total> sold` tally; `disposition='available'` feeds this + the prospective bundle | the litter holding Fern | collapsible; per-pup **"Add sale →"** on sellable pups; "Open litter →" | ≥1 litter with an `available` pup | ⚠️ only the closed litter → G3/G4 |
 | Due outs & upcoming | Deep-link into an event (edit-in-place) | Fern placement (+7d), Percy vet visit | collapsible; "Open →" (openEvent) | ≥1 future-dated event | ✅ |
 | Away from home | Whereabouts = boarding ∪ in-person stud; location from partner address | Birch @ Ellen (Burlington) | collapsible; **expandable row** (Contact/Drop-off/Return/Open) | in-person stud w/ sent_date, partner address | ✅ |
 | Kennel overview | Status vs. archive (deceased is a status, not archived) | dog roster | collapsible; status tiles | dogs across statuses | ✅ |
@@ -111,7 +114,7 @@ Shared components referenced below (each is an **expandable surface** the tour o
 |---|---|---|---|---|---|
 | Profile — identity | full identity field set | (a dog w/ registry/chip/color/url) | edit-in-place | identity fields set on ≥2 dogs | ❌ G6 |
 | Profile — ownership/external | owner required for external/leased; kennel hides | Gunnar (external), a leased dog | edit warnings (owner-required) | a `leased_in`/`leased_out` dog | ❌ G5 |
-| Profile — disposition | keeping vs offering; independent of status | Fern (available) / Birch (keeping) | — | disposition values present | ✅ |
+| Profile — disposition | keeping vs offering; **puppy-only** field — shown only while `status='puppy'`, cleared when status moves past puppy | Fern (available); a `keeping` puppy | — | disposition on ≥1 puppy incl. a `keeping` one | ⚠️ only available/placed pups → G12 (no `keeping` puppy) |
 | Profile — edit warnings | sex-mismatch, DOD/status, DOB-vs-litter (3 fixes) | (edit a linked-litter pup) | inline warn + fix buttons | a litter-linked pup | ✅ |
 | Recorded COI | user-attested, never computed; method combobox | Juniper (genomic), Gunnar (pedigree) | collapsible; inline edit | recorded_coi on ≥2 dogs | ✅ |
 | Planned Tests | undated intention; add/copy; advisory unlogged | (a dog w/ planned_tests) | collapsible; **"+ Plan a test"** add/copy toggle | planned_tests + kennel preferred_tests | ❌ G6/G12 |
@@ -154,10 +157,11 @@ Anchor Juniper. Status ✅.
 
 | Section | Teaches | Anchor | Expandable | Depends on | Status |
 |---|---|---|---|---|---|
-| Profile | nickname title; whelp→ready +56d; **per-sex pricing** → sale/prospective | Autumn litter (priced, nickname) | edit-in-place; sync/count/future-whelp warns; save→"update pairing status?" modal | pricing + nickname on a litter | ❌ G4 |
-| Puppy Roster | roster is derived (Dog WHERE litter_id), not stored | Autumn puppies | **+ Add Puppy / + Add N Puppies modals**; **"+ Log event for whole litter"** cascade | a litter w/ puppies + dam breed set | ⚠️ G3 |
+| Profile | nickname title; whelp→ready +56d; **per-sex pricing** → sale/prospective; **accept-deposits date** → prospective bundle | Autumn litter (priced, nickname) | edit-in-place; sync/count/future-whelp warns; save→"update pairing status?" modal | pricing + nickname on a litter | ❌ G4 |
 | Timeline | litter-subject events incl. per-pup weight_check | — | timeline | litter events | ✅ |
+| Puppy Roster | roster is derived (Dog WHERE litter_id), not stored | Autumn puppies | **+ Add Puppy / + Add N Puppies modals**; **"+ Log event for whole litter"** cascade | a litter w/ puppies + dam breed set | ⚠️ G3 |
 | Expenses | litter-subject cost | — | expensePanel | ≥1 litter expense | ✅ |
+| Sales & Income | per-puppy sale **total value** (price + transport + deferred boarding) + status, with a running total; deliberately **no** earned/anticipated split or net (that detail lives only in reporting) | a litter with a sold pup | collapsible | ≥1 sale on a pup in this litter | ❌ G2/G3 |
 
 Legacy `HUB_CHILDREN` (still reachable, not primary stops): `pairings.html`,
 `litters.html` (breed col → D2), `active-breeding.html`, `live-births.html`.
@@ -179,19 +183,24 @@ Legacy `HUB_CHILDREN` (still reachable, not primary stops): `pairings.html`,
 | Dogs owned/co-owned ⟨cond⟩ | derived ownership | Dana → Gunnar | collapsible | owner/co-owner links | ✅ |
 | Sales (as buyer) ⟨cond⟩ | derived buyer history | Priya | collapsible | buyer w/ sales | ✅ |
 
-**`kennels.html`** (inline management — no detail editor)
+**`kennels.html`** (list — identity CRUD only)
 
 | Section | Teaches | Anchor | Expandable | Depends on | Status |
 |---|---|---|---|---|---|
-| Add / rows | own vs. outside is a flag | Thornfield (mine), Meadow Ridge (outside) | inline edit row | own + outside kennel | ✅ |
-| Preferred tests panel | own-kennel test vocab; feeds combobox | Thornfield preferred_tests | **"Preferred tests" panel + nested "Apply to dogs…"** | preferred_tests set on Thornfield | ❌ G12 |
-| Lifecycle nudges (edit row) | promote-nudge config | Thornfield promote_* | inline (own-kennel) | promote_nudge_enabled + a kept pup old enough | ❌ G12/G1 |
+| Add / rows | own vs. outside is a flag; name/prefix/location/website + own-flag | Thornfield (mine), Meadow Ridge (outside) | inline edit row | own + outside kennel | ✅ |
 | Delete blocked | archive-only when referenced | Thornfield | disabled Delete + tooltip | referenced kennel | ✅ |
+| Open → | jumps to the kennel detail page (config + expenses) | Thornfield | — | own kennel | ✅ |
 
-**Note:** `preferred_breeds` has **no editor** here — set via seed/import only (D2/G12).
+**`kennel.html`** (detail — own-kennel program config + expenses)
 
-**`kennel.html`** — read-only profile + **Kennel Expenses** panel (subject=kennel).
-Anchor: Thornfield overhead expenses. Status ✅.
+| Section | Teaches | Anchor | Expandable | Depends on | Status |
+|---|---|---|---|---|---|
+| Identity / logo / website | read-only profile; `logo_data_url` + website surface on the print docs | Thornfield | — | own kennel | ✅ |
+| Preferred tests panel | own-kennel test vocab; feeds the planned-test combobox | Thornfield preferred_tests | **"Preferred tests" panel + nested "Apply to dogs…"** | preferred_tests set on Thornfield | ❌ G12 |
+| Lifecycle nudges | promote-nudge config (`promote_nudge_enabled` + `promote_age_*`) | Thornfield promote_* | own-kennel config block | promote config + a `keeping` pup old enough | ❌ G12/G1 |
+| Kennel Expenses | overhead ledger (subject=kennel) | Thornfield overhead expenses | **expensePanel** | ≥1 kennel expense | ✅ |
+
+**Note:** `preferred_breeds` has **no editor** — set via seed/import only (D2/G12).
 
 ### B.5 Placements & Contracts → `sales.html` + `sale.html` + `stud-services.html` + `stud-service.html` + `contracts.html` + `contract.html`
 
@@ -199,7 +208,7 @@ Anchor: Thornfield overhead expenses. Status ✅.
 
 | Section | Teaches | Anchor | Expandable | Depends on | Status |
 |---|---|---|---|---|---|
-| Sale cards + inline contracts | placement_type & sale_status; Contract owns the link | existing sales | link/unlink/create contract; **"Show more" >5** | ≥1 open sale; >5 for pagination | ❌ G2/G10 |
+| Sale cards, grouped by litter → dog | placement_type & sale_status; Contract owns the link; cards are **grouped under the sold pup's litter** (dogs with no litter link fall into one "External acquisitions" bucket, last), not paginated | existing sales | link/unlink/create contract | ≥1 open sale | ❌ G2 |
 
 **`sale.html`**
 
@@ -213,8 +222,8 @@ Anchor: Thornfield overhead expenses. Status ✅.
 
 | Section | Teaches | Anchor | Expandable | Depends on | Status |
 |---|---|---|---|---|---|
-| Cards + inline contracts | direction; inline contract link | existing stud svc | link/unlink/create; "Show more" >5 | incoming + outgoing | ❌ G8 |
-| Profile | direction/type; fee_structure gates pick_status; in-person+sent→away board; +Create Pairing | Birch (outgoing/in-person); an **incoming/ai** svc | edit-in-place; pick field toggles on fee_structure | an incoming, ai stud service | ❌ G8 |
+| Cards, grouped by our dog | direction; inline contract link; cards are **grouped by `our_dog_id`** (the kennel's own dog on either side), not paginated | existing stud svc | link/unlink/create | incoming + outgoing | ❌ G8 |
+| Profile | direction/type; fee_structure gates pick_status **and** pick_value_amount (non-cash pick estimate, separate from fee); in-person+sent→away board; +Create Pairing | Birch (outgoing/in-person); an **incoming/ai** svc | edit-in-place; pick fields toggle on fee_structure | an incoming, ai stud service | ❌ G8 |
 | Contracts | derived by related_stud_service_id | a stud contract | + Create Contract | stud contract | ⚠️ G8 |
 
 **`contracts.html` / `contract.html`**
@@ -226,11 +235,35 @@ Anchor: Thornfield overhead expenses. Status ✅.
 
 ### B.6 Financials → `financials.html`
 
+Top **Overview / Income / Expenses** toggle (`?view=`). An **"Invoice / Receipt"**
+generator button sits on every view.
+
+**Overview view**
+
+| Section | Teaches | Anchor | Expandable | Depends on | Status |
+|---|---|---|---|---|---|
+| Net tiles | Earned income / Anticipated income / Total expenses / **Net (earned − spent)** | existing sales/stud + expenses | — | income + expenses present | ⚠️ G2 (no open sale → anticipated thin) |
+| Breakdown | income-by-component beside expense-by-category | — | — | costs + income across kinds | ⚠️ G2/G14 |
+
+**Income view** — money-in is **derived** (no income table); read from Sales + outgoing Stud Services.
+
+| Section | Teaches | Anchor | Expandable | Depends on | Status |
+|---|---|---|---|---|---|
+| Summary | earned/anticipated totals + per-component breakdown | existing income rows | — | income rows present | ⚠️ G2 |
+| Earned / Anticipated boxes | each a reportView (source/year filters + CSV); a component is earned once paid-dated or status-advanced, else anticipated; stud `pick_value` rides its own non-cash line, out of the cash totals | Hazel sale (earned); an open sale (anticipated) | **row → Adjust modal** (writes money/status/paid-date back via repo) | an open, part-paid sale to split across both boxes | ❌ G2/G9 |
+
+**Expenses view**
+
 | Section | Teaches | Anchor | Expandable | Depends on | Status |
 |---|---|---|---|---|---|
 | Summary | grand total + per-category | existing expenses | — | expenses across categories | ✅ |
-| Ledger | category/subject-type/year filters + CSV | kennel/dog/litter/event costs | filters; row→subject | costs across subject types | ⚠️ G14 (no pairing) |
-| + Add Expense | log against any subject | — | **add-expense modal** (subject-type→subject) | — | ✅ |
+| Category seg-tabs | one tab per `EXPENSE_CATEGORIES` value + **All**; pre-filters the loaded ledger | — | tab switch (`?bucket=`) | costs across categories (incl. `dog_purchase`) | ⚠️ thin categories |
+| Ledger | category/subject-type/year filters + CSV; newest-first | kennel/dog/litter/event costs | filters; row→subject | costs across subject types | ⚠️ G14 (no pairing) |
+| + Add Expense | log against any subject (Expenses view only) | — | **add-expense modal** (subject-type→subject) | — | ✅ |
+
+**Invoice / Receipt generator** — a modal listing every income record (sales + outgoing stud);
+picking one opens the print-only `invoice.html` (per-line Full/Partial, due dates, accepted
+methods). Teaches: the five cash line types; browser Print → Save as PDF. Status ✅.
 
 ### B.7 More → Reports / Companion / Import-Export
 
@@ -249,11 +282,11 @@ Anchor: Thornfield overhead expenses. Status ✅.
 
 | Section | Teaches | Anchor | Expandable | Depends on | Status |
 |---|---|---|---|---|---|
-| Seg-tabs + filter blurb | allow-list / one-way / no-revoke; membership rules | — | tab switch | — | ✅ |
-| Message template | per-type Layer-1 copy | (kennel identity) | editable card | — | ✅ |
-| Recipients — Prospective | active waitlist; price from litter | Owen | collapsible row; note editor; **Prepare link** | Owen + litter price | ⚠️ G4 (price) |
-| Recipients — Current families | open sale membership; balance math | (open-sale buyer) | collapsible row; Prepare link | ≥1 open sale | ❌ G2 |
-| Recipients — Partners | stud/lease/co_own membership | Ellen (stud); a lease partner | collapsible row; Prepare link | Ellen + a lease partner | ⚠️ G7 (lease path) |
+| Seg-tabs + filter blurb | allow-list / one-way / no-revoke; membership rules; the tab **is** the bundle type | — | tab switch | — | ✅ |
+| Message template + "What to include" | per-type Layer-1 copy **plus** the per-type component allow-list (all default on; builder only ever subtracts; masters gate children) | (kennel identity) | editable card; **"What to include" master/child checkboxes** | — | ✅ |
+| Recipients — Prospective | active waitlist; per-litter availability incl. **accept-deposits date** + per-sex price | Owen | collapsible row; note editor; **Preview** (iframe render) / **Prepare link** | Owen + litter price/accept-deposits | ⚠️ G4 (price) |
+| Recipients — Current families | open sale membership (terminal sales excluded); balance math | (open-sale buyer) | collapsible row; Preview / Prepare link | ≥1 open sale | ❌ G2 |
+| Recipients — Partners | stud/lease/co_own membership; live-only, per-type contracts | Ellen (stud); a lease partner | collapsible row; Preview / Prepare link | Ellen + a lease partner | ⚠️ G7 (lease path) |
 
 **Import/Export (`import-export.html`)**
 
@@ -281,7 +314,7 @@ Every gap the seed still has, and whether it's **confirmed live** on a fresh see
 | G7 contracts | contracts.html fallout; Companion Partners lease path | source |
 | G8 incoming/ai stud | Stud service direction/type; stud-services-report | source |
 | G9 sale fees | family bundle balance math | source |
-| G10 Show more | Breeding/Sales/Stud pagination | ✅ 3 pairing cards, no "Show more" |
+| G10 Show more | Breeding pairings pagination only (Sales & Stud are grouped, not paginated) | ✅ 3 pairing cards, no "Show more" |
 | G11 medical spans | Dog timeline boarding/medication span | source |
 | G12 kennel config | Preferred-tests panel; promote nudge | source |
 | G13 contacts polish | groomer/other; email/address/companion_note breadth | source |
@@ -302,8 +335,8 @@ The tour must drive these, not just point at them. Complete list found by walkin
 - **Collapsible cards** (chevron): every `today.html` card; every `dog.html` card
   (except Profile); `contact.html` Dogs/Sales; Event History & Expenses everywhere.
 - **Expandable table rows**: Today "Away from home" (tap row → Contact/Drop-off/Return).
-- **"Show more" pagination**: `breeding.html`, `sales.html`, `stud-services.html`
-  (PAGE_SIZE=5).
+- **"Show more" pagination**: `breeding.html` only (PAGE_SIZE=5). `sales.html` and
+  `stud-services.html` group their cards (by litter/dog) instead and do not paginate.
 - **Modals**:
   - Event add/edit (`eventForm.js`) — from every timeline, litter cascade, sale
     post-save prompts, breeding "Log heat cycle" (via dam-picker modal first).
@@ -311,13 +344,20 @@ The tour must drive these, not just point at them. Complete list found by walkin
   - Puppy add — "+ Add Puppy" / "+ Add N Puppies" on litter.
   - Prompt-chain modals on sale save (co-owner / ownership / disposition / boarding /
     placement) and litter save ("update pairing status?").
+  - Income **Adjust** modal (Financials Income view → row) writing money/status/paid-date back.
+  - **Invoice / Receipt generator** modal (Financials, every view) → print-only `invoice.html`.
+  - **Print Puppy Record** modal (`sales.html`, non-delivered sales) → print-only `puppy-record.html`.
+  - Companion **Preview** modal (channel body + real shell in an iframe).
   - Inline "+ New contact" (contactPicker) on sale/stud-service pickers; inline "+ New
     kennel" on contact.
   - Confirm/alert/select/prompt modals (`ui.js`) for archive/delete/etc.
   - Reset-app "type RESET" modal; restore Merge/Replace confirm.
+- **View toggles / seg-tabs**: Financials **Overview / Income / Expenses** top toggle +
+  Expenses **category** seg-tabs; Companion bundle-type seg-tabs; Dogs/Contacts group tabs.
 - **Inline edit toggles**: Dog Profile edit; Recorded COI edit; Planned Tests
-  "+ Plan a test"; kennels inline edit + Preferred-tests + "Apply to dogs…"; companion
-  recipient expand + note editor + Prepare link.
+  "+ Plan a test"; kennels list inline edit (identity); kennel-detail config — Preferred-tests
+  panel + "Apply to dogs…" + lifecycle-nudge thresholds; companion recipient expand + note
+  editor + "What to include" checkboxes + Preview + Prepare link.
 - **Datalists / comboboxes**: breed, COI method, planned-test token, lead source,
   first-contact source, pick status.
 
@@ -329,7 +369,7 @@ Served `KennelOS/` over HTTP, seeded Thornfield via the first-run prompt, walked
 hub pages headless. **No page/console errors.** Rendered sections matched source:
 
 - **Today** cards present, in order: Reminders(3) [Overdue/Due-soon/Upcoming buckets] ·
-  Available puppies(1)=Fern · Due outs & upcoming(2) · Away from home(1)=Birch,
+  Active litters(1) (the closed litter still holding available Fern) · Due outs & upcoming(2) · Away from home(1)=Birch,
   Burlington VT · Kennel overview tiles · This year (Litters 0 / Pairings 2 / Sales 0).
   **No Nudges card** → G1 live. This-year Litters/Sales = 0 → G3/G2 live.
 - **Dog Detail** cards, in order: Profile · Recorded COI · Planned Tests *(empty)* ·
@@ -352,20 +392,23 @@ The natural one-idea-per-stop sequence the seed must serve, hub by hub, in the s
 IA. (Feeds Phase 0's "freeze the spine"; the wizard-runtime spec, Phase 5, consumes it.)
 
 0. **Open** — first-run prompt → seed Thornfield; kennel-setup wizard.
-1. **Today** — Reminders (+snooze/dismiss) → Available puppies → Due outs → Away board
-   (expand row) → Kennel overview (status vs archive) → *Nudges* (needs G1).
+1. **Today** — Reminders (+snooze/dismiss) → Active litters (per-litter availability) →
+   Due outs → Away board (expand row) → Kennel overview (status vs archive) → *Nudges*
+   (needs G1).
 2. **Dogs** — list (buckets/filters/Show archived) → Dog detail top-to-bottom (identity
    → ownership/external → disposition → COI → Planned Tests → Health tests → timeline
    span → expenses → derived panels → pedigree).
 3. **Breeding** — chain view (Show more, Log heat) → Pairing (sire≠dam block, prefill)
    → Litter (pricing, roster derived, cascade event).
-4. **People** — Contacts (groups, companion_note) → Kennels (preferred tests, promote
-   config) → Kennel expenses.
-5. **Placements** — Sales (open lifecycle, inline contracts) → Sale detail (fees→dates)
-   → Stud services (incoming+ai, away-board link) → Contracts (lease/co_own).
-6. **Financials** — summary → ledger filters → add expense against any subject.
-7. **More** — Reports (four analytics) → Companion (all three tabs non-empty) →
-   Import/Export (**backup = the closer**).
+4. **People** — Contacts (groups, companion_note) → Kennels list (identity) → Kennel
+   detail (preferred tests, promote config, kennel expenses).
+5. **Placements** — Sales (open lifecycle, grouped by litter/dog, inline contracts;
+   Puppy Record PDF) → Sale detail (fees→dates) → Stud services (incoming+ai, pick_value,
+   away-board link) → Contracts (lease/co_own).
+6. **Financials** — Overview (Net tiles) → Income (earned vs anticipated, Adjust) →
+   Expenses (category tabs, ledger, add expense) → Invoice/Receipt PDF.
+7. **More** — Reports (four analytics) → Companion (all three tabs non-empty, "What to
+   include") → Import/Export (**backup = the closer**).
 
 ---
 
