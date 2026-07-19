@@ -97,12 +97,12 @@ export function renderExpensePanel(opts) {
         <div class="collapsible-header" style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;" data-toggle="xp-toggle">
           <span class="collapsible-arrow" style="transform: rotate(90deg); display: inline-block; transition: transform 0.2s; font-size: 12px;">▶</span>
           <h2 style="margin:0;">${esc(title)}</h2>
-          <span id="xp-total" class="badge badge-neutral"></span>
         </div>
-        <div class="pill-row">
-          <label class="check-inline"><input type="checkbox" id="xp-archived"> Show archived</label>
-          <button class="btn btn-primary btn-sm" id="xp-add">+ Add Expense</button>
-        </div>
+        <strong id="xp-total" style="font-size:18px;"></strong>
+      </div>
+      <div class="pill-row" style="justify-content:flex-end; margin-top:8px;">
+        <label class="check-inline"><input type="checkbox" id="xp-archived"> Show archived</label>
+        <button class="btn btn-primary btn-sm" id="xp-add">+ Add Expense</button>
       </div>
       <div class="collapsible-content" id="xp-content" style="display: block; margin-top:12px;">
         <div id="xp-body"></div>
