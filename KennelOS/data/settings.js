@@ -103,20 +103,54 @@ const COMPANION_TYPE_LABELS = {
   partner: 'Partners'
 };
 
+// `include` is the Layer-1 component allow-list per bundle type: a flat map of
+// boolean flags, ALL default true (current behaviour = everything shown). Each
+// flag lets the owner drop a component from the recipient's page; the builder
+// only ever SUBTRACTS from what it emits, so this can never widen the bundle.
+// Master flags gate a group; a child flag is only honoured when its master is
+// on (the builder ANDs them). New flags added here default true, so an upgrade
+// never silently hides a component from an existing saved config.
+const COMPANION_INCLUDE_DEFAULTS = {
+  prospective: {
+    parents: true, parentRegisteredName: true, parentCallName: true, parentPhotos: true, parentTests: true,
+    pricing: true, pricingPrice: true, pricingDeposit: true,
+    litterDates: true, markings: true
+  },
+  family: {
+    age: true, parentage: true, photos: true, readyPlacement: true, financials: true,
+    histVaccination: true, histPreventative: true, histWeight: true, histMilestone: true, histNote: true,
+    histBoarding: true, contract: true
+  },
+  partner: {
+    studServices: true, studRegisteredName: true, studCallName: true, studPhotos: true, studTests: true,
+    studAgreement: true, studContract: true,
+    contracts: true
+  }
+};
+
 const COMPANION_DEFAULTS = {
   prospective: {
     kennelName: '', tagline: '', announcement: '', closer: '',
-    introText: 'A peek at the puppies we have available right now. This is a snapshot as of the last link I sent — I’ll send a fresh link when things change. There’s no live sync.'
+    introText: 'A peek at the puppies we have available right now. This is a snapshot as of the last link I sent — I’ll send a fresh link when things change. There’s no live sync.',
+    include: COMPANION_INCLUDE_DEFAULTS.prospective
   },
   family: {
     kennelName: '', tagline: '', announcement: '', closer: '',
-    introText: 'This shows your puppy’s info as of the last link I sent. I’ll send a new link whenever anything changes — there’s no live sync.'
+    introText: 'This shows your puppy’s info as of the last link I sent. I’ll send a new link whenever anything changes — there’s no live sync.',
+    include: COMPANION_INCLUDE_DEFAULTS.family
   },
   partner: {
     kennelName: '', tagline: '', announcement: '', closer: '',
-    introText: 'A summary of our arrangement as of the last link I sent. I’ll send a new link when anything changes — there’s no live sync.'
+    introText: 'A summary of our arrangement as of the last link I sent. I’ll send a new link when anything changes — there’s no live sync.',
+    include: COMPANION_INCLUDE_DEFAULTS.partner
   }
 };
+
+// The full ordered list of include flags per type (masters + children), used by
+// the console to render checkboxes and by callers that need every key.
+export function companionIncludeKeys(type) {
+  return Object.keys(COMPANION_INCLUDE_DEFAULTS[type] || {});
+}
 
 export function companionTypeLabel(type) {
   return COMPANION_TYPE_LABELS[type] || type;
@@ -131,8 +165,15 @@ function readCompanionStore() {
 // Merged with defaults so a caller always gets every field, even before the
 // owner has saved anything.
 export function getCompanionSettings(type) {
+  const defaults = COMPANION_DEFAULTS[type] || {};
   const stored = readCompanionStore()[type] || {};
-  return { ...(COMPANION_DEFAULTS[type] || {}), ...stored };
+  // `include` is deep-merged over defaults so a flag the owner never set (or one
+  // added in a later version) falls back to its default (on) instead of undefined.
+  return {
+    ...defaults,
+    ...stored,
+    include: { ...(defaults.include || {}), ...(stored.include || {}) }
+  };
 }
 
 export function getAllCompanionSettings() {
@@ -143,7 +184,13 @@ export function getAllCompanionSettings() {
 
 export function setCompanionSettings(type, values) {
   const store = readCompanionStore();
-  store[type] = { ...(store[type] || {}), ...values };
+  const prev = store[type] || {};
+  const merged = { ...prev, ...values };
+  // Deep-merge `include` so a partial write updates only the named flags and
+  // never drops the rest (the console writes the full map, but this keeps any
+  // caller honest).
+  if (values.include) merged.include = { ...(prev.include || {}), ...values.include };
+  store[type] = merged;
   localStorage.setItem(KEYS.companion, JSON.stringify(store));
   return getCompanionSettings(type);
 }

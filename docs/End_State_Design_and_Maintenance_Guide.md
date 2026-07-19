@@ -117,7 +117,7 @@ and commonly blank at entry time.
 | **Contact** | `name` | `contact_type[]` (multi), `email`, `phone`, `address`, `kennel_id`, `waitlist_status`, `first_contact_source`, `notes`, `companion_note` (plain, unindexed — a per-recipient message **meant for the recipient's eyes**, shown on their companion share page; deliberately distinct from the private `notes`; the Companion feature's Layer-2 override of the per-type announcement, §20). Buyers are Contacts — **there is no Buyer table**. `address` also resolves an in-person stud service's away-board location (§19). |
 | **Kennel** | `kennel_name` | `is_own_kennel`, `prefix`, `location`, `website` (plain, unindexed — a link for this kennel, e.g. its public site or listing; mirrors `Dog.url`), `preferred_tests[]`, `preferred_breeds[]`, `promote_nudge_enabled` (bool, default off), `promote_age_male_months`/`promote_age_female_months` (numbers — the promote-lifecycle nudge's per-kennel thresholds, §19). Lightweight; added inline from Contact form. |
 | **Pairing** | `sire_id`, `dam_id`, `pairing_type`, `status` | `method`, `planned_date` (displayed as "Planned first date" — the first planned/tie date), `last_observed_date` (plain, unindexed — a subsequent observed tie/breeding date), `expected_due_date` (prefilled on the detail page as 63 days after `planned_date` when still empty, never clobbering a deliberate edit), `notes`. Sire ≠ dam (hard block). |
-| **Litter** | `dam_id`, `sire_id`, `status` | `nickname` (plain, unindexed — optional friendly label for the litter, e.g. “Party of Five”; when set it leads the detail-page title and shows as its own column on the Litters list and report, searchable across all three; falls back to `dam × sire` when blank), `pairing_id`, `whelp_date`, `estimated_ready_date` (plain, unindexed — prefilled on the detail page as 8 weeks/56 days after `whelp_date` when still empty, never clobbering a deliberate edit), `litter_registration_number`, `puppies_born_total/alive/deceased/abnormalities` (the last a count, not mutually exclusive with alive/deceased — an alive or deceased puppy may also count here), `expected_price_male`/`expected_price_female`/`expected_deposit_male`/`expected_deposit_female` (plain, unindexed — per-litter defaults, grouped by sex on the detail page; `sale.js` prefills a new Sale's `price` and `deposit_amount` from the matching-sex pair by the puppy's `sex`, only into fields still empty, never clobbering a value already entered), `notes`. Litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
+| **Litter** | `dam_id`, `sire_id`, `status` | `nickname` (plain, unindexed — optional friendly label for the litter, e.g. “Party of Five”; when set it leads the detail-page title and shows as its own column on the Litters list and report, searchable across all three; falls back to `dam × sire` when blank), `pairing_id`, `whelp_date`, `accept_deposits_date` (plain, unindexed — the date the breeder begins accepting deposits on this litter; on the detail page it sits between `whelp_date` and `estimated_ready_date`, and it surfaces in the **prospective** companion bundle only, rendered between "Born" and "Estimated ready" when set, §20), `estimated_ready_date` (plain, unindexed — prefilled on the detail page as 8 weeks/56 days after `whelp_date` when still empty, never clobbering a deliberate edit), `litter_registration_number`, `puppies_born_total/alive/deceased/abnormalities` (the last a count, not mutually exclusive with alive/deceased — an alive or deceased puppy may also count here), `expected_price_male`/`expected_price_female`/`expected_deposit_male`/`expected_deposit_female` (plain, unindexed — per-litter defaults, grouped by sex on the detail page; `sale.js` prefills a new Sale's `price` and `deposit_amount` from the matching-sex pair by the puppy's `sex`, only into fields still empty, never clobbering a value already entered), `notes`. Litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
 | **Sale** | `dog_id`, `buyer_contact_id`, `placement_type`, `status` | `sale_date`, `price`, `deposit_amount`, `deposit_date`, `balance_due_date`, `balance_paid_date`, `transport_fee` (plain, unindexed — a flat delivery/transport charge, decimal amount), `deferred_boarding_amount`/`deferred_boarding_frequency`/`deferred_boarding_duration_days` (plain, unindexed — a boarding rate for a buyer who delayed pickup, decimal amount + `BOARDING_FREQUENCY_OPTIONS` Day/Week/Month + a free-text **count of frequency units** (despite the `_days` field name, the value is the number of frequency units — e.g. `2` with frequency `Week` means two weeks; owner decision), rendered on one line as "amount per frequency × count"; the **family companion bundle** multiplies `amount × count` into a deferred-pickup total that feeds the computed remaining balance (§20); never cents, and never an Expense — see §21), `lead_source`, `referred_by_contact_id` (indexed FK → the Contact who referred this buyer; `CONTACT_REFERENCES`; on save `saleRepo` auto-tags that contact with the `buyer_referrer` role via `contactRepo.ensureType`), `notes`. On the detail page (`sale.js`), all fee fields (price, deposit amount, transport fee, deferred boarding) render/edit above all date fields (sale date, deposit date, balance due date, balance paid date). Its own table (not a Dog field) so reserve/return/re-place stay distinct facts. |
 | **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `related_dog_id` (canonical Dog link, used only for `lease`/`co_own`/`other` types — where no linked Sale/StudService already reaches a dog; forced `null` for other types via `contractRepo.DOG_LINK_TYPES`/`normalizeLinks`), `related_contact_id` (canonical counterparty link — lessee/co-owner/partner — for the same `lease`/`co_own`/`other` types via `CONTACT_LINK_TYPES`; sale/stud contracts reach their counterparty through the linked Sale/StudService, so it stays `null` there and never double-sources; scopes a contract into the **partner** companion bundle, §20), `document_url` (plain, unindexed — a share link to the signed document, e.g. a Drive "anyone with the link" URL; carried as a *pointer* into the buyer bundle, §20), `signed_date`, `lease_start_date`/`lease_end_date` (lease type; UI shows them and hides Related sale/stud fields when `contract_type='lease'`), `title`, `terms_summary`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf for its own hard-delete (nothing points *at* a contract), but a contract itself points *at* its Dog via `related_dog_id` (guarded under `DOG_REFERENCES`) and its counterparty via `related_contact_id` (guarded under `CONTACT_REFERENCES`) — neither under `CONTRACT_REFERENCES`. |
 | **StudService** | `direction`, `our_dog_id`, `partner_dog_id`, `partner_contact_id`, `status` | `pairing_id`, `fee_amount`, `fee_structure`, `pick_status` (plain, unindexed — suggested `pending`/`claimed`, free text allowed; meaningful **only** when `fee_structure ∈ {pick_of_litter, flat_plus_pick}`, forced `null` otherwise so a `flat_fee`/`other` arrangement never shows a stray pick; feeds the partner companion bundle's compensation, §20), `result_notes`, `type` (`in_person`/`ai` — coarse physical-travel flag; `in_person` + `sent_date`/`returned_date` window feeds the away-board, §19), `referred_by_contact_id` (indexed FK → the Contact who referred this arrangement; `CONTACT_REFERENCES`; on save `studServiceRepo` auto-tags that contact with the `stud_referrer` role via `contactRepo.ensureType`), plus optional logistics dates. Covers both `incoming` and `outgoing`. |
@@ -737,8 +737,10 @@ view. The main app stays single-user/offline/all-local; this adds *recipients*.
   **policy changes** landed with it and are called out below:
   - **`prospective`** — a prospective family (a client/waitlister with no sale):
     current availability as **one card per litter with its available pups nested
-    inside** (`litters[]`, each with `nickname`, `breed`, `whelpDate`, `readyDate`,
-    a `dogCard` for `sire`/`dam`, and `pups[]`). Each pup carries `sex`, `callName`,
+    inside** (`litters[]`, each with `nickname`, `breed`, `whelpDate`,
+    `acceptDepositsDate` (from `Litter.accept_deposits_date`; rendered between
+    "Born" and "Estimated ready" only when set — prospective bundle only),
+    `readyDate`, a `dogCard` for `sire`/`dam`, and `pups[]`). Each pup carries `sex`, `callName`,
     `markings`, and its **sex-keyed list `price` + `deposit`** (`Litter.expected_price_*`
     / `expected_deposit_*`). **⚠ Policy reversal (brief decision 1):** prospective
     bundles **now carry price** — this reverses the earlier "prospective = shared
@@ -832,8 +834,9 @@ view. The main app stays single-user/offline/all-local; this adds *recipients*.
   `contracts` block filters on the same `isLivePartnerContract`), so membership and
   bundle contents stay in lockstep.
 - **Two-layer messaging.** Layer 1 is per-type config (`kennelName`/`tagline`/
-  `introText`/`announcement`/`closer`) in `settings.js` under the `companion` key,
-  edited in the console's template card (one per type). Layer 2 is
+  `introText`/`announcement`/`closer`, plus the `include` component map — see
+  below) in `settings.js` under the `companion` key, edited in the console's
+  template card (one per type). Layer 2 is
   **`Contact.companion_note`**, a per-recipient personal line.
   Both are carried in the bundle **separately** — `announcement` (broadcast) and
   `personalNote` (the note) — and the shell shows them **alongside each other**, no
@@ -843,6 +846,35 @@ view. The main app stays single-user/offline/all-local; this adds *recipients*.
   and the `closer` sign-off as the final card **just above the snapshot date**. The
   bundle copies the resolved copy inline, so header/landing text updates without a
   shell deploy.
+- **Per-type component allow-list (`include`).** A third piece of Layer-1 config:
+  a flat map of boolean flags, one set per bundle type, stored under
+  `companion[type].include` and edited as the "What to include" checkboxes in each
+  template card. **All flags default `true`** — everything shows, matching the
+  pre-feature behaviour — and `getCompanionSettings` deep-merges the map over the
+  defaults so a flag the owner never set (or one **added in a later version**) falls
+  back to on, never silently hiding a component after an upgrade. Each builder reads
+  its type's `include` and **only ever subtracts**: a disabled component's field is
+  emitted `null`/`''`/`[]` (or the section is skipped), never a new key — so the
+  allow-list invariant below is untouched and no `COMPANION_BUNDLE_VERSION` bump is
+  needed. **Master/child flags:** a master gates a group (`parents`, `pricing`,
+  `studServices`) and the builder ANDs each child with its master, so a child only
+  emits when both are on; the console greys out a child whose master is unchecked.
+  The flags, by type:
+  - **prospective:** `parents` (→ `parentRegisteredName`, `parentCallName`,
+    `parentPhotos`, `parentTests` — the Sire/Dam `dogCard` fields, each independently
+    toggleable), `pricing` (→ `pricingPrice`, `pricingDeposit` — the per-pup price and
+    deposit, split), `litterDates` (born / accept-deposits / estimated-ready), `markings`.
+    When every `dogCard` field is off the card is omitted entirely (no empty "—"
+    block); when no pup carries a price/deposit the shell drops the deposit disclaimer.
+  - **family:** `age`, `parentage`, `photos`, `readyPlacement`, `financials` (price,
+    deposit, transport, deferred-pickup, remaining balance, balance-due — **not**
+    placement type / sale status, which always show), the five history flags
+    `histVaccination`/`histPreventative`/`histWeight`/`histMilestone`/`histNote`,
+    `histBoarding` (deferred-pickup boarding section), `contract`.
+  - **partner:** `studServices` (master → `studRegisteredName`, `studCallName`,
+    `studPhotos`, `studTests` for the Stud/Dam cards, plus `studAgreement` for the
+    Agreement Details/compensation and `studContract` for the per-service contract),
+    and top-level `contracts` (lease / co-own / other).
 
 ### The load-bearing invariant: the allow-list builder
 

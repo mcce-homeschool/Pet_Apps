@@ -44,6 +44,13 @@ const FEE_STRUCTURES_WITH_PICK = ['pick_of_litter', 'flat_plus_pick'];
 // or any other type not listed here.
 const FAMILY_EVENT_TYPES = ['vaccination', 'preventative', 'weight_check', 'milestone', 'note'];
 
+// Maps each family event-history type to its Layer-1 include flag, so a type is
+// only surfaced when the owner has left its checkbox on.
+const FAMILY_EVENT_FLAG = {
+  vaccination: 'histVaccination', preventative: 'histPreventative',
+  weight_check: 'histWeight', milestone: 'histMilestone', note: 'histNote'
+};
+
 function nonEmpty(v) {
   return v != null && v !== '' ? v : null;
 }
@@ -106,15 +113,21 @@ async function completedTests(dogId) {
 }
 
 // Public projection of a dog — registered/AKC name, call name, a photos link,
-// and completed tests. Named copy only, no record spread.
-async function dogCard(dog) {
+// and completed tests. Named copy only, no record spread. `opts` (from the
+// Layer-1 include flags) selects which fields to populate; a disabled field is
+// emitted empty. When every field is disabled the card is omitted entirely
+// (null), so the shell never renders an empty "—" block.
+const ALL_DOG_FIELDS = { registeredName: true, callName: true, photos: true, tests: true };
+async function dogCard(dog, opts = ALL_DOG_FIELDS) {
   if (!dog) return null;
-  return {
-    registeredName: dog.registered_name || '',
-    callName: dog.call_name || '',
-    photosUrl: dog.url || '',
-    tests: await completedTests(dog.id)
+  const card = {
+    registeredName: opts.registeredName ? (dog.registered_name || '') : '',
+    callName: opts.callName ? (dog.call_name || '') : '',
+    photosUrl: opts.photos ? (dog.url || '') : '',
+    tests: opts.tests ? await completedTests(dog.id) : []
   };
+  if (!card.registeredName && !card.callName && !card.photosUrl && !card.tests.length) return null;
+  return card;
 }
 
 // Whole weeks + trailing days between a YYYY-MM-DD birth date and an as-of
@@ -193,8 +206,20 @@ const PARTNER_KEYS = [
 // private data — every prospect sees the same availability. -----------------
 export async function buildProspectiveBundle(contact) {
   const h = headerCopy('prospective', contact);
+  const inc = getCompanionSettings('prospective').include;
   const dogs = await dogRepo.getAll();
   const available = dogs.filter((d) => d.status === 'puppy' && d.disposition === 'available');
+
+  // Which parent-card fields to include, and whether each price/deposit shows —
+  // a child flag only counts when its master (parents / pricing) is on.
+  const dogOpts = {
+    registeredName: inc.parents && inc.parentRegisteredName,
+    callName: inc.parents && inc.parentCallName,
+    photos: inc.parents && inc.parentPhotos,
+    tests: inc.parents && inc.parentTests
+  };
+  const showPrice = inc.pricing && inc.pricingPrice;
+  const showDeposit = inc.pricing && inc.pricingDeposit;
 
   const litterIds = [...new Set(available.map((d) => d.litter_id).filter(Boolean))];
   const litters = [];
@@ -208,19 +233,22 @@ export async function buildProspectiveBundle(contact) {
       .map((d) => ({
         sex: d.sex || '',
         callName: d.call_name || '',
-        markings: d.color_markings || '',
-        price: d.sex === 'male' ? nonEmpty(l.expected_price_male)
-          : d.sex === 'female' ? nonEmpty(l.expected_price_female) : null,
-        deposit: d.sex === 'male' ? nonEmpty(l.expected_deposit_male)
-          : d.sex === 'female' ? nonEmpty(l.expected_deposit_female) : null
+        markings: inc.markings ? (d.color_markings || '') : '',
+        price: !showPrice ? null
+          : d.sex === 'male' ? nonEmpty(l.expected_price_male)
+            : d.sex === 'female' ? nonEmpty(l.expected_price_female) : null,
+        deposit: !showDeposit ? null
+          : d.sex === 'male' ? nonEmpty(l.expected_deposit_male)
+            : d.sex === 'female' ? nonEmpty(l.expected_deposit_female) : null
       }));
     litters.push({
       nickname: l.nickname || '',
       breed: (damDog && damDog.breed) || (sireDog && sireDog.breed) || '',
-      whelpDate: l.whelp_date || null,
-      readyDate: l.estimated_ready_date || null,
-      sire: await dogCard(sireDog),
-      dam: await dogCard(damDog),
+      whelpDate: inc.litterDates ? (l.whelp_date || null) : null,
+      acceptDepositsDate: inc.litterDates ? (l.accept_deposits_date || null) : null,
+      readyDate: inc.litterDates ? (l.estimated_ready_date || null) : null,
+      sire: inc.parents ? await dogCard(sireDog, dogOpts) : null,
+      dam: inc.parents ? await dogCard(damDog, dogOpts) : null,
       pups
     });
   }
@@ -241,6 +269,7 @@ export async function buildProspectiveBundle(contact) {
 // history. A pointer to the governing contract document rides alongside. ------
 export async function buildFamilyBundle(contact) {
   const h = headerCopy('family', contact);
+  const inc = getCompanionSettings('family').include;
   // Only OPEN sales — a terminal sale (delivered/returned/cancelled) never shows,
   // matching "current family" membership exactly (saleRepo.isOpenSale).
   const sales = (await saleRepo.getByBuyer(contact.id)).filter(saleRepo.isOpenSale);
@@ -263,6 +292,7 @@ export async function buildFamilyBundle(contact) {
 
       const eventSections = [];
       for (const t of FAMILY_EVENT_TYPES) {
+        if (!inc[FAMILY_EVENT_FLAG[t]]) continue;
         const items = events
           .filter((e) => e.event_type === t && e.event_date)
           .map((e) => ({ date: e.event_date, title: e.title || '', detail: familyEventDetail(e) }));
@@ -306,49 +336,54 @@ export async function buildFamilyBundle(contact) {
       const deferredComplete = deferredAmount != null
         && nonEmpty(sale.deferred_boarding_frequency) != null
         && nonEmpty(sale.deferred_boarding_duration_days) != null;
-      if (deferredComplete) {
+      if (inc.histBoarding && deferredComplete) {
         const boarding = events
           .filter((e) => e.event_type === 'boarding' && e.event_date)
           .map((e) => ({ startDate: e.event_date, endDate: e.event_end_date || null }));
         if (boarding.length) eventSections.unshift({ type: 'deferred_pickup_boarding', items: boarding });
       }
 
+      const showFin = inc.financials;
       const pup = {
         callName: dog.call_name || '',
         sex: dog.sex || '',
-        photosUrl: dog.url || '',
-        sire: parentName(sireDog),
-        dam: parentName(damDog),
-        age: ageFrom(dog.date_of_birth, asOf),
+        photosUrl: inc.photos ? (dog.url || '') : '',
+        sire: inc.parentage ? parentName(sireDog) : null,
+        dam: inc.parentage ? parentName(damDog) : null,
+        age: inc.age ? ageFrom(dog.date_of_birth, asOf) : null,
         placementType: nonEmpty(sale.placement_type),
         saleStatus: nonEmpty(sale.status),
-        price,
-        deposit,
-        transportFee,
-        deferredPickup,
-        remainingBalance,
-        balanceDueDate: sale.balance_due_date || null,
+        price: showFin ? price : null,
+        deposit: showFin ? deposit : null,
+        transportFee: showFin ? transportFee : null,
+        deferredPickup: showFin ? deferredPickup : null,
+        remainingBalance: showFin ? remainingBalance : null,
+        balanceDueDate: showFin ? (sale.balance_due_date || null) : null,
         eventSections
       };
       if (litter && litter.nickname) pup.litterNickname = litter.nickname;
-      if (placement) {
-        const pd = placement.details || {};
-        pup.placement = {
-          date: placement.event_date,
-          time: nonEmpty(pd.placement_time),
-          method: nonEmpty(pd.dropoff_method)
-        };
-      } else if (litter && litter.estimated_ready_date) {
-        pup.estimatedReadyDate = litter.estimated_ready_date;
+      if (inc.readyPlacement) {
+        if (placement) {
+          const pd = placement.details || {};
+          pup.placement = {
+            date: placement.event_date,
+            time: nonEmpty(pd.placement_time),
+            method: nonEmpty(pd.dropoff_method)
+          };
+        } else if (litter && litter.estimated_ready_date) {
+          pup.estimatedReadyDate = litter.estimated_ready_date;
+        }
       }
       pups.push(pup);
     }
     // Carry each governing/documented contract as {signedDate, documentUrl} so the
     // shell can show the signed date (or "Not Signed") alongside a view/sign link.
-    const saleContracts = (await contractRepo.getBySale(sale.id)).filter((c) => !c.is_archived);
-    for (const c of saleContracts) {
-      if (c.document_url || c.signed_date) {
-        contracts.push({ signedDate: c.signed_date || null, documentUrl: c.document_url || null });
+    if (inc.contract) {
+      const saleContracts = (await contractRepo.getBySale(sale.id)).filter((c) => !c.is_archived);
+      for (const c of saleContracts) {
+        if (c.document_url || c.signed_date) {
+          contracts.push({ signedDate: c.signed_date || null, documentUrl: c.document_url || null });
+        }
       }
     }
   }
@@ -369,8 +404,20 @@ export async function buildFamilyBundle(contact) {
 // lease/co_own/other contracts where this partner is the counterparty. -------
 export async function buildPartnerBundle(contact) {
   const h = headerCopy('partner', contact);
+  const inc = getCompanionSettings('partner').include;
 
-  const services = (await studServiceRepo.getByPartnerContact(contact.id)).filter((s) => !s.is_archived);
+  // Which Stud/Dam card fields to include — each honoured only while the
+  // Stud services master is on.
+  const dogOpts = {
+    registeredName: inc.studServices && inc.studRegisteredName,
+    callName: inc.studServices && inc.studCallName,
+    photos: inc.studServices && inc.studPhotos,
+    tests: inc.studServices && inc.studTests
+  };
+
+  const services = inc.studServices
+    ? (await studServiceRepo.getByPartnerContact(contact.id)).filter((s) => !s.is_archived)
+    : [];
   const studServices = [];
   for (const ss of services) {
     const our = await dogRepo.getById(ss.our_dog_id);
@@ -385,22 +432,25 @@ export async function buildPartnerBundle(contact) {
     // The stud service's own contract (governing/signed if any, else the most
     // recent) as {signedDate, documentUrl} — powers the per-service Contract
     // block: signed date (or "Not Signed") + a view/sign link.
-    const svcContracts = (await contractRepo.getByStudService(ss.id)).filter((c) => !c.is_archived);
-    const gov = contractRepo.governingContract(svcContracts);
-    const primary = gov || svcContracts.slice().sort((a, b) =>
-      (b.created_at || '').localeCompare(a.created_at || ''))[0] || null;
+    let primary = null;
+    if (inc.studContract) {
+      const svcContracts = (await contractRepo.getByStudService(ss.id)).filter((c) => !c.is_archived);
+      const gov = contractRepo.governingContract(svcContracts);
+      primary = gov || svcContracts.slice().sort((a, b) =>
+        (b.created_at || '').localeCompare(a.created_at || ''))[0] || null;
+    }
 
     studServices.push({
-      studDog: await dogCard(studDog),
-      damDog: await dogCard(damDog),
-      type: ss.type || null,
-      compensation: {
+      studDog: await dogCard(studDog, dogOpts),
+      damDog: await dogCard(damDog, dogOpts),
+      type: inc.studAgreement ? (ss.type || null) : null,
+      compensation: inc.studAgreement ? {
         fee_structure: ss.fee_structure || null,
         fee_amount: nonEmpty(ss.fee_amount),
         pick_status: hasPick ? (ss.pick_status || null) : null,
         sentDate: ss.sent_date || null,
         returnedDate: ss.returned_date || null
-      },
+      } : {},
       contract: primary
         ? { signedDate: primary.signed_date || null, documentUrl: primary.document_url || null }
         : null
@@ -414,8 +464,9 @@ export async function buildPartnerBundle(contact) {
   // group them by (type + dog), and within each group keep the governing
   // (most-recent signed) contract, falling back to the most recent by created_at.
   const today = todayYMD();
-  const liveContracts = (await contractRepo.getByContact(contact.id))
-    .filter((c) => contractRepo.isLivePartnerContract(c, today));
+  const liveContracts = inc.contracts
+    ? (await contractRepo.getByContact(contact.id)).filter((c) => contractRepo.isLivePartnerContract(c, today))
+    : [];
   const contractGroups = new Map();
   for (const c of liveContracts) {
     const key = `${c.contract_type}::${c.related_dog_id || ''}`;
