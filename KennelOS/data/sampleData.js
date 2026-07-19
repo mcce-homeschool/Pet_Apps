@@ -195,6 +195,17 @@ export async function seedSampleData() {
   });
   await dogRepo.archive(willow.id);
 
+  // Clover — a retired Boston female past breeding age, now being placed in a pet
+  // home. `status: 'for_sale'` (Phase 4 acceptance pass, §7 enum coverage): distinct
+  // from `retired_breeding` (still with the program) — she's actively listed, not
+  // just retired. No sire/dam recorded, same as several other adults here (Percy,
+  // Nell, Dahlia, Titan, Sage).
+  const clover = await dogRepo.create({
+    call_name: 'Clover', sex: 'female', breed: BREED,
+    date_of_birth: '2018-02-11',
+    ownership_type: 'owned', status: 'for_sale', kennel_id: thornfield.id
+  });
+
   // Juniper carries a recorded COI (Stage 5 §9) — genomic, from Embark. It's a
   // user-attested value on the Dog record, not computed by the app. planned_tests
   // + url (Thread A/G6): a photo pointer (external URL, D4) and a planned-test
@@ -343,10 +354,13 @@ export async function seedSampleData() {
     ownership_type: 'owned', status: 'puppy', disposition: 'placed', kennel_id: thornfield.id,
     breeder_kennel_id: thornfield.id
   });
+  // Aster carries `disposition: 'undecided'` (Phase 4 acceptance pass, §7 enum
+  // coverage): not yet designated keep or sell — the one disposition value the
+  // rest of the packet didn't anchor anywhere.
   const asterPup = await dogRepo.create({
     call_name: 'Aster', sex: 'female', breed: BREED,
     date_of_birth: daysFromToday(-63), sire_id: gunnar.id, dam_id: ivy.id, litter_id: autumnLitter.id,
-    ownership_type: 'owned', status: 'puppy', disposition: 'keeping', kennel_id: thornfield.id,
+    ownership_type: 'owned', status: 'puppy', disposition: 'undecided', kennel_id: thornfield.id,
     breeder_kennel_id: thornfield.id
   });
 
@@ -415,7 +429,7 @@ export async function seedSampleData() {
   });
 
   manifest.dogs.push(
-    ash.id, willow.id, juniper.id, gunnar.id, ivy.id,
+    ash.id, willow.id, clover.id, juniper.id, gunnar.id, ivy.id,
     fern.id, birch.id, hazel.id, poppy.id, daisy.id,
     wrenPup.id, cedarPup.id, asterPup.id, percy.id, nell.id, dahlia.id,
     diesel.id, juno.id, titan.id, sage.id

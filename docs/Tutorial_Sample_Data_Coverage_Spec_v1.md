@@ -488,10 +488,33 @@ fire on a fresh seed (see the litter→close note under G-nudges below).
    Tessa and Dana). All dates are `daysFromToday`/`monthsFromToday`-relative already, so
    nothing needed re-anchoring — "lock relative dating" was a verify, not a rewrite.
 5. **Phase 4 — Acceptance pass (§9)** + docs/service-worker/reference-registry updates.
-   Note for that pass: `Tutorial_Coverage_Matrix_v1.md` predates Phase 2's seed expansion
-   in git history and has at least one stale anchor (Today → "Due outs & upcoming" names
-   "Fern placement (+7d)"; the live anchor is now Cedar's scheduled-pickup placement
-   event) — reconcile the matrix's anchors against the current seed as part of Phase 4.
+   ✅ **Done.** Ran the §9 checklist against the current seed:
+   - **§9.1 Matrix green** — `Tutorial_Coverage_Matrix_v1.md` reconciled row-by-row
+     against the expanded seed (it predated Phase 2's seed expansion in git history).
+     Every closed-gap row flipped to ✅ with a real anchor; stale anchors fixed (e.g.
+     "Fern placement" → Cedar's scheduled pickup); §C's gap table became a resolution
+     log; a report page the original walk missed (Litter P&L) was added to the
+     inventory.
+   - **§9.2 Enum target met** — going through §7's table line by line (not just the
+     G1–G14/D2 list) surfaced two values with no live record that the original gap
+     catalog never caught: `DOG_STATUS: 'for_sale'` and `DISPOSITION: 'undecided'`.
+     Closed both, data-only, no schema change: a new dog **Clover** (`status:
+     'for_sale'`, retired-age, no sire/dam — same no-ancestry pattern as
+     Percy/Nell/Dahlia/Titan/Sage) and switching **Aster**'s disposition from
+     `keeping` to `undecided` (Poppy already anchors `keeping`, so no coverage was
+     lost). `LITTER_STATUS: 'closed'` stays deferred — that one's the same accepted
+     trade-off as the litter→close nudge (§9.3), not a new finding. Packet is now 21
+     dogs (was 20).
+   - **§9.3–§9.7** — nudges, Companion tabs, §5.2 dependencies, clear/reset, and
+     validation-cleanliness were already confirmed in Phase 3 and re-verified after
+     the two Phase 4 additions (same clean results, dog count 20→21, zero
+     contamination, zero console errors).
+   - **§9.8 Docs updated** — no new field/FK/table, so `referenceRegistry.js` and the
+     End-State guide's data-model sections needed no change; the guide's one stale
+     fact (`CACHE_NAME` example, still reading v68 from before Phase 3) was corrected.
+     `CACHE_NAME` bumped v71→v72 for this phase's `sampleData.js` edit (Clover/Aster).
+   - **§9.9** — `node --check data/sampleData.js` passes; the packet was served over
+     HTTP and walked end-to-end in a browser after every change in this phase.
 6. **Phase 5 — Hand off to the wizard-runtime spec** with a frozen anchor list.
 
 ---
