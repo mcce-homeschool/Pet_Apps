@@ -431,9 +431,22 @@ async function prepareLink(row, contact) {
       </div>
       <div class="field" style="margin-top:8px;">
         <label>Or copy the link</label>
-        <input type="text" readonly value="${esc(url)}" onclick="this.select()">
+        <div style="display:flex; gap:8px; align-items:flex-start;">
+          <input type="text" readonly value="${esc(url)}" onclick="this.select()">
+          <button class="btn btn-sm r-copy-link" style="margin-top:0;">Copy</button>
+        </div>
         <span class="field-hint">Snapshot as of now (${esc(new Date(bundle.updatedAt).toLocaleString())}). Payload ${hash.length} chars. Tap an anchor above to send.</span>
       </div>`;
+    const copyBtn = linkBox.querySelector('.r-copy-link');
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(url).then(() => {
+        const origText = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = origText; }, 2000);
+      }).catch(() => {
+        showError('Failed to copy link to clipboard');
+      });
+    });
   } catch (e) {
     linkBox.innerHTML = '';
     showError(e.message || String(e));
