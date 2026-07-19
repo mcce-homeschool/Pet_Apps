@@ -476,9 +476,16 @@ table.data tr.row-detail .dl-meta { margin: 0; }
 .muted { color: var(--text-muted); }
 .faint { color: var(--text-faint); }
 .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
-.row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .stack-sm > * + * { margin-top: 8px; }
 .pill-row { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Trailing action button(s) in a row-between header/row: pin them to the row's
+   right edge even when the outer flex-wrap pushes them onto their own line
+   (narrow viewport) — otherwise a wrapped line's item defaults to the left.
+   A pill-row also grows to fill that line so its own internal wrapping (when
+   the button group itself is too wide) right-aligns each sub-line in turn. */
+.row-between > .pill-row { flex: 1 1 auto; justify-content: flex-end; }
+.row-between > .btn:last-child { margin-left: auto; }
 
 /* --- Hub segment tabs (Navigation Consolidation Plan v1 §6: People, Placements
    & Contracts) — small pill row switching between the pages folded into a hub. */
