@@ -13,11 +13,10 @@ import Dexie from '../vendor/dexie.min.mjs';
 export const db = new Dexie('KennelOSBreedingApp');
 
 // --- Schema ---------------------------------------------------------------
-// Data Model Architecture Proposal v3 §2 collapses the version(1)/(2)/(3) ladder
-// that carried Stages 1–3 into a SINGLE version(1) block covering all nine
-// tables. That ladder only exists to protect real-data migrations, and nothing
-// has shipped — there is no live data to migrate, so this is a deliberate,
-// documented reset (v3 §2, Stage4 Revision v2 §1). The NEXT `.version(2)` block
+// Data Model Architecture Proposal v3 §2 collapses the version ladder into a
+// SINGLE version(1) block covering all ten tables. That ladder only exists to
+// protect real-data migrations, and nothing has shipped — there is no live data
+// to migrate, so this is a deliberate, documented reset. The NEXT `.version(2)` block
 // should be added only at the first real release; from then on, additive
 // versioning applies as Dexie expects and this block is never edited again.
 //

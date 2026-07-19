@@ -52,25 +52,6 @@ export function param(name) {
   return new URLSearchParams(location.search).get(name);
 }
 
-// Populate a <select> from a vocab list. `current` preselects; `placeholder`
-// adds a leading empty option when provided.
-export function fillSelect(selectEl, vocab, current, placeholder) {
-  selectEl.innerHTML = '';
-  if (placeholder != null) {
-    const o = document.createElement('option');
-    o.value = '';
-    o.textContent = placeholder;
-    selectEl.appendChild(o);
-  }
-  for (const v of vocab) {
-    const o = document.createElement('option');
-    o.value = v.value;
-    o.textContent = v.label;
-    if (v.value === current) o.selected = true;
-    selectEl.appendChild(o);
-  }
-}
-
 // --- Styled modal dialogs -------------------------------------------------
 // The app's own dialogs, replacing native window.confirm/alert/prompt. Each
 // appends a .modal-overlay to <body> and returns a promise, removing the

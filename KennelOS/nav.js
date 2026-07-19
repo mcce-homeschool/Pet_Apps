@@ -1,12 +1,13 @@
 // nav.js — single source of truth for the top navigation, injected into the
 // <div id="app-nav"></div> that every page includes.
 //
-// The bar is organized by JOB, not by table (Navigation Consolidation Plan v1):
-// five workflow hubs in the main bar, and the back-of-house utilities (Reports,
-// Import/Export) tucked behind a "More" corner menu. Detail, edit, and import
-// pages are NOT nav entries — they're reached by clicking into a hub. Retired
-// entities (Pairings, Litters, Roster, Board, Upcoming, Reminders, …) still exist
-// as pages and keep their URLs; the bar simply consolidates the doors to them.
+// The bar is organized by JOB, not by table: six workflow hubs in the main bar
+// (Today / Dogs / Breeding / People / Placements & Contracts / Financials), and
+// the back-of-house utilities (Reports, Companion, Import/Export) tucked behind a
+// "More" corner menu. Detail, edit, and import pages are NOT nav entries — they're
+// reached by clicking into a hub. Consolidated pages (Pairings, Litters, Roster,
+// Board, Upcoming, Reminders, …) still exist and keep their URLs; the bar simply
+// consolidates the doors to them.
 export const NAV_ITEMS = [
   { label: 'Today',    path: 'pages/today.html' },    // dashboard + reminders + upcoming + board
   { label: 'Dogs',     path: 'pages/dogs.html' },

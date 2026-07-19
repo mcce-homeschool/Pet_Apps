@@ -12,7 +12,7 @@
 // Why a registry instead of ad-hoc checks in each repo:
 //  - It stays HONEST per stage. `findBlockingReferences` skips any entry whose
 //    table doesn't exist in the current schema version — a harmless no-op now
-//    that all nine tables exist from version(1), but kept so a future unshipped
+//    that all ten tables exist from version(1), but kept so a future unshipped
 //    table can't silently break the guard.
 //  - It can't silently rot: adding a referencing table later means appending one
 //    line here, not remembering to update a scattered check.

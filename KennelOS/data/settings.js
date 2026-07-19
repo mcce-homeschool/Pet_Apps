@@ -177,12 +177,6 @@ export function getCompanionSettings(type) {
   };
 }
 
-export function getAllCompanionSettings() {
-  const out = {};
-  for (const t of COMPANION_TYPES) out[t] = getCompanionSettings(t);
-  return out;
-}
-
 export function setCompanionSettings(type, values) {
   const store = readCompanionStore();
   const prev = store[type] || {};

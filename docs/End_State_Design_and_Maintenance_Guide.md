@@ -461,7 +461,7 @@ First-run flow (`app.js`): request durable storage once → offer sample data; i
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v67`) + a `PRECACHE_URLS` list of **every** app
+- `CACHE_NAME` (currently `kennelos-shell-v68`) + a `PRECACHE_URLS` list of **every** app
   file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed file
   fails the whole install). `activate` deletes old caches. Fetch is **cache-first** for
@@ -497,8 +497,8 @@ When in doubt: `value` = text (auto-escaped), `cell` = HTML (you escape).
 
 `esc(s)` (HTML-escape — use it on every interpolated user value in hand-built innerHTML),
 `badge`/`badges`, `fmtDate` (YYYY-MM-DD → localized), `param(name)` (read `?id=`),
-`fillSelect`, `confirmAction`. `todayYMD` is re-exported here but its one implementation
-lives in `data/dateUtils.js`.
+`confirmAction` (and the styled modal dialogs). `todayYMD` is re-exported here but its one
+implementation lives in `data/dateUtils.js`.
 
 ### Other components
 
