@@ -563,13 +563,31 @@ async function renderIncomeSection() {
 
   els.income.innerHTML = `
     <section class="card" style="margin-top:16px;">
-      <div class="row-between" style="align-items:baseline;">
-        <h2 style="margin:0;">Sales &amp; Income${sales.length ? ` <span class="faint">(${sales.length})</span>` : ''}</h2>
+      <div class="row-between">
+        <div class="collapsible-header" style="flex:1; display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;" data-toggle="inc-toggle">
+          <span class="collapsible-arrow" style="transform: rotate(90deg); display:inline-block; transition:transform 0.2s; font-size:12px;">▶</span>
+          <h2 style="margin:0;">Sales &amp; Income${sales.length ? ` <span class="faint">(${sales.length})</span>` : ''}</h2>
+        </div>
         ${sales.length ? `<strong style="font-size:18px;">${esc(fmtMoney(total))}</strong>` : ''}
       </div>
-      <p class="muted" style="margin:4px 0 0; font-size:13px;">Total sale value (price + transport + boarding). Earned-vs-anticipated and net live on the litter P&amp;L report.</p>
-      ${rowsHtml}
+      <div class="collapsible-content" id="inc-content" style="display:block; margin-top:12px;">
+        <p class="muted" style="margin:0; font-size:13px;">Total sale value (price + transport + boarding). Earned-vs-anticipated and net live on the litter P&amp;L report.</p>
+        ${rowsHtml}
+      </div>
     </section>`;
+
+  // Collapsible header — same behavior as the Expenses/Timeline cards.
+  const header = els.income.querySelector('[data-toggle="inc-toggle"]');
+  const content = els.income.querySelector('#inc-content');
+  const arrow = header?.querySelector('.collapsible-arrow');
+  let isExpanded = true;
+  if (header) {
+    header.addEventListener('click', () => {
+      isExpanded = !isExpanded;
+      content.style.display = isExpanded ? 'block' : 'none';
+      if (arrow) arrow.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+    });
+  }
 }
 
 // --- Top-level render ----------------------------------------------------
