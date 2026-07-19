@@ -938,6 +938,14 @@ Revenue is **not** here (it stays on `Sale.price`/`deposit_amount` and
 is a plain decimal — never cents** (`companionExport.js` states this explicitly:
 "Money is the app's native decimal, never cents — the shell formats it").
 
+Buying a new dog is deliberately an **expense, never a Sale** — `Sale` and
+`StudService` stay strictly income (owner decision). `EXPENSE_CATEGORIES` carries a
+`dog_purchase` ("New dog purchase") category for this; the dog's own `acquisition`
+event type (`EVENT_TYPES`, dog-subject, instant, `source` field for the seller) is
+an **option** on that dog's timeline, never auto-created, and its default Cost
+category (`defaultExpenseCategoryFor`) is `dog_purchase` — logging one with a Cost
+amount upserts the linked `Expense` the normal event↔cost way (above).
+
 ### The event↔cost link (one canonical direction)
 
 `Expense.event_id` is the **only** stored link between an event and its cost:

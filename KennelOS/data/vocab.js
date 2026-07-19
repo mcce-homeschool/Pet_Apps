@@ -217,6 +217,14 @@ export const ABNORMALITY_TYPES = [
 // combobox (a free-text input with suggestions — suggest-not-enforce, never a
 // validated enum) | select (enforced choice from `options[]`).
 export const EVENT_TYPES = [
+  // Acquisition — an option for the first event on a newly-bought dog's
+  // timeline, never auto-created. `source` is a plain free-text field (the
+  // seller needn't already be a Contact record). The purchase price itself
+  // goes through the event form's existing Cost field, category "New dog
+  // purchase" (EXPENSE_CATEGORIES) — Sales/StudService stay income-only, so
+  // dog acquisitions are tracked purely as an expense, never a Sale.
+  { value: 'acquisition',        label: 'Acquisition',        badge: 'badge-green',   subjects: ['dog'], duration: 'instant',
+    fields: [{ key: 'source', label: 'Source / seller', type: 'text' }] },
   { value: 'vaccination',        label: 'Vaccination',        badge: 'badge-blue',    subjects: ['dog'], duration: 'instant',
     fields: [{ key: 'vaccine', label: 'Vaccine', type: 'text' }, { key: 'lot_number', label: 'Lot #', type: 'text' }, { key: 'next_due', label: 'Next due', type: 'date' }] },
   { value: 'preventative',       label: 'Preventative',       badge: 'badge-blue',    subjects: ['dog'], duration: 'instant',
@@ -318,6 +326,7 @@ export const EXPENSE_CATEGORIES = [
   { value: 'facility',     label: 'Facility',           badge: 'badge-amber' },
   { value: 'boarding',     label: 'Boarding & travel',  badge: 'badge-amber' },
   { value: 'stud_fee',     label: 'Stud fee',           badge: 'badge-purple' },
+  { value: 'dog_purchase', label: 'New dog purchase',   badge: 'badge-red' },
   { value: 'marketing',    label: 'Marketing',          badge: 'badge-blue' },
   { value: 'insurance',    label: 'Insurance',          badge: 'badge-neutral' },
   { value: 'other',        label: 'Other',              badge: 'badge-gray' }
@@ -338,6 +347,7 @@ export const EXPENSE_SUBJECT_TYPES = [
 // event_type. Only a starting point — the event form's category dropdown lets
 // the user override before saving. Anything unmapped defaults to 'other'.
 const EVENT_TYPE_EXPENSE_CATEGORY = {
+  acquisition: 'dog_purchase',
   vaccination: 'veterinary', preventative: 'veterinary', illness: 'veterinary',
   surgery: 'veterinary', vet_visit: 'veterinary', injury: 'veterinary',
   medication: 'veterinary', abnormalities: 'veterinary',
