@@ -1182,5 +1182,8 @@ gated by an `@media print` block), same posture as the Puppy Record.
 
 The generator modal lives on the Financials hub (`financials.js`, the "Invoice / Receipt" button
 on every view), lists every income record (from `getIncomeRows`), and opens the print page in a new
-tab. The document **never prints itself** — the owner triggers the browser's Print → Save as PDF
-with the page's "Print / Save as PDF" button.
+tab. Because the record is persisted (an `await`) before navigating, the tab is opened **blank and
+synchronously within the click handler** and only navigated afterward — opening it *after* the
+await would let iOS Safari's pop-up blocker silently swallow it (the gesture is spent), so the
+invoice/receipt would never appear on iPhone. The document **never prints itself** — the owner
+triggers the browser's Print → Save as PDF with the page's "Print / Save as PDF" button.

@@ -796,18 +796,25 @@ async function openGenerateModal() {
     const cfg = { number: st.number.trim(), notes: st.notes.trim(), lines };
     if (st.doc === 'invoice') cfg.methods = [...st.accepted];
     else { cfg.payMethod = st.payMethod.trim(); cfg.payReference = st.payReference.trim(); }
+    // Open the tab synchronously, WHILE we still hold the user gesture. iOS
+    // Safari blocks window.open() once an await has consumed the click, so we
+    // grab the blank tab here and only navigate it after the async save below.
+    const win = window.open('', '_blank');
     try {
       const repo = st.source === 'sale' ? saleRepo : studServiceRepo;
       const persist = { invoice_number: st.number.trim() || null, invoice_notes: st.notes.trim() || null };
       if (st.doc === 'receipt') { persist.payment_method = st.payMethod.trim() || null; persist.payment_reference = st.payReference.trim() || null; }
       await repo.update(st.record.id, persist);
-      // Open the document but don't auto-print — the owner triggers the actual
-      // download/print themselves with the page's "Print / Save as PDF" button.
+      // Navigate to the document but don't auto-print — the owner triggers the
+      // actual download/print themselves with the page's "Print / Save as PDF"
+      // button.
       const url = `invoice.html?source=${encodeURIComponent(st.source)}&id=${encodeURIComponent(st.record.id)}`
         + `&doc=${encodeURIComponent(st.doc)}&cfg=${encodeURIComponent(JSON.stringify(cfg))}`;
-      window.open(url, '_blank');
+      if (win) win.location = url;   // navigate the tab we pre-opened
+      else window.location = url;    // popup blocked outright — fall back to this tab
       close();
     } catch (e) {
+      if (win) win.close();
       errBox.innerHTML = `<div class="inline-error">${esc(e.message || String(e))}</div>`;
     }
   });
