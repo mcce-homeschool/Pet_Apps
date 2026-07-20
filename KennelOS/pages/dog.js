@@ -25,9 +25,6 @@ import { openEventFromQuery } from '../assets/eventForm.js';
 import { renderPedigree } from '../assets/pedigree.js';
 
 const OWNER_REQUIRED = ['external', 'leased_in'];
-// kennel_id only makes sense for dogs that are actually part of one of your own
-// kennels — hidden on the form for dogs owned/leased by someone else.
-const KENNEL_FIELD_HIDDEN_FOR = ['external', 'leased_in'];
 
 const els = {
   title: document.getElementById('dog-title'),
@@ -233,13 +230,13 @@ function contactOptions(current) {
   return `<option value="">— none —</option>` + opts;
 }
 
-// Only your own kennels are offered here — assigning an owned/co-owned dog to
-// someone else's kennel record wouldn't mean anything (Own-Kennel Identity addendum §4).
+// Every kennel is offered here — your own for a dog you own, or an outside
+// kennel for a dog you don't (external / leased). We track other people's
+// kennels now, so linking an external dog to its kennel is a first-class thing.
 function kennelOptions(current) {
   const opts = ctx.allKennels
-    .filter((k) => k.is_own_kennel)
     .filter((k) => ctx.pickerArchived || !k.is_archived || k.id === current)
-    .map((k) => `<option value="${esc(k.id)}"${k.id === current ? ' selected' : ''}>${esc(k.kennel_name)}${k.is_archived ? ' (archived)' : ''}</option>`)
+    .map((k) => `<option value="${esc(k.id)}"${k.id === current ? ' selected' : ''}>${esc(k.kennel_name)}${k.is_own_kennel ? ' — My kennel' : ''}${k.is_archived ? ' (archived)' : ''}</option>`)
     .join('');
   return `<option value="">— none —</option>` + opts;
 }
@@ -283,7 +280,7 @@ function renderView() {
       ${row('Ownership', badge(OWNERSHIP_TYPE, d.ownership_type))}
       ${row('Owner', esc(contactName(d.owner_contact_id)))}
       ${row('Co-owners', coOwners)}
-      ${KENNEL_FIELD_HIDDEN_FOR.includes(d.ownership_type) ? '' : row('Kennel', esc(kennelName(d.kennel_id)))}
+      ${row('Kennel', esc(kennelName(d.kennel_id)))}
       ${row('Status', badge(DOG_STATUS, d.status) + (d.status_date ? ` <span class="faint">since ${esc(fmtDate(d.status_date))}</span>` : ''))}
       ${d.status === 'puppy' ? row('Disposition', d.disposition ? badge(DISPOSITION, d.disposition) : '') : ''}
       ${row('Notes', d.notes ? esc(d.notes).replace(/\n/g, '<br>') : '')}
@@ -331,7 +328,7 @@ function renderEdit() {
       ${field('Breeder kennel', `<select id="f-breeder_kennel_id">${breederKennelOptions(d.breeder_kennel_id)}</select>`, { hint: 'The kennel that produced this dog — your own for an in-house litter, or an outside kennel for a dog you acquired.' })}
       ${field('Owner', `<select id="f-owner_contact_id">${contactOptions(d.owner_contact_id)}</select>`, { hint: 'Required for external / leased-in dogs.' })}
       ${field('Co-owners', `<select id="f-co_owner_contact_ids" multiple size="4">${coOptions}</select>`, { hint: 'Ctrl/Cmd-click to select multiple.' })}
-      ${KENNEL_FIELD_HIDDEN_FOR.includes(d.ownership_type) ? '' : field('Kennel', `<select id="f-kennel_id">${kennelOptions(d.kennel_id)}</select>`, { hint: 'Which of your own kennels this dog belongs to.' })}
+      ${field('Kennel', `<select id="f-kennel_id">${kennelOptions(d.kennel_id)}</select>`, { hint: 'The kennel this dog belongs to — your own, or an outside kennel for a dog you don’t own.' })}
       <div class="field field-wide">
         <label class="check-inline"><input id="picker-archived" type="checkbox"${ctx.pickerArchived ? ' checked' : ''}> Include archived dogs/contacts/kennels in the pickers above</label>
       </div>

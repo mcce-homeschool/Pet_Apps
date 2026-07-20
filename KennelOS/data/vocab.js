@@ -364,13 +364,19 @@ export const EXPENSE_SUBJECT_TYPES = [
 // Suggested default category when a cost is captured from an event, keyed by
 // event_type. Only a starting point — the event form's category dropdown lets
 // the user override before saving. Anything unmapped defaults to 'other'.
+//
+// `veterinary` is reserved for genuine clinical vet care (a dog seen, treated,
+// operated on, or scanned by a vet), NOT used as a lazy catch-all for anything
+// health-adjacent. Events that are stockable products a breeder self-administers
+// (preventative, medication) or a plain observation with no inherent cost
+// (abnormalities) fall through to 'other' rather than mislabel spend as vet care.
+// Diagnostic panels (genetic/OFA/breed/progesterone) map to `testing`.
 const EVENT_TYPE_EXPENSE_CATEGORY = {
   acquisition: 'dog_purchase',
-  vaccination: 'veterinary', preventative: 'veterinary', illness: 'veterinary',
-  surgery: 'veterinary', vet_visit: 'veterinary', injury: 'veterinary',
-  medication: 'veterinary', abnormalities: 'veterinary',
+  vaccination: 'veterinary', illness: 'veterinary', surgery: 'veterinary',
+  vet_visit: 'veterinary', injury: 'veterinary', ultrasound: 'veterinary',
   genetic_test: 'testing', ofa_pennhip: 'testing', breed_specific_test: 'testing',
-  progesterone_test: 'testing', ultrasound: 'veterinary',
+  progesterone_test: 'testing',
   boarding: 'boarding'
 };
 

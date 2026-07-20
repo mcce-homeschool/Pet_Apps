@@ -112,7 +112,7 @@ export const WIZARD_STEPS = [
     id: 'dog-ownership', hub: 'Dogs', page: 'dog.html', anchor: 'gunnar',
     selector: '#profile-body',
     title: 'Ownership & external dogs',
-    body: 'Gunnar is an external dog owned by Dana Ruiz — an owner is required for external and leased dogs, and the “Kennel” field hides for them. The same profile handles your own dogs and outside ones.'
+    body: 'Gunnar is an external dog owned by Dana Ruiz — an owner is required for external and leased dogs. His “Kennel” points at Meadow Ridge, an outside kennel: we track other people’s kennels too, so any dog can be linked to its kennel, yours or not. The same profile handles your own dogs and outside ones.'
   },
   {
     id: 'dog-disposition', hub: 'Dogs', page: 'dog.html', anchor: 'fern',

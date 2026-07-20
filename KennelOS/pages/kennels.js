@@ -50,6 +50,12 @@ function editRow(k) {
 
 async function render() {
   const kennels = await kennelRepo.getAll({ includeArchived: true });
+  // My own kennels sort to the top; everyone else's fall below in alphabetical
+  // order by name (own kennels are also name-sorted among themselves).
+  kennels.sort((a, b) => {
+    if (!!a.is_own_kennel !== !!b.is_own_kennel) return a.is_own_kennel ? -1 : 1;
+    return (a.kennel_name || '').localeCompare(b.kennel_name || '');
+  });
   if (!kennels.length) {
     listEl.innerHTML = `<div class="card empty-state">No kennels yet.</div>`;
     return;
@@ -106,6 +112,25 @@ async function saveEdit(kennel) {
   }
 }
 
+// The add form stays collapsed behind the "+ Add New Kennel" button until asked
+// for — kennels are usually created inline from a contact, so the list is the
+// star of this screen.
+const addSection = document.getElementById('add-section');
+function clearAddForm() {
+  document.getElementById('k-name').value = '';
+  document.getElementById('k-prefix').value = '';
+  document.getElementById('k-location').value = '';
+  document.getElementById('k-website').value = '';
+  document.getElementById('k-own').checked = false;
+}
+function closeAddForm() { addSection.hidden = true; clearAddForm(); clearError(); }
+
+document.getElementById('add-toggle').addEventListener('click', () => {
+  addSection.hidden = !addSection.hidden;
+  if (!addSection.hidden) document.getElementById('k-name').focus();
+});
+document.getElementById('k-add-cancel').addEventListener('click', closeAddForm);
+
 document.getElementById('k-add').addEventListener('click', async () => {
   clearError();
   const name = document.getElementById('k-name').value.trim();
@@ -115,11 +140,7 @@ document.getElementById('k-add').addEventListener('click', async () => {
   const is_own_kennel = document.getElementById('k-own').checked;
   try {
     await kennelRepo.create({ kennel_name: name, prefix, location, website, is_own_kennel });
-    document.getElementById('k-name').value = '';
-    document.getElementById('k-prefix').value = '';
-    document.getElementById('k-location').value = '';
-    document.getElementById('k-website').value = '';
-    document.getElementById('k-own').checked = false;
+    closeAddForm();
     render();
   } catch (e) {
     showError(e.message || String(e));

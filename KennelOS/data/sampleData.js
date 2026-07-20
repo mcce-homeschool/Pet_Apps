@@ -221,17 +221,18 @@ export async function seedSampleData() {
     recorded_coi: { value: 6.25, method: 'genomic', source: 'Embark', as_of_date: '2023-03-01' }
   });
 
-  // Gunnar stays kennel_id: null — external, owned by Dana Ruiz. His kennel
-  // identity flows through owner_contact_id, not kennel_id. His recorded COI uses
-  // a DIFFERENT method/source (pedigree, AKC 5-gen) so the mixed-provenance
-  // display is exercised (Stage 5 §9). breeder_kennel_id points at Meadow Ridge.
+  // Gunnar is external, owned by Dana Ruiz. Both his breeder_kennel_id and his
+  // kennel_id point at Meadow Ridge (Dana's outside kennel) — external dogs can
+  // now be linked to their kennel, exercising a non-own kennel_id on the dog form
+  // and in the wizard tour. His recorded COI uses a DIFFERENT method/source
+  // (pedigree, AKC 5-gen) so the mixed-provenance display is exercised (Stage 5 §9).
   const gunnar = await dogRepo.create({
     call_name: 'Gunnar', sex: 'male', breed: BREED,
     date_of_birth: '2018-06-01', dob_is_estimated: true,
     registered_name: 'Meadow Ridge Maximus Gunnar', registration_number: 'AKC WS78341201',
     microchip_id: '985141000456789', color_markings: 'Seal & white, Irish marked', registry: 'AKC',
     ownership_type: 'external', owner_contact_id: dana.id, status: 'external_reference',
-    breeder_kennel_id: meadowRidge.id,
+    breeder_kennel_id: meadowRidge.id, kennel_id: meadowRidge.id,
     recorded_coi: { value: 4.1, method: 'pedigree', source: 'AKC 5-gen', as_of_date: '2022-11-15' }
   });
 

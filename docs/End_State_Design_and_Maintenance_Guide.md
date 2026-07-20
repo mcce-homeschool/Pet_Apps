@@ -121,7 +121,7 @@ commonly blank at entry time.
 
 | Entity | Required | Notable other fields |
 |---|---|---|
-| **Dog** | `call_name`, `sex`, `breed`, `ownership_type`, `status` | `registered_name`, `date_of_birth`, `date_of_death`, `sire_id`, `dam_id`, `litter_id`, `breeder_kennel_id` (the kennel that *produced* this dog — own or an outside contact's; distinct from `kennel_id`, which of the user's own kennels it belongs to *now*; auto-prefilled from the litter's dam's own `kennel_id` when that dam is owned/co-owned), `owner_contact_id`, `co_owner_contact_ids[]`, `kennel_id`, `color_markings`, `registry`, `registration_number`, `microchip_id`, `url` (plain, unindexed — a link for this dog, e.g. a registry page or listing), `planned_tests[]`, `recorded_coi{value,method,source,as_of_date}`, `disposition` (`undecided`/`keeping`/`available`/`placed` — breeder intent; **puppy-only**, valid only while `status='puppy'` and forced null otherwise. Enforced in `dogRepo` create/update and mirrored in the UI: the dog form shows it only for a puppy, `sale.js` won't set one on a non-puppy, the profile hides the row otherwise. Feeds the Today "Active litters" card, the promote-lifecycle nudge, and the litter-lifecycle nudges, §19), `notes`. Owner required when `ownership_type ∈ {external, leased_in}`. |
+| **Dog** | `call_name`, `sex`, `breed`, `ownership_type`, `status` | `registered_name`, `date_of_birth`, `date_of_death`, `sire_id`, `dam_id`, `litter_id`, `breeder_kennel_id` (the kennel that *produced* this dog — own or an outside contact's; distinct from `kennel_id`, the kennel it belongs to *now* — the user's own for a dog they own, or an outside kennel for an external/leased dog (the form's Kennel picker offers every kennel, not just own ones); auto-prefilled from the litter's dam's own `kennel_id` when that dam is owned/co-owned), `owner_contact_id`, `co_owner_contact_ids[]`, `kennel_id`, `color_markings`, `registry`, `registration_number`, `microchip_id`, `url` (plain, unindexed — a link for this dog, e.g. a registry page or listing), `planned_tests[]`, `recorded_coi{value,method,source,as_of_date}`, `disposition` (`undecided`/`keeping`/`available`/`placed` — breeder intent; **puppy-only**, valid only while `status='puppy'` and forced null otherwise. Enforced in `dogRepo` create/update and mirrored in the UI: the dog form shows it only for a puppy, `sale.js` won't set one on a non-puppy, the profile hides the row otherwise. Feeds the Today "Active litters" card, the promote-lifecycle nudge, and the litter-lifecycle nudges, §19), `notes`. Owner required when `ownership_type ∈ {external, leased_in}`. |
 | **Contact** | `name` | `contact_type[]` (multi), `email`, `phone`, `address`, `kennel_id`, `waitlist_status`, `first_contact_source`, `notes`, `companion_note` (plain, unindexed — a per-recipient message **meant for the recipient's eyes**, shown on their companion share page; deliberately distinct from the private `notes`; §20). Buyers are Contacts — **there is no Buyer table**. `address` also resolves an in-person stud service's away-board location (§19). |
 | **Kennel** | `kennel_name` | `is_own_kennel`, `prefix`, `location`, `website` (plain, unindexed — a link for this kennel, mirrors `Dog.url`), `logo_data_url` (plain, unindexed — a downscaled PNG/SVG **data URL** for the kennel's logo, uploaded/removed on the kennel detail page, rendered on its invoices/receipts (§24) and puppy records (§23); rides the JSON backup), `preferred_tests[]`, `preferred_breeds[]`, `promote_nudge_enabled` (bool, default off), `promote_age_male_months`/`promote_age_female_months` (the promote-lifecycle nudge's per-kennel thresholds, §19). Lightweight; added inline from the Contact form. |
 | **Pairing** | `sire_id`, `dam_id`, `pairing_type`, `status` | `method`, `planned_date` (shown as "Planned first date" — the first planned/tie date), `last_observed_date` (plain, unindexed — a subsequent observed tie/breeding date), `expected_due_date` (prefilled on the detail page as 63 days after `planned_date` when still empty, never clobbering a deliberate edit), `notes`. Sire ≠ dam (hard block). |
@@ -596,7 +596,8 @@ Companion Messaging console, §20), `import-export`, plus root `index.html`.
 Dogs: `dog` (detail), `roster`, `pedigree`.
 Breeding: `pairings`/`pairing`, `litters`/`litter`, `active-breeding`, `live-births`.
 People: `contact`, `kennels` (list — identity CRUD only: name/prefix/location/own + archive/
-delete) / `kennel` (detail — hosts that kennel's Expenses ledger plus, for own kennels, its
+delete; the add form stays collapsed behind a **+ Add New Kennel** button, and rows sort own
+kennels first then everyone else's alphabetically by name) / `kennel` (detail — hosts that kennel's Expenses ledger plus, for own kennels, its
 program configuration: the preferred-tests panel and the lifecycle-nudge thresholds). Both
 map to the People hub in `HUB_CHILDREN`.
 Placements/contracts: `sale`/`sales`, `stud-service`/`stud-services`, `contract`/`contracts`,
@@ -1007,7 +1008,13 @@ Cost amount upserts the linked `Expense` the normal event↔cost way.
   writer: on save (`assets/eventForm.js`) it upserts an `Expense` carrying `event_id` = the
   saved event and the event's own subject; clearing the Cost hard-deletes that linked expense.
   Cascade (litter-wide) events create one linked expense per created event. Event stores **no
-  `cost` field**.
+  `cost` field**. The Cost category dropdown pre-selects `defaultExpenseCategoryFor(event_type)`
+  (overridable before save). `veterinary` is reserved for genuine clinical vet care
+  (`vaccination`, `illness`, `injury`, `surgery`, `vet_visit`, `ultrasound`) — **not** a catch-all;
+  diagnostic panels (`genetic_test`/`ofa_pennhip`/`breed_specific_test`/`progesterone_test`) map to
+  `testing`, `boarding`→`boarding`, `acquisition`→`dog_purchase`, and everything else (including
+  stockable products like `medication`/`preventative` and observation-only events like
+  `abnormalities`) falls through to `other`.
 - **Ledger → event (display).** `timeline.js` reads amounts back via `expenseRepo.getByEvent`
   and shows a `🔗 event` tag on linked ledger rows.
 - **Ledger → event (create).** In `assets/expensePanel.js`, a dog/litter/pairing expense with
