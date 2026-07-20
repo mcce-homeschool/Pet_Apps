@@ -21,6 +21,25 @@ const base = makeRepo('expenses', EXPENSE_REFERENCES);
 
 const SUBJECT_TYPES = EXPENSE_SUBJECT_TYPES.map((s) => s.value);
 
+function numOrNull(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function round2(n) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+// A mileage expense's dollar amount is DERIVED (miles × rate) — never entered
+// directly. Exported so the add-expense form can show a live preview off the
+// same rule the repo stores by. Returns null when it isn't a valid pair.
+export function mileageAmount(miles, rate) {
+  const m = numOrNull(miles);
+  const r = numOrNull(rate);
+  return (m != null && r != null) ? round2(m * r) : null;
+}
+
 function validateExpense(candidate) {
   if (!SUBJECT_TYPES.includes(candidate.subject_type)) {
     throw new Error(`Expense: subject_type must be one of ${SUBJECT_TYPES.join(', ')}.`);
@@ -31,6 +50,16 @@ function validateExpense(candidate) {
   if (!candidate.expense_date) {
     throw new Error('Expense: "expense_date" is required.');
   }
+  // A mileage entry (miles set) needs a non-negative rate; its amount is derived
+  // in normalize(), so the amount check below runs against the computed value.
+  if (candidate.miles != null) {
+    const m = Number(candidate.miles);
+    if (!Number.isFinite(m) || m < 0) throw new Error('Expense: "miles" must be a non-negative number.');
+    const r = Number(candidate.mileage_rate);
+    if (candidate.mileage_rate == null || !Number.isFinite(r) || r < 0) {
+      throw new Error('Expense: a mileage entry needs a rate per mile.');
+    }
+  }
   const n = Number(candidate.amount);
   if (candidate.amount == null || candidate.amount === '' || !Number.isFinite(n)) {
     throw new Error('Expense: "amount" must be a number.');
@@ -40,10 +69,17 @@ function validateExpense(candidate) {
 
 // Normalize the money/category fields the same way on create and update, so a
 // row is always stored with a real Number amount and a category (never blank).
+// Mileage mode (miles present) makes `amount` DERIVED = miles × rate; a flat
+// expense stores miles/mileage_rate as null and keeps the entered amount.
 function normalize(data) {
+  const miles = numOrNull(data.miles);
+  const rate = numOrNull(data.mileage_rate);
+  const isMileage = miles != null;
   return {
     ...data,
-    amount: Number(data.amount),
+    miles: isMileage ? miles : null,
+    mileage_rate: isMileage ? rate : null,
+    amount: (isMileage && rate != null) ? round2(miles * rate) : Number(data.amount),
     category: data.category || 'other',
     event_id: data.event_id || null
   };
@@ -53,8 +89,11 @@ export const expenseRepo = {
   ...base,
 
   async create(data) {
-    validateExpense(data);
-    return base.create(normalize(data));
+    // Normalize first so a mileage entry's derived amount exists before we
+    // validate it (mileage mode never enters `amount` directly).
+    const norm = normalize(data);
+    validateExpense(norm);
+    return base.create(norm);
   },
 
   async update(id, changes) {

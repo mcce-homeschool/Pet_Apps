@@ -130,7 +130,7 @@ commonly blank at entry time.
 | **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `related_dog_id` (canonical Dog link, used only for `lease`/`co_own`/`other` types — where no linked Sale/StudService reaches a dog; forced `null` for other types via `contractRepo.DOG_LINK_TYPES`/`normalizeLinks`), `related_contact_id` (canonical counterparty link — lessee/co-owner/partner — for the same `lease`/`co_own`/`other` types via `CONTACT_LINK_TYPES`; sale/stud contracts reach their counterparty through the linked Sale/StudService, so it stays `null` there; scopes a contract into the **partner** companion bundle, §20), `document_url` (plain, unindexed — a share link to the signed document, e.g. a Drive "anyone with the link" URL; carried as a *pointer* into the buyer bundle, §20), `signed_date`, `lease_start_date`/`lease_end_date` (lease type; UI shows them and hides Related sale/stud fields when `contract_type='lease'`), `title`, `terms_summary`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf for its own hard-delete (nothing points *at* a contract), but it points *at* its Dog via `related_dog_id` (guarded under `DOG_REFERENCES`) and its counterparty via `related_contact_id` (guarded under `CONTACT_REFERENCES`). |
 | **StudService** | `direction`, `our_dog_id`, `partner_dog_id`, `partner_contact_id`, `status` | `pairing_id`, `fee_amount`, `fee_structure`, `pick_status` (plain, unindexed — suggested `pending`/`claimed`, free text allowed; meaningful **only** when `fee_structure ∈ {pick_of_litter, flat_plus_pick}`, forced `null` otherwise; feeds the partner companion bundle's compensation, §20), `pick_value_amount` (plain, unindexed decimal — the breeder's own estimated dollar value of the pick puppy, for income tracking; gated the same way as `pick_status`; deliberately **separate** from `fee_amount` (the actual cash); internal only — never in the partner bundle), `result_notes`, `type` (`in_person`/`ai` — coarse physical-travel flag; `in_person` + `sent_date`/`returned_date` window feeds the away-board, §19), `referred_by_contact_id` (indexed FK → the referring Contact; `CONTACT_REFERENCES`; on save `studServiceRepo` auto-tags `stud_referrer` via `contactRepo.ensureType`), `payment_method`/`payment_reference`/`invoice_number`/`invoice_notes` (plain, unindexed — invoice/receipt document fields, mirroring Sale's; only the outgoing direction is invoiceable, since incoming stud is an expense; §24), plus optional logistics dates. Covers both `incoming` and `outgoing`. |
 | **Event** | `subject_type`, `subject_id`, `event_type`, `event_date`, `title` | `event_end_date`, `reminder_date`, `reminder_dismissed`, `related_dog_id`, `related_contact_id`, `details{}`, `notes`. See §8. **No `cost` field** — a cost entered on the event form is written to the Expense ledger (`expenses.event_id` = the event) and read back via `expenseRepo.getByEvent`; see the Expense row and §21. |
-| **Expense** | `subject_type` (`dog`/`litter`/`pairing`/`kennel`), `subject_id`, `amount`, `category`, `expense_date` | `event_id` (nullable FK → the Event a cost was captured from — the one canonical event↔cost link; reverse is `expenseRepo.getByEvent`), `vendor`, `notes`. The Financials ledger: the single home for money spent. Polymorphic like Event; `kennel`-subject rows are kennel-wide overhead. Leaf entity (`EXPENSE_REFERENCES` empty). See §21. |
+| **Expense** | `subject_type` (`dog`/`litter`/`pairing`/`kennel`), `subject_id`, `amount`, `category`, `expense_date` | `event_id` (nullable FK → the Event a cost was captured from — the one canonical event↔cost link; reverse is `expenseRepo.getByEvent`), `miles`/`mileage_rate` (plain, unindexed — a **mileage** expense: when `miles` is set, `amount` is **derived** = `miles × mileage_rate` in `expenseRepo.normalize`, never entered directly; both null on a flat expense. Default rate prefilled from `settings.getMileageDefaults()`; §21), `vendor`, `notes`. The Financials ledger: the single home for money spent. Polymorphic like Event; `kennel`-subject rows are kennel-wide overhead. Leaf entity (`EXPENSE_REFERENCES` empty). See §21. |
 
 ### 4.2 Relationship direction — the sixth design principle
 
@@ -436,7 +436,9 @@ way.
   — Layer 1, §20 — one JSON object keyed by recipient type via
   `getCompanionSettings`/`setCompanionSettings`), `invoiceDefaults` (the invoice
   generator's default accepted payment methods, §24, via
-  `getInvoiceDefaults`/`setInvoiceDefaults`). `clearAllSettings()` drops them all (used by
+  `getInvoiceDefaults`/`setInvoiceDefaults`), `mileageDefaults` (the add-expense form's
+  default rate per mile for mileage entries, §21, via
+  `getMileageDefaults`/`setMileageDefaults`). `clearAllSettings()` drops them all (used by
   Reset App).
 - **nudgeState.js** — a second, deliberately separate `localStorage` module (one key,
   `kennelOS.nudgeDismissals`): the derived-nudge dismissal ledger (§19). Kept out of
@@ -1001,6 +1003,31 @@ bulk food, registration dues, marketing) lives on `subject_type='kennel'`; there
 **no `general` subject** — program overhead is logged against your own kennel, so there is never
 a null `subject_id`. Revenue is **not stored** here (it stays on `Sale.price`/`deposit_amount`
 and `StudService.fee_amount`); this table is costs only.
+
+### Mileage / transport costs
+
+A cost you drive for (vet runs, delivering a puppy, hauling a dam to a stud) is captured as a
+**mileage expense** — a normal ledger row whose dollar `amount` is **derived** from distance,
+not typed. The add-expense form (both `assets/expensePanel.js` on every subject page and the
+Financials hub's own modal in `financials.js`) carries a **Flat amount ↔ Mileage** toggle:
+Mileage mode swaps the Amount box for **Miles** + **Rate / mile** (the rate prefilled from
+`settings.getMileageDefaults()`, with a "Save this rate as my default" opt-in via
+`setMileageDefaults`), shows a live `= $X (N mi × $R/mi)` preview, and locks the category to the
+dedicated **`mileage`** ("Mileage / travel") `EXPENSE_CATEGORIES` value.
+
+The math is a **repo rule, not a UI one**: `expenseRepo.normalize` computes `amount =
+round(miles × mileage_rate, 2)` whenever `miles` is set (and stores `miles`/`mileage_rate` as
+plain unindexed fields), so the amount is authoritative regardless of which modal — or a future
+CSV/import — writes it; `validateExpense` requires a non-negative rate on any mileage entry, and
+`create` normalizes **before** validating so the derived amount exists to check. A flat expense
+leaves both fields null and keeps its entered amount. The pure helper `mileageAmount(miles,
+rate)` is exported for the form's live preview so preview and stored value can't drift. Because
+`mileage` is a real category, driving costs break out on their own Expenses seg-tab and in the
+Overview category breakdown automatically (the seg-tabs are built from the vocab, never
+hand-listed) — a clean deductible-mileage total. The two form modals share
+`buildMileageFields`/`wireMileageMode` (exported from `expensePanel.js`) so they never diverge.
+No new table, index, FK, or `referenceRegistry` entry — the fields are plain and the amount is
+derived.
 
 Buying a new dog is deliberately an **expense, never a Sale** — `Sale` and `StudService` stay
 strictly income-side records (owner decision). `EXPENSE_CATEGORIES` carries a `dog_purchase`

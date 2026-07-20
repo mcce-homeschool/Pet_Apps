@@ -4,10 +4,86 @@
 // role timeline.js plays for events. A cost entered here lives in the `expenses`
 // table (expenseRepo); this is the ledger-first entry point that complements the
 // convenience "Cost" field on the event form.
-import { expenseRepo } from '../data/expenseRepo.js';
+import { expenseRepo, mileageAmount } from '../data/expenseRepo.js';
 import { EXPENSE_CATEGORIES } from '../data/vocab.js';
+import { getMileageDefaults, setMileageDefaults } from '../data/settings.js';
 import { esc, badge, fmtDate, fmtMoney, todayYMD, confirmModal } from './ui.js';
 import { openEventForm } from './eventForm.js';
+
+// Shared mileage-mode fragments so this panel's modal and the Financials hub's
+// add-expense modal stay in lockstep. `buildMileageFields` returns the extra
+// form rows; `wireMileageMode` binds the Flat↔Mileage toggle, the live "= $X"
+// preview, and returns a reader that hands the save() function the right payload
+// bits (amount/category/miles/mileage_rate) for whichever mode is active.
+
+// Markup for the mode toggle + mileage inputs. `p` is an id prefix so the two
+// modals don't collide, `draft` seeds an edit (miles/rate/amount/category).
+export function buildMileageFields(p, draft) {
+  const isMileage = draft?.miles != null;
+  const rate = draft?.mileage_rate ?? getMileageDefaults().rate ?? '';
+  return `
+    <div class="field field-wide"><label>Entry type</label>
+      <div class="pill-row">
+        <label class="check-inline"><input type="radio" name="${p}-mode" value="flat"${isMileage ? '' : ' checked'}> Flat amount</label>
+        <label class="check-inline"><input type="radio" name="${p}-mode" value="mileage"${isMileage ? ' checked' : ''}> Mileage</label>
+      </div>
+    </div>
+    <div class="field" data-mode="flat"><label>Amount <span class="req">*</span></label>
+      <input id="${p}-amount" type="number" step="0.01" min="0" value="${esc(draft?.amount ?? '')}"></div>
+    <div class="field" data-mode="mileage" style="display:none;"><label>Miles <span class="req">*</span></label>
+      <input id="${p}-miles" type="number" step="0.1" min="0" value="${esc(draft?.miles ?? '')}"></div>
+    <div class="field" data-mode="mileage" style="display:none;"><label>Rate / mile <span class="req">*</span></label>
+      <input id="${p}-rate" type="number" step="0.01" min="0" value="${esc(rate)}"></div>
+    <div class="field field-wide" data-mode="mileage" style="display:none;">
+      <span id="${p}-mileage-preview" class="field-hint"></span>
+      <label class="check-inline" style="margin-top:4px;"><input type="checkbox" id="${p}-rate-default"> Save this rate as my default</label>
+    </div>`;
+}
+
+// Wire the mode toggle for a modal that already contains buildMileageFields(p).
+// `categorySel` is the modal's category <select> (forced to 'mileage' and locked
+// while in mileage mode). Returns { mode(), payloadBits() } for save().
+export function wireMileageMode(modal, p, categorySel) {
+  const modeInputs = modal.querySelectorAll(`input[name="${p}-mode"]`);
+  const milesEl = modal.querySelector(`#${p}-miles`);
+  const rateEl = modal.querySelector(`#${p}-rate`);
+  const previewEl = modal.querySelector(`#${p}-mileage-preview`);
+  const defaultEl = modal.querySelector(`#${p}-rate-default`);
+  const mode = () => modal.querySelector(`input[name="${p}-mode"]:checked`)?.value || 'flat';
+
+  function refreshPreview() {
+    const amt = mileageAmount(milesEl.value, rateEl.value);
+    previewEl.textContent = amt != null
+      ? `= ${fmtMoney(amt)} (${milesEl.value || 0} mi × ${fmtMoney(rateEl.value || 0)}/mi)`
+      : 'Enter miles and a rate per mile.';
+  }
+  function applyMode() {
+    const m = mode();
+    modal.querySelectorAll('[data-mode]').forEach((el) => {
+      el.style.display = el.dataset.mode === m ? '' : 'none';
+    });
+    if (m === 'mileage') { categorySel.value = 'mileage'; categorySel.disabled = true; refreshPreview(); }
+    else { categorySel.disabled = false; }
+  }
+  modeInputs.forEach((r) => r.addEventListener('change', applyMode));
+  milesEl.addEventListener('input', refreshPreview);
+  rateEl.addEventListener('input', refreshPreview);
+  applyMode();
+
+  return {
+    mode,
+    // The mode-specific fields for the save payload. Flat mode nulls out the
+    // mileage fields (so editing mileage→flat clears them); mileage mode leaves
+    // `amount` to the repo (derived) and persists the default rate if asked.
+    payloadBits() {
+      if (mode() === 'mileage') {
+        if (defaultEl.checked) setMileageDefaults({ rate: Number(rateEl.value) });
+        return { amount: '', category: 'mileage', miles: milesEl.value, mileage_rate: rateEl.value };
+      }
+      return { amount: modal.querySelector(`#${p}-amount`).value, category: categorySel.value, miles: null, mileage_rate: null };
+    }
+  };
+}
 
 const CATEGORY_OPTIONS = EXPENSE_CATEGORIES.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join('');
 
@@ -21,6 +97,8 @@ function openExpenseForm({ subjectType, subjectId, expense = null, onSaved }) {
   const isEdit = !!expense;
   const draft = {
     amount: expense?.amount ?? '',
+    miles: expense?.miles ?? null,
+    mileage_rate: expense?.mileage_rate ?? null,
     category: expense?.category || 'other',
     expense_date: expense?.expense_date || todayYMD(),
     vendor: expense?.vendor || '',
@@ -36,8 +114,7 @@ function openExpenseForm({ subjectType, subjectId, expense = null, onSaved }) {
         <button class="btn btn-sm" data-act="cancel">✕</button>
       </div>
       <div class="form-grid">
-        <div class="field"><label>Amount <span class="req">*</span></label>
-          <input id="xf-amount" type="number" step="0.01" min="0" value="${esc(draft.amount)}"></div>
+        ${buildMileageFields('xf', draft)}
         <div class="field"><label>Category</label>
           <select id="xf-category">${CATEGORY_OPTIONS}</select></div>
         <div class="field"><label>Date <span class="req">*</span></label>
@@ -55,7 +132,9 @@ function openExpenseForm({ subjectType, subjectId, expense = null, onSaved }) {
     </div>`;
   document.body.appendChild(overlay);
   const modal = overlay.querySelector('.modal');
-  modal.querySelector('#xf-category').value = draft.category;
+  const categorySel = modal.querySelector('#xf-category');
+  categorySel.value = draft.category;
+  const mileage = wireMileageMode(modal, 'xf', categorySel);
 
   function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
   function onKey(e) { if (e.key === 'Escape') close(); }
@@ -64,11 +143,10 @@ function openExpenseForm({ subjectType, subjectId, expense = null, onSaved }) {
     const payload = {
       subject_type: subjectType,
       subject_id: subjectId,
-      amount: modal.querySelector('#xf-amount').value,
-      category: modal.querySelector('#xf-category').value,
       expense_date: modal.querySelector('#xf-date').value,
       vendor: modal.querySelector('#xf-vendor').value.trim(),
-      notes: modal.querySelector('#xf-notes').value
+      notes: modal.querySelector('#xf-notes').value,
+      ...mileage.payloadBits()
     };
     try {
       const saved = isEdit
@@ -123,7 +201,9 @@ export function renderExpensePanel(opts) {
       return;
     }
     body.innerHTML = `<ul class="linked-list" style="margin:0; padding:0; list-style:none;">` + visible.map((x, i) => {
-      const meta = [x.vendor ? esc(x.vendor) : '', x.notes ? esc(x.notes) : ''].filter(Boolean).join(' — ');
+      const mileageMeta = x.miles != null
+        ? `${esc(x.miles)} mi × ${esc(fmtMoney(x.mileage_rate ?? 0))}/mi` : '';
+      const meta = [mileageMeta, x.vendor ? esc(x.vendor) : '', x.notes ? esc(x.notes) : ''].filter(Boolean).join(' — ');
       const eventTag = x.event_id ? ' <span class="badge badge-gray" title="Captured from an event">🔗 event</span>' : '';
       const logBtn = (!x.event_id && EVENTABLE.has(subjectType))
         ? `<button class="btn btn-sm" data-act="log-event" data-idx="${i}" title="Create a linked event for this cost">Log event →</button>` : '';

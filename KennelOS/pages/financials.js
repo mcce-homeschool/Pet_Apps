@@ -27,6 +27,7 @@ import { eventRepo } from '../data/eventRepo.js';
 import { getIncomeRows, summarize, incomeLineItems } from '../data/incomeView.js';
 import { getInvoiceDefaults, setInvoiceDefaults } from '../data/settings.js';
 import { createReportView } from '../assets/reportView.js';
+import { buildMileageFields, wireMileageMode } from '../assets/expensePanel.js';
 import { esc, badge, fmtDate, fmtMoney, todayYMD, param } from '../assets/ui.js';
 import {
   EXPENSE_CATEGORIES, EXPENSE_SUBJECT_TYPES, INCOME_SOURCE_TYPES, INCOME_COMPONENTS,
@@ -123,8 +124,7 @@ function openAddExpense(onSaved) {
           <select id="af-subject-type">${EXPENSE_SUBJECT_TYPES.map((s) => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join('')}</select></div>
         <div class="field"><label>Subject <span class="req">*</span></label>
           <select id="af-subject-id">${subjectOptionsFor('dog')}</select></div>
-        <div class="field"><label>Amount <span class="req">*</span></label>
-          <input id="af-amount" type="number" step="0.01" min="0"></div>
+        ${buildMileageFields('af', null)}
         <div class="field"><label>Category</label>
           <select id="af-category">${CATEGORY_OPTIONS}</select></div>
         <div class="field"><label>Date <span class="req">*</span></label>
@@ -144,6 +144,7 @@ function openAddExpense(onSaved) {
   const typeSel = modal.querySelector('#af-subject-type');
   const subjSel = modal.querySelector('#af-subject-id');
   typeSel.addEventListener('change', () => { subjSel.innerHTML = subjectOptionsFor(typeSel.value); });
+  const mileage = wireMileageMode(modal, 'af', modal.querySelector('#af-category'));
 
   function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
   function onKey(e) { if (e.key === 'Escape') close(); }
@@ -152,11 +153,10 @@ function openAddExpense(onSaved) {
       const saved = await expenseRepo.create({
         subject_type: typeSel.value,
         subject_id: subjSel.value,
-        amount: modal.querySelector('#af-amount').value,
-        category: modal.querySelector('#af-category').value,
         expense_date: modal.querySelector('#af-date').value,
         vendor: modal.querySelector('#af-vendor').value.trim(),
-        notes: modal.querySelector('#af-notes').value
+        notes: modal.querySelector('#af-notes').value,
+        ...mileage.payloadBits()
       });
       close();
       onSaved?.(saved);
