@@ -14,6 +14,8 @@ import {
 } from '../data/wizardState.js';
 import { WIZARD_STEPS } from '../data/wizardSteps.js';
 import { getSampleDataManifest } from '../data/settings.js';
+import { clearSampleData } from '../data/sampleData.js';
+import { showKennelSetupModal } from './kennelSetupUI.js';
 import { alertModal, esc } from './ui.js';
 
 function rootPrefix() {
@@ -119,15 +121,25 @@ function revealTarget(step) {
   if (btn && body && body.hidden) btn.click();
 }
 
-const CLOSING_MESSAGE = 'That’s the whole spine, Reminders to Reports. Take the tour again any ' +
-  'time from the More menu — and before you start adding your own records, back up your data from ' +
-  'Import / Export.';
+const CLOSING_MESSAGE = 'And that’s it! You now know how to use KennelOS to manage your entire ' +
+  'breeding operation’s recordkeeping. We’ll clear the sample data now — you won’t need it, ' +
+  'you’ve got your own dogs to load in — and get you set up with your kennel name next. We hope ' +
+  'you love using the app!';
+
+// Finishing the tour mirrors the "I'll explore" onboarding ending: acknowledge,
+// clear the Thornfield seed (clearSampleData only removes the seeded records), and
+// hand off to the kennel-setup modal — exactly what the closing copy promises.
+async function finishTour() {
+  teardown();
+  await alertModal({ title: 'Tour complete', message: CLOSING_MESSAGE, okLabel: 'Set up my kennel →' });
+  try { await clearSampleData(); } catch { /* leave the seed in place if the clear fails */ }
+  await showKennelSetupModal({ skippable: true });
+}
 
 function goNext() {
   advanceWizard();
   if (getWizardStatus() !== 'active') {
-    teardown();
-    alertModal({ title: 'Tour complete', message: CLOSING_MESSAGE });
+    finishTour();
     return;
   }
   const step = currentStep();

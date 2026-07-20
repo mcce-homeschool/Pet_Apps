@@ -277,20 +277,20 @@ export const WIZARD_STEPS = [
   {
     id: 'stud-profile', hub: 'Placements', page: 'stud-service.html', anchor: 'studServiceBirch',
     selector: '#profile-section',
-    title: 'A stud service',
-    body: 'Birch is outgoing, in-person, flat-plus-pick — fee_structure gates both pick_status and a pick_value estimate ($1,500 non-cash, kept out of the cash totals). An in-person, sent service also books the dog “away”. “+ Create Pairing” links one.'
+    title: 'Stud service details',
+    body: 'Like sales, each stud service expands to show its details. This one is an outgoing studding, where your dog is the sire — a status of “Arranged” means your dog hasn’t left yet to begin the studding (it’s in person). Record sent and return dates to mark the intended duration. Below the details you can create or link a contract and track whether it’s signed.'
   },
   {
     id: 'contracts-list', hub: 'Placements', page: 'contracts.html',
     selector: '#contract-list',
-    title: 'Contracts — the fallout list',
-    body: 'Sale and stud contracts live inline on their cards; this page lists only the rest — co-ownership, lease, other and unlinked. Sage’s breeding lease (signed) and Percy’s co-ownership (sent) are here.'
+    title: 'Other contracts',
+    body: 'Contracts that don’t fit neatly into a sale — like a co-ownership agreement or a lease — live on the Other Contracts tab. It’s your repository of the legal agreements you’ve made with other breeders and owners.'
   },
   {
     id: 'contract-profile', hub: 'Placements', page: 'contract.html', anchor: 'sageLeaseContract',
     selector: '#profile-section',
-    title: 'A contract',
-    body: 'Type-conditional fields: a lease hides sale/stud fields and shows lease dates and the counterparty (Dana). document_url surfaces on the share-out, and status moves freely — signed, sent, void, declined.'
+    title: 'Contract details',
+    body: 'A contract carries its own information — the dog, sale, or stud agreement it applies to, the date it was signed, and the counterparty. It also has a link field for the external URL where you store and sign the contract, and it can be sent to the other party through the Companion app if you like.'
   },
 
   // --- Financials --------------------------------------------------------
@@ -302,26 +302,20 @@ export const WIZARD_STEPS = [
   {
     id: 'fin-overview', hub: 'Financials', page: 'financials.html',
     selector: '#financials-view-tabs',
-    title: 'Financials — overview',
-    body: 'Four net tiles: earned income, anticipated income, total expenses, and Net (earned − spent). Toggle Overview / Income / Expenses up here. Income is entirely derived — there is no income table; it’s read from Sales and outgoing Stud Services.'
+    title: 'Financials overview',
+    body: 'Your at-a-glance view of where your kennel is receiving — and spending — its money. See your collected and anticipated revenue (completed versus still-in-progress sales and studs), your total expenditures, and the net profit or loss those numbers produce.'
   },
   {
     id: 'fin-breakdown', hub: 'Financials', page: 'financials.html',
     selector: '#summary-section',
-    title: 'Income & expense breakdown',
-    body: 'Income by component (deposits, balance, transport, deferred boarding, stud fees, pick value) beside expenses by category. In the Income view, a row → Adjust modal writes money/status/paid-date back; a component is earned once paid or advanced, else anticipated.'
-  },
-  {
-    id: 'fin-expenses', hub: 'Financials', page: 'financials.html',
-    selector: '#add-expense',
-    title: 'The expense ledger',
-    body: 'A category tab for each expense type plus All, over one ledger filterable by category / subject-type / year, newest first. “+ Add Expense” logs a cost against any subject — kennel, dog, litter, pairing or event.'
+    title: 'Income & expense toggles',
+    body: 'Here you’ll see the actual details of your income and expenses, and can make adjustments or add new items. Note that income is always derived from a sale or stud service — you can adjust existing values here, but anything completely missing has to be added first in the Placements & Contracts hub before it shows up.'
   },
   {
     id: 'fin-invoice', hub: 'Financials', page: 'financials.html',
     selector: '#gen-document',
-    title: 'Invoice / receipt',
-    body: 'Pick any income record (a sale or outgoing stud) to open a print-only invoice — per-line full/partial, due dates and accepted methods. Print → Save as PDF from the browser.'
+    title: 'Invoices & receipts',
+    body: 'Generate invoices (for money owed) and receipts (for money paid) right in the app, pre-filled from your existing sales and stud services. Choose full or partial amounts, decide which payment methods you’ll accept, and set due dates easily. Click Print to save a PDF to email or hand over in person.'
   },
 
   // --- More: Reports / Companion / Import-Export --------------------------
@@ -334,18 +328,18 @@ export const WIZARD_STEPS = [
     id: 'reports', hub: 'More', page: 'reports.html',
     selector: 'main',
     title: 'Reports',
-    body: 'Six analytics reports (litters over time, live-birth %, placements, litter P&L, stud services, health-test events) plus operational roster/scheduled views. Each is a filterable report with its own CSV export.'
+    body: 'The analytics — reports you can generate from information stored across the app and download as spreadsheets for your physical files.'
   },
   {
     id: 'companion', hub: 'More', page: 'companion.html',
     selector: '#companion-type-tabs',
-    title: 'Companion share-outs',
-    body: 'Read-only, no-account links for buyers and partners — the seg-tab is the bundle type (prospective, current families, partners). “What to include” only ever subtracts from the defaults; recipients derive from live waitlist, open sales and contracts.'
+    title: 'Companion app',
+    body: 'A place to generate snapshots of the information you want to share, in a format that looks like an app, without putting your business online. Three preconfigured Companion packages suit different audiences: pick the toggle, find the relevant contact, preview it, and send off a link. The recipient sees just what you sent, in a clean, readable format.'
   },
   {
     id: 'import-export', hub: 'More', page: 'import-export.html',
     selector: '#btn-backup',
-    title: 'Back up your data',
-    body: 'Everything lives in this browser — so before you start adding your own records, export a JSON backup here. Restore previews every change before committing, and seven CSV importers match-or-create by natural key with a dry-run preview. That’s the tour!'
+    title: 'Import / export',
+    body: 'Where you bring in CSV files to populate a large kennel all at once, and where you back up your entire dataset to protect against loss. There’s no cloud storage, so losing your phone means starting over — back up regularly and keep the file somewhere central, like a Drive or an email to yourself, for easy recovery.'
   }
 ];

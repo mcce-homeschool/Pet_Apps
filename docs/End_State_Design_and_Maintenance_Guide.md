@@ -499,7 +499,11 @@ page-agnostic card with a single forward button (`step.button`, e.g. "Explore To
 step (no `kind`) spotlights a real element and pins a compact card to the **top** of the
 viewport, scrolling its target to sit just below so the card never covers it (a target pinned
 too high on its page to clear the top card flips the card to the **bottom** of the viewport
-instead; falls back to a centered card if the target never appears). `app.js`'s shared `boot()` calls `runWizardStep()`
+instead; a `ResizeObserver` re-positions the target as a content-heavy page's sections load in,
+so a late reflow can't leave it off-screen; and it falls back to a centered card if the target
+never appears). **Finishing** the tour (the last step's "Finish") mirrors the "I'll explore"
+onboarding ending: it shows the closing card, then `clearSampleData()` removes the Thornfield
+seed and hands off to the kennel-setup modal (`showKennelSetupModal`). `app.js`'s shared `boot()` calls `runWizardStep()`
 unconditionally on every page — the only wizard hook; no page file is wizard-aware.
 Detail-page highlight steps carry an `anchor` slug that `wizardUI.js` resolves to the current
 seed's real id at runtime via the `manifest.named` map the seed writes (the seed uses runtime
