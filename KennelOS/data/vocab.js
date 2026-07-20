@@ -343,6 +343,7 @@ export const EXPENSE_CATEGORIES = [
   { value: 'supplies',     label: 'Supplies',           badge: 'badge-amber' },
   { value: 'facility',     label: 'Facility',           badge: 'badge-amber' },
   { value: 'boarding',     label: 'Boarding & travel',  badge: 'badge-amber' },
+  { value: 'mileage',      label: 'Mileage / travel',   badge: 'badge-amber' },
   { value: 'stud_fee',     label: 'Stud fee',           badge: 'badge-purple' },
   { value: 'dog_purchase', label: 'New dog purchase',   badge: 'badge-red' },
   { value: 'marketing',    label: 'Marketing',          badge: 'badge-blue' },

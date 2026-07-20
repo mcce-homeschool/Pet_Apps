@@ -12,6 +12,7 @@ const KEYS = {
   myKennelSetupSkipped: 'kennelOS.myKennelSetupSkipped',
   companion: 'kennelOS.companion',
   invoiceDefaults: 'kennelOS.invoiceDefaults',
+  mileageDefaults: 'kennelOS.mileageDefaults',
   expensesMigrated: 'kennelOS.expensesMigrated',
   wizardStatus: 'kennelOS.wizardStatus',
   wizardStepIndex: 'kennelOS.wizardStepIndex'
@@ -210,6 +211,28 @@ export function getInvoiceDefaults() {
 export function setInvoiceDefaults(values) {
   const merged = { ...getInvoiceDefaults(), ...values };
   localStorage.setItem(KEYS.invoiceDefaults, JSON.stringify(merged));
+  return merged;
+}
+
+// --- Mileage defaults (§21) ------------------------------------------------
+// The default reimbursement/deduction rate per mile the add-expense form's
+// mileage mode prefills. Editable per entry, or saved back here as the new
+// default. 0.70 is a sensible starting value (the 2025 US IRS standard mileage
+// rate) — change it to whatever rate your jurisdiction/records use. Units are
+// the app's native decimal dollars per mile.
+const MILEAGE_DEFAULTS = {
+  rate: 0.70
+};
+
+export function getMileageDefaults() {
+  const raw = localStorage.getItem(KEYS.mileageDefaults);
+  if (!raw) return { ...MILEAGE_DEFAULTS };
+  try { return { ...MILEAGE_DEFAULTS, ...(JSON.parse(raw) || {}) }; } catch { return { ...MILEAGE_DEFAULTS }; }
+}
+
+export function setMileageDefaults(values) {
+  const merged = { ...getMileageDefaults(), ...values };
+  localStorage.setItem(KEYS.mileageDefaults, JSON.stringify(merged));
   return merged;
 }
 
