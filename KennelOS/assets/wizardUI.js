@@ -7,6 +7,7 @@ import {
   startWizard, advanceWizard, retreatWizard, dismissWizard
 } from '../data/wizardState.js';
 import { WIZARD_STEPS } from '../data/wizardSteps.js';
+import { getSampleDataManifest } from '../data/settings.js';
 import { confirmModal, alertModal, esc } from './ui.js';
 
 function rootPrefix() {
@@ -18,12 +19,35 @@ function currentFile() {
   return parts[parts.length - 1] || 'index.html';
 }
 
-function resolvePagePath(page) {
-  return `${rootPrefix()}pages/${page}`;
+function currentId() {
+  return new URLSearchParams(location.search).get('id');
+}
+
+// Detail-page steps carry an `anchor` slug (e.g. 'juniper'); resolve it to the
+// current seed's real id via the manifest.named map the seed writes (spec §3.2,
+// reconciled to the actual runtime-UUID seed). Null for list/hub steps.
+function resolvedAnchorId(step) {
+  if (!step.anchor) return null;
+  return getSampleDataManifest()?.named?.[step.anchor] || null;
+}
+
+// Is the browser already on this step's page? File must match, and for an
+// anchored detail step the ?id= must be the resolved anchor id too, so
+// advancing between two different dogs (both dog.html) still navigates.
+function isOnStepPage(step) {
+  if (step.page.split('?')[0] !== currentFile()) return false;
+  const wantId = resolvedAnchorId(step);
+  return wantId ? currentId() === wantId : true;
+}
+
+function resolveStepUrl(step) {
+  const base = `${rootPrefix()}pages/${step.page.split('?')[0]}`;
+  const id = resolvedAnchorId(step);
+  return id ? `${base}?id=${id}` : base;
 }
 
 function goToStep(step) {
-  location.href = resolvePagePath(step.page);
+  location.href = resolveStepUrl(step);
 }
 
 // --- First offer -------------------------------------------------------
@@ -41,7 +65,7 @@ export async function maybeOfferWizardStart() {
   }
   startWizard();
   const step = currentStep();
-  if (step.page.split('?')[0] === currentFile()) runWizardStep();
+  if (isOnStepPage(step)) runWizardStep();
   else goToStep(step);
 }
 
@@ -65,7 +89,7 @@ export function renderWizardMenuEntry() {
     if (status !== 'active') startWizard();
     const step = currentStep();
     if (!step) return;
-    if (step.page.split('?')[0] === currentFile()) runWizardStep();
+    if (isOnStepPage(step)) runWizardStep();
     else goToStep(step);
   });
   menu.appendChild(a);
@@ -76,6 +100,7 @@ let mountedNodes = [];
 let spotlightEl = null;
 
 function teardown() {
+  renderToken++; // invalidate any in-flight target poll
   mountedNodes.forEach((n) => n.remove());
   mountedNodes = [];
   if (spotlightEl) {
@@ -116,14 +141,14 @@ function goNext() {
     return;
   }
   const step = currentStep();
-  if (step.page.split('?')[0] === currentFile()) runWizardStep();
+  if (isOnStepPage(step)) runWizardStep();
   else goToStep(step);
 }
 
 function goBack() {
   retreatWizard();
   const step = currentStep();
-  if (step.page.split('?')[0] === currentFile()) runWizardStep();
+  if (isOnStepPage(step)) runWizardStep();
   else goToStep(step);
 }
 
@@ -160,23 +185,37 @@ function mountTooltip(step, target) {
   if (target) positionTooltip(tip, target);
 }
 
-function mountStep(step) {
-  revealTarget(step);
-  const target = step.selector ? document.querySelector(step.selector) : null;
+// Bumped on every runWizardStep()/teardown() so a pending target poll from a
+// superseded step bails instead of mounting a stale, duplicate tooltip.
+let renderToken = 0;
 
+function mountStep(step) {
   const overlay = document.createElement('div');
   overlay.className = 'wizard-overlay';
   document.body.appendChild(overlay);
   mountedNodes.push(overlay);
+  waitForTarget(step, renderToken, 0);
+}
 
+// app.js's shared boot() runs runWizardStep() synchronously, but each page
+// renders its own content asynchronously (repo reads → innerHTML), so a step's
+// target often isn't in the DOM yet on the first tick. Poll briefly for it
+// before falling back to the centered non-spotlit tooltip (§4.3), so the
+// fallback is reserved for genuinely-absent targets, not slow renders.
+function waitForTarget(step, token, attempt) {
+  if (token !== renderToken) return; // superseded by a newer step/teardown
+  if (!step.selector) { mountTooltip(step, null); return; }
+  revealTarget(step); // open a collapsed card once it exists
+  const target = document.querySelector(step.selector);
   if (target) {
     target.classList.add('wizard-spotlight-target');
     spotlightEl = target;
-    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    requestAnimationFrame(() => mountTooltip(step, target));
-  } else {
-    mountTooltip(step, null); // §4.3 case 3 — missing target, centered non-spotlit fallback
+    target.scrollIntoView({ block: 'center', behavior: 'auto' });
+    requestAnimationFrame(() => { if (token === renderToken) mountTooltip(step, target); });
+    return;
   }
+  if (attempt >= 40) { mountTooltip(step, null); return; } // ~2s, then fall back
+  setTimeout(() => waitForTarget(step, token, attempt + 1), 50);
 }
 
 function renderResumePill(step) {
@@ -197,7 +236,7 @@ export function runWizardStep() {
   if (getWizardStatus() !== 'active') return;
   const step = currentStep();
   if (!step) return;
-  if (step.page.split('?')[0] !== currentFile()) {
+  if (!isOnStepPage(step)) {
     renderResumePill(step);
     return;
   }

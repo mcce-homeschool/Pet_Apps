@@ -82,6 +82,8 @@ KennelOS/
     sampleData.js              "Thornfield Kennels" demo seed/clear
     seedImport.js              Optional breed+test vocabulary seed
     kennelSetup.js             First-run "your kennel/owner" wizard logic
+    wizardState.js             Guided-tour status/index state machine (§11)
+    wizardSteps.js             Guided-tour step catalog — data only (§11)
     settings.js                localStorage-backed UI prefs / identity keys
     nudgeState.js              Device-local dismissal ledger for derived nudges
     nudges.js                  Derived-nudge engine — computeNudges() (§19)
@@ -100,6 +102,7 @@ KennelOS/
     importView.js              Shared CSV import dry-run/commit UI
     sampleDataUI.js            First-run sample-data prompt + banner
     kennelSetupUI.js           Kennel-setup prompt/wizard + seed prefill
+    wizardUI.js                Guided-tour overlay/spotlight/tooltip + resume pill (§11)
     expensePanel.js            Reusable per-subject expense ledger panel (§21)
   pages/                       One .js + .html per screen (see §13 catalog)
 ```
@@ -463,7 +466,24 @@ way.
   a never-visited browser sees.
 
 First-run flow (`app.js`): request durable storage once → offer sample data; if declined
-(or after sample data is later cleared), offer kennel setup.
+(or after sample data is later cleared), offer kennel setup. When sample data **is** seeded,
+`maybeOfferWizardStart()` then offers the **guided tour** (below).
+
+**Guided tour (first-run wizard).** A spotlight coach-mark tour of the seeded Thornfield
+packet — a pure UI/state feature that reads existing records (never writes app data) and
+persists its own progress in `localStorage` via `settings.js` (`wizardStatus` +
+`wizardStepIndex`), no Dexie table, no schema, no `referenceRegistry.js` entry. Three
+modules: **`data/wizardState.js`** (the status/index state machine + `isTourAvailable()`,
+which gates the tour on the Thornfield seed being the active dataset — same two settings
+signals as the sample-data banner), **`data/wizardSteps.js`** (the static ordered
+`WIZARD_STEPS` catalog, authored from `Tutorial_Coverage_Matrix_v1.md` §B/§F — data only,
+like `vocab.js`), and **`assets/wizardUI.js`** (the box-shadow spotlight overlay, tooltip,
+nav "Take the tour" entry, and free-navigation "Resume tour" pill). `app.js`'s shared
+`boot()` calls `runWizardStep()` unconditionally on every page — the only wizard hook; no
+page file is wizard-aware. Detail-page steps carry an `anchor` slug that `wizardUI.js`
+resolves to the current seed's real id at runtime via the `manifest.named` map the seed
+writes (the seed uses runtime `crypto.randomUUID()` ids, so links can only resolve
+per-seed). See `docs/Wizard_Runtime_Spec_v1.md` for the full design.
 
 ---
 
@@ -471,7 +491,7 @@ First-run flow (`app.js`): request durable storage once → offer sample data; i
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v72`) + a `PRECACHE_URLS` list of **every** app
+- `CACHE_NAME` (currently `kennelos-shell-v73`) + a `PRECACHE_URLS` list of **every** app
   file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed file
   fails the whole install). `activate` deletes old caches. Fetch is **cache-first** for

@@ -6,7 +6,7 @@
 // never re-fetches a stale precached file on its own; only a CACHE_NAME change
 // (which changes these bytes, so the browser detects a new service worker,
 // installs it, and purges the old cache in `activate`) rolls it over.
-const CACHE_NAME = 'kennelos-shell-v72';
+const CACHE_NAME = 'kennelos-shell-v73';
 
 const PRECACHE_URLS = [
   './',
@@ -28,6 +28,7 @@ const PRECACHE_URLS = [
   'assets/sampleDataUI.js',
   'assets/timeline.js',
   'assets/ui.js',
+  'assets/wizardUI.js',
   'assets/icons/apple-touch-icon.png',
   'assets/icons/favicon-32.png',
   'assets/icons/icon-192.png',
@@ -61,6 +62,8 @@ const PRECACHE_URLS = [
   'data/settings.js',
   'data/studServiceRepo.js',
   'data/vocab.js',
+  'data/wizardState.js',
+  'data/wizardSteps.js',
   'pages/active-breeding.html',
   'pages/active-breeding.js',
   'pages/board.html',
