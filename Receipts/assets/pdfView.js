@@ -1,12 +1,13 @@
 // pdfView.js — "Save as PDF" for receipt photos. No PDF library: it builds a
-// clean, one-receipt-per-page printable view in the current document and calls
-// window.print(), so the user saves it via the browser's own Print → Save as
-// PDF (same posture as KennelOS's invoice/puppy-record print docs, and iOS-safe
-// because nothing is opened in a popup). Fully offline.
+// clean printable view in the current document and calls window.print(), so
+// the user saves it via the browser's own Print → Save as PDF (same posture
+// as KennelOS's invoice/puppy-record print docs, and iOS-safe because nothing
+// is opened in a popup). Fully offline.
 //
-// Each page shows the receipt image plus its details (receipt #, date, amount,
-// vendor, category, business, subject, notes) — a self-documenting archive for
-// tax time. Entries with no photo are skipped.
+// Two receipts share a page (one alone — the per-receipt "Save as PDF" case —
+// gets the full page). Each shows the receipt image plus its details (receipt
+// #, date, amount, vendor, category, business, subject, notes) — a
+// self-documenting archive for tax time. Entries with no photo are skipped.
 import { photoRepo } from '../data/photoRepo.js';
 import { effectiveAmount } from '../data/entryRepo.js';
 import { categoryLabel, subjectTypeLabel } from '../data/vocab.js';
@@ -79,16 +80,23 @@ export async function printReceiptsPdf(entries, opts = {}) {
       <p class="pdf-generated">Generated ${esc(fmtDate(new Date().toISOString().slice(0, 10)))}</p>
     </section>` : '';
 
+  // Two receipts per page (keeps a full page for the single-receipt case).
+  const groups = [];
+  for (let i = 0; i < pages.length; i += 2) groups.push(pages.slice(i, i + 2));
+
   const root = document.createElement('div');
   root.className = 'pdf-root';
-  root.innerHTML = coverHtml + pages.map(({ e, dataUrl }) => `
-    <section class="pdf-page">
-      <div class="pdf-head">
-        <span class="pdf-title">${esc(title)}</span>
-        <span class="pdf-rcpt">${esc(e.receipt_number || '')}</span>
-      </div>
-      <div class="pdf-imgwrap"><img src="${dataUrl}" alt="receipt"></div>
-      <table class="pdf-meta">${detailRows(e)}</table>
+  root.innerHTML = coverHtml + groups.map((group) => `
+    <section class="pdf-page${group.length === 1 ? ' pdf-single' : ''}">
+      ${group.map(({ e, dataUrl }) => `
+        <div class="pdf-receipt">
+          <div class="pdf-head">
+            <span class="pdf-title">${esc(title)}</span>
+            <span class="pdf-rcpt">${esc(e.receipt_number || '')}</span>
+          </div>
+          <div class="pdf-imgwrap"><img src="${dataUrl}" alt="receipt"></div>
+          <table class="pdf-meta">${detailRows(e)}</table>
+        </div>`).join('')}
     </section>`).join('') + ((summary && pages.length === 1) ? `<p class="pdf-single-total">Total: ${esc(fmtMoney(total))}</p>` : '');
 
   document.body.appendChild(root);

@@ -206,20 +206,27 @@ h1, h2 { margin: 0; }
 /* ---- Save-as-PDF print view ---- */
 .pdf-root { display: none; }
 .pdf-page { break-inside: avoid; }
+.pdf-receipt { break-inside: avoid; }
 @media print {
   @page { margin: 14mm; }
   body.printing > *:not(.pdf-root) { display: none !important; }
   .pdf-root { display: block; }
   .pdf-page { page-break-after: always; color: #000; }
   .pdf-page:last-child { page-break-after: auto; }
-  .pdf-head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 12px; }
+  .pdf-receipt + .pdf-receipt { border-top: 1px dashed #999; margin-top: 8mm; padding-top: 8mm; }
+  .pdf-head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
   .pdf-title { font-weight: 700; font-size: 15px; }
   .pdf-rcpt { font-family: ui-monospace, monospace; font-weight: 700; font-size: 15px; }
   .pdf-imgwrap { text-align: center; }
   .pdf-imgwrap img { max-width: 100%; max-height: 165mm; object-fit: contain; border: 1px solid #ccc; }
-  .pdf-meta { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
-  .pdf-meta th { text-align: left; width: 34mm; color: #444; font-weight: 700; padding: 3px 8px 3px 0; vertical-align: top; white-space: nowrap; }
-  .pdf-meta td { padding: 3px 0; color: #000; }
+  /* Two receipts share a page, so each image is capped smaller than the
+     full-page (single-receipt) case — sized to leave room for a worst-case
+     (trip, all fields + notes) metadata table under both without overflowing
+     onto a third page. */
+  .pdf-page:not(.pdf-single) .pdf-imgwrap img { max-height: 58mm; }
+  .pdf-meta { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+  .pdf-meta th { text-align: left; width: 30mm; color: #444; font-weight: 700; padding: 2px 8px 2px 0; vertical-align: top; white-space: nowrap; }
+  .pdf-meta td { padding: 2px 0; color: #000; }
   .pdf-cover h1 { font-size: 22px; margin: 0 0 18px; }
   .pdf-summary { border-collapse: collapse; font-size: 14px; }
   .pdf-summary th { text-align: left; color: #444; font-weight: 700; padding: 6px 24px 6px 0; }
