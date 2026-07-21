@@ -366,6 +366,13 @@ export function eventTypesFor(subjectType) {
   return EVENT_TYPES.filter((t) => t.subjects.includes(subjectType));
 }
 
+// The KennelAssistant allow-list (§26): the event types the helper app can SEE
+// (assistantSync's feed builder) and LOG (assistant.js's form) — one list so
+// the two can never drift. Lives here (not in either sync module) because both
+// sides import vocab and neither should import the other's database module.
+// Widen/narrow by editing this list.
+export const ASSISTANT_EVENT_TYPES = ['weight_check', 'milestone', 'note'];
+
 // --- Financials (the Expense ledger) --------------------------------------
 // The controlled category vocabulary for an Expense. Same shape as every other
 // vocab here (value/label/badge) so dropdowns and badges read from one place.

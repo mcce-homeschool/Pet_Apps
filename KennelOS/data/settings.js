@@ -15,7 +15,9 @@ const KEYS = {
   mileageDefaults: 'kennelOS.mileageDefaults',
   expensesMigrated: 'kennelOS.expensesMigrated',
   wizardStatus: 'kennelOS.wizardStatus',
-  wizardStepIndex: 'kennelOS.wizardStepIndex'
+  wizardStepIndex: 'kennelOS.wizardStepIndex',
+  dropbox: 'kennelOS.dropbox',
+  assistantLastSync: 'kennelOS.assistantLastSync'
 };
 
 export function getLastBackupDate() {
@@ -275,6 +277,41 @@ export function getWizardStepIndexRaw() {
 
 export function setWizardStepIndexRaw(index) {
   localStorage.setItem(KEYS.wizardStepIndex, String(index));
+}
+
+// --- Dropbox sync (data/dropbox.js) -----------------------------------------
+// One JSON blob holding the user-created Dropbox app key plus the OAuth tokens
+// the PKCE flow produces (refresh token, cached short-lived access token, and
+// the in-flight PKCE verifier during a redirect). App-level config, so it lives
+// here like every other setting — never in IndexedDB, and it rides Reset App's
+// clearAllSettings like everything else. The SAME connection is shared by the
+// Import/Export page and the KennelAssistant page (same origin, same folder).
+export function getDropboxSettings() {
+  const raw = localStorage.getItem(KEYS.dropbox);
+  if (!raw) return {};
+  try { return JSON.parse(raw) || {}; } catch { return {}; }
+}
+
+export function setDropboxSettings(values) {
+  const merged = { ...getDropboxSettings(), ...values };
+  // A key explicitly set to null is a delete, so tokens can be dropped cleanly.
+  for (const k of Object.keys(merged)) if (merged[k] == null) delete merged[k];
+  localStorage.setItem(KEYS.dropbox, JSON.stringify(merged));
+  return merged;
+}
+
+export function clearDropboxSettings() {
+  localStorage.removeItem(KEYS.dropbox);
+}
+
+// KennelAssistant: when the dog feed was last pulled from Dropbox (ISO string).
+export function getAssistantLastSync() {
+  return localStorage.getItem(KEYS.assistantLastSync);
+}
+
+export function setAssistantLastSync(iso = new Date().toISOString()) {
+  localStorage.setItem(KEYS.assistantLastSync, iso);
+  return iso;
 }
 
 // Full app reset (Reset App to Start): drop every key this app owns in
