@@ -44,6 +44,9 @@ function validate(e) {
     throw new Error('Entry: name the dog this cost is for.');
   }
   if (e.kind === 'trip') {
+    if (e.odometer_start != null && e.odometer_end != null && e.odometer_end < e.odometer_start) {
+      throw new Error('Entry: the ending odometer must be at or above the starting odometer.');
+    }
     if (e.miles == null || e.miles < 0) throw new Error('Entry: a trip needs a non-negative miles value.');
     if (e.mileage_rate == null || e.mileage_rate < 0) throw new Error('Entry: a trip needs a rate per mile.');
   } else {
@@ -55,6 +58,14 @@ function validate(e) {
 function normalize(data) {
   const kind = data.kind === 'trip' ? 'trip' : 'receipt';
   const isTrip = kind === 'trip';
+  // Odometer start/end (trip only). When both are present, miles is DERIVED as
+  // end − start; otherwise fall back to a directly-entered miles value.
+  const odoStart = isTrip ? numOrNull(data.odometer_start) : null;
+  const odoEnd = isTrip ? numOrNull(data.odometer_end) : null;
+  let miles = isTrip ? numOrNull(data.miles) : null;
+  if (isTrip && odoStart != null && odoEnd != null) {
+    miles = Math.round((odoEnd - odoStart) * 10) / 10;
+  }
   return {
     kind,
     entry_date: data.entry_date || '',
@@ -64,8 +75,15 @@ function normalize(data) {
     vendor: String(data.vendor || '').trim(),
     notes: String(data.notes || '').trim(),
     amount: isTrip ? null : numOrNull(data.amount),
-    miles: isTrip ? numOrNull(data.miles) : null,
+    miles,
     mileage_rate: isTrip ? numOrNull(data.mileage_rate) : null,
+    // Odometer readings + the vehicle driven and by whom (trip only). These stay
+    // in this app for your mileage log; they do NOT ride to KennelOS (which gets
+    // only miles × rate).
+    odometer_start: odoStart,
+    odometer_end: odoEnd,
+    vehicle: isTrip ? String(data.vehicle || '').trim() : '',
+    driver: isTrip ? String(data.driver || '').trim() : '',
     // The receipt number ties this entry to its KennelOS row (assigned on create
     // if blank). `business` buckets the entry for this app's own filtering/export
     // scoping — it deliberately does NOT ride to KennelOS.

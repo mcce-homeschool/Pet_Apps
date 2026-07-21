@@ -12,8 +12,12 @@ the browser, works offline as an installable PWA.
   image is stored on-device, and offline OCR pre-fills **amount, date, and vendor**
   for you to confirm. Pick a category (the same categories KennelOS uses) and whether
   the cost is kennel-wide overhead or for a specific dog.
-- **🚗 Trips** — log mileage (miles × rate). The dollar amount is figured the same way
-  KennelOS figures it, so a trip becomes a clean deductible-mileage expense.
+- **🚗 Trips** — log mileage (miles × rate). Enter **start/end odometer** and the miles
+  compute themselves (or type miles directly), and record the **vehicle** and **driver**
+  (each a separately saved list, remembered as you type and prefilled next time). The
+  dollar amount is figured the same way KennelOS figures it, so a trip becomes a clean
+  deductible-mileage expense. Odometer/vehicle/driver stay in this app for your mileage
+  log — the KennelOS export carries only miles × rate.
 - **⬆ Export to KennelOS** — download a CSV of everything (or just what you haven't
   exported yet). Load it in KennelOS under **Import / Export → Import expenses (CSV)**,
   which shows a preview where you can **attach each expense to a dog, litter, pairing,
@@ -31,6 +35,18 @@ the browser, works offline as an installable PWA.
 - **Categories** — the picker mirrors KennelOS's categories exactly; you can also add
   your **own custom categories** in Settings (KennelOS files anything it doesn't
   recognize under "Other", so custom ones suit non-kennel businesses).
+
+- **🗓 Date-range filter** — the Export dialog has optional **From/To** dates that scope
+  both the CSV and the PDF (and the live totals shown in the dialog update as you set
+  them), so you can pull, say, one quarter's receipts.
+
+- **🖼 Photos → PDF** — save the receipt photos as a PDF for your records: a **summary
+  cover page** (count, date range, and **total** of the included receipts) followed by a
+  tidy one-receipt-per-page document (image + number, date, amount, vendor/mileage,
+  odometer, vehicle, driver, category, business, subject, notes). Available from the
+  Export dialog (honoring the same business + date-range/scope filters) and per-receipt
+  from the photo viewer. Uses the browser's own Print → Save as PDF — no library, fully
+  offline.
 
 **The photos stay here.** KennelOS stores no images by design, so this app is your
 archive of the original receipt pictures; only the extracted numbers cross over.

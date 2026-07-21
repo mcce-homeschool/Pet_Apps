@@ -18,7 +18,11 @@ const KEYS = {
   seq: 'receipts.seq',
   businesses: 'receipts.businesses',
   defaultBusiness: 'receipts.defaultBusiness',
-  customCategories: 'receipts.customCategories'
+  customCategories: 'receipts.customCategories',
+  vehicles: 'receipts.vehicles',
+  drivers: 'receipts.drivers',
+  lastVehicle: 'receipts.lastVehicle',
+  lastDriver: 'receipts.lastDriver'
 };
 
 const DEFAULTS = { kennelName: '', mileageRate: 0.70 };
@@ -110,3 +114,37 @@ export function addCustomCategory(name) {
 export function removeCustomCategory(name) {
   return setCustomCategories(getCustomCategories().filter((c) => c !== name));
 }
+
+// --- Vehicles & drivers (trip log) ----------------------------------------
+// Two separate saved lists, so a trip can record which vehicle was driven and by
+// whom. These stay in this app for your own mileage log — they do NOT ride into
+// the KennelOS export (which carries only miles × rate). `lastVehicle`/`lastDriver`
+// remember your most recent pick to prefill the next trip.
+function listGet(key) {
+  try {
+    const arr = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(arr) ? arr.filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+function listSet(key, list) {
+  const clean = [...new Set((list || []).map((s) => String(s).trim()).filter(Boolean))];
+  localStorage.setItem(key, JSON.stringify(clean));
+  return clean;
+}
+
+export function getVehicles() { return listGet(KEYS.vehicles); }
+export function setVehicles(list) { return listSet(KEYS.vehicles, list); }
+export function addVehicle(name) { const n = String(name || '').trim(); return n ? listSet(KEYS.vehicles, [...getVehicles(), n]) : getVehicles(); }
+export function removeVehicle(name) { return listSet(KEYS.vehicles, getVehicles().filter((v) => v !== name)); }
+
+export function getDrivers() { return listGet(KEYS.drivers); }
+export function setDrivers(list) { return listSet(KEYS.drivers, list); }
+export function addDriver(name) { const n = String(name || '').trim(); return n ? listSet(KEYS.drivers, [...getDrivers(), n]) : getDrivers(); }
+export function removeDriver(name) { return listSet(KEYS.drivers, getDrivers().filter((d) => d !== name)); }
+
+export function getLastVehicle() { return localStorage.getItem(KEYS.lastVehicle) || ''; }
+export function setLastVehicle(v) { localStorage.setItem(KEYS.lastVehicle, String(v ?? '').trim()); }
+export function getLastDriver() { return localStorage.getItem(KEYS.lastDriver) || ''; }
+export function setLastDriver(v) { localStorage.setItem(KEYS.lastDriver, String(v ?? '').trim()); }

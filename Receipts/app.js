@@ -10,9 +10,12 @@ import { EXPENSE_CATEGORIES, SUBJECT_TYPES, categoryLabel, categoryList } from '
 import {
   getKennelName, setKennelName, getMileageRate, setMileageRate,
   getBusinesses, addBusiness, removeBusiness, getDefaultBusiness, setDefaultBusiness,
-  getCustomCategories, addCustomCategory, removeCustomCategory
+  getCustomCategories, addCustomCategory, removeCustomCategory,
+  getVehicles, addVehicle, removeVehicle, getDrivers, addDriver, removeDriver,
+  getLastVehicle, setLastVehicle, getLastDriver, setLastDriver
 } from './data/settings.js';
 import * as ocr from './data/ocr.js';
+import { printReceiptsPdf } from './assets/pdfView.js';
 import { esc, fmtMoney, fmtDate, todayYMD, toast, openModal } from './assets/ui.js';
 
 let ocrAvailable = false;
@@ -257,7 +260,7 @@ function openReceiptForm(entry) {
     if (ocrAvailable) runScan(file);
   });
 
-  el.querySelector('#view-photo').addEventListener('click', () => viewPhoto(photoId));
+  el.querySelector('#view-photo').addEventListener('click', () => viewPhoto(photoId, entry));
   scanBtn.addEventListener('click', async () => {
     const p = await photoRepo.get(photoId);
     if (p?.blob) runScan(p.blob);
@@ -328,14 +331,32 @@ function openTripForm(entry) {
         <label>Date
           <input type="date" name="entry_date" value="${esc(entry?.entry_date || todayYMD())}" required>
         </label>
-        <label>Miles
-          <input type="number" step="0.1" min="0" inputmode="decimal" name="miles" value="${entry?.miles ?? ''}" placeholder="0" required>
+        <label>Rate per mile
+          <input type="number" step="0.001" min="0" inputmode="decimal" name="mileage_rate" value="${entry?.mileage_rate ?? getMileageRate()}" required>
         </label>
       </div>
-      <label>Rate per mile
-        <input type="number" step="0.001" min="0" inputmode="decimal" name="mileage_rate" value="${entry?.mileage_rate ?? getMileageRate()}" required>
+      <div class="grid2">
+        <label>Start odometer <span class="muted">(optional)</span>
+          <input type="number" step="0.1" min="0" inputmode="decimal" name="odometer_start" value="${entry?.odometer_start ?? ''}" placeholder="e.g. 41200">
+        </label>
+        <label>End odometer <span class="muted">(optional)</span>
+          <input type="number" step="0.1" min="0" inputmode="decimal" name="odometer_end" value="${entry?.odometer_end ?? ''}" placeholder="e.g. 41230">
+        </label>
+      </div>
+      <label>Miles <span class="muted">(auto from odometer, or enter directly)</span>
+        <input type="number" step="0.1" min="0" inputmode="decimal" name="miles" value="${entry?.miles ?? ''}" placeholder="0" required>
       </label>
       <div class="mileage-preview muted" id="mileage-preview"></div>
+      <div class="grid2">
+        <label>Vehicle
+          <input type="text" name="vehicle" list="veh-list" value="${esc(entry?.vehicle ?? (isNew ? getLastVehicle() : ''))}" placeholder="e.g. Ford F-150" autocomplete="off">
+          <datalist id="veh-list">${getVehicles().map((v) => `<option value="${esc(v)}"></option>`).join('')}</datalist>
+        </label>
+        <label>Driver
+          <input type="text" name="driver" list="drv-list" value="${esc(entry?.driver ?? (isNew ? getLastDriver() : ''))}" placeholder="e.g. Alex" autocomplete="off">
+          <datalist id="drv-list">${getDrivers().map((d) => `<option value="${esc(d)}"></option>`).join('')}</datalist>
+        </label>
+      </div>
       ${subjectFields(entry)}
       ${metaFields(entry)}
       <label>Purpose / notes
@@ -368,8 +389,18 @@ function openTripForm(entry) {
       ? `= ${fmtMoney(Math.round((miles * rate + Number.EPSILON) * 100) / 100)}  (${miles} mi × ${fmtMoney(rate)}/mi)`
       : '';
   }
+  // When both odometer readings are present, miles = end − start (still editable).
+  function recomputeMilesFromOdo() {
+    const s = form.odometer_start.value, e = form.odometer_end.value;
+    if (s !== '' && e !== '' && Number.isFinite(Number(s)) && Number.isFinite(Number(e)) && Number(e) >= Number(s)) {
+      form.miles.value = String(Math.round((Number(e) - Number(s)) * 10) / 10);
+    }
+    updatePreview();
+  }
   form.miles.addEventListener('input', updatePreview);
   form.mileage_rate.addEventListener('input', updatePreview);
+  form.odometer_start.addEventListener('input', recomputeMilesFromOdo);
+  form.odometer_end.addEventListener('input', recomputeMilesFromOdo);
   updatePreview();
 
   el.querySelector('#tphoto-input').addEventListener('change', async (ev) => {
@@ -380,16 +411,22 @@ function openTripForm(entry) {
     el.querySelector('#tview-photo').style.display = '';
     toast('Photo attached');
   });
-  el.querySelector('#tview-photo').addEventListener('click', () => viewPhoto(photoId));
+  el.querySelector('#tview-photo').addEventListener('click', () => viewPhoto(photoId, entry));
   if (!isNew) el.querySelector('#tdel-btn').addEventListener('click', () => confirmDelete(entry, close));
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    const vehicle = form.vehicle.value.trim();
+    const driver = form.driver.value.trim();
     const data = {
       kind: 'trip',
       entry_date: form.entry_date.value,
       miles: form.miles.value,
       mileage_rate: form.mileage_rate.value,
+      odometer_start: form.odometer_start.value,
+      odometer_end: form.odometer_end.value,
+      vehicle,
+      driver,
       notes: form.notes.value,
       photo_id: photoId,
       ...readSubject(form),
@@ -397,6 +434,9 @@ function openTripForm(entry) {
     };
     try {
       if (isNew) await entryRepo.create(data); else await entryRepo.update(entry.id, data);
+      // Remember vehicle/driver: add to the saved lists and prefill next time.
+      if (vehicle) { addVehicle(vehicle); setLastVehicle(vehicle); }
+      if (driver) { addDriver(driver); setLastDriver(driver); }
       saved = true;
       close();
       toast(isNew ? 'Trip logged' : 'Trip updated');
@@ -408,11 +448,13 @@ function openTripForm(entry) {
 }
 
 // ---------------------------------------------------------- helpers -------
-async function viewPhoto(photoId) {
+async function viewPhoto(photoId, entry) {
   if (!photoId) return;
   const url = await photoRepo.getObjectUrl(photoId);
   if (!url) return;
-  const { close } = openModal(`<div class="photo-full"><img src="${url}" alt="receipt photo"><div class="form-actions"><span class="spacer"></span><button class="btn" data-close>Close</button></div></div>`, () => URL.revokeObjectURL(url));
+  const pdfBtn = entry ? `<button class="btn btn-soft" id="photo-pdf">🖼 Save as PDF</button>` : '';
+  const { el, close } = openModal(`<div class="photo-full"><img src="${url}" alt="receipt photo"><div class="form-actions">${pdfBtn}<span class="spacer"></span><button class="btn" data-close>Close</button></div></div>`, () => URL.revokeObjectURL(url));
+  el.querySelector('#photo-pdf')?.addEventListener('click', () => printReceiptsPdf([entry], { title: entry.business || 'Receipt', summary: false }));
 }
 
 function confirmDelete(entry, closeParent) {
@@ -455,27 +497,47 @@ async function openExport() {
       <button class="icon-btn" data-close aria-label="Close">✕</button>
     </div>
     <p class="muted">Downloads a CSV you load in KennelOS under <strong>Import / Export → Import expenses (CSV)</strong>. The photos stay here — KennelOS stores the numbers, this app keeps your originals.</p>
-    <div class="form">${bizSelect}</div>
+    <div class="form">
+      ${bizSelect}
+      <div class="grid2">
+        <label>From date <span class="muted">(optional)</span>
+          <input type="date" id="exp-from">
+        </label>
+        <label>To date <span class="muted">(optional)</span>
+          <input type="date" id="exp-to">
+        </label>
+      </div>
+    </div>
     <div class="export-choices" id="exp-choices"></div>
-    <label class="check"><input type="checkbox" id="mark-exported" checked> Mark these as exported</label>
-    <div class="form-actions"><span class="spacer"></span>
+    <label class="check"><input type="checkbox" id="mark-exported" checked> Mark these as exported (CSV only)</label>
+    <div class="form-actions">
+      <button class="btn btn-soft" id="do-pdf" title="Save the receipt photos as a PDF">🖼 Photos → PDF</button>
+      <span class="spacer"></span>
       <button class="btn" data-close>Cancel</button>
-      <button class="btn btn-primary" id="do-export">⬇ Download CSV</button>
+      <button class="btn btn-primary" id="do-export">⬇ CSV for KennelOS</button>
     </div>`);
 
   const bizEl = el.querySelector('#exp-business');
+  const fromEl = el.querySelector('#exp-from');
+  const toEl = el.querySelector('#exp-to');
   const choicesEl = el.querySelector('#exp-choices');
 
-  // Apply the chosen business filter to a set of entries.
-  function scopedByBusiness(list) {
+  // Apply the business filter AND the (inclusive, lexicographic — dates are
+  // YYYY-MM-DD) date range to a set of entries.
+  function scopedEntries(list) {
     const b = bizEl?.value || '__all';
-    if (b === '__all') return list;
-    if (b === '__none') return list.filter((e) => !e.business);
-    return list.filter((e) => e.business === b);
+    const from = fromEl.value, to = toEl.value;
+    return list.filter((e) => {
+      if (b === '__none' && e.business) return false;
+      if (b !== '__all' && b !== '__none' && e.business !== b) return false;
+      if (from && e.entry_date < from) return false;
+      if (to && e.entry_date > to) return false;
+      return true;
+    });
   }
 
   function currentSets() {
-    const scoped = scopedByBusiness(all);
+    const scoped = scopedEntries(all);
     return { all: scoped, unexported: scoped.filter((e) => !e.exported_at) };
   }
 
@@ -496,6 +558,8 @@ async function openExport() {
   }
   renderChoices();
   bizEl?.addEventListener('change', renderChoices);
+  fromEl.addEventListener('change', renderChoices);
+  toEl.addEventListener('change', renderChoices);
 
   el.querySelector('#do-export').addEventListener('click', async () => {
     const { all: a, unexported: u } = currentSets();
@@ -510,6 +574,15 @@ async function openExport() {
     close();
     toast(`Exported ${rows.length} item${rows.length === 1 ? '' : 's'}`);
     renderList();
+  });
+
+  el.querySelector('#do-pdf').addEventListener('click', async () => {
+    const { all: a, unexported: u } = currentSets();
+    const scope = el.querySelector('input[name=scope]:checked')?.value || 'all';
+    const rows = scope === 'unexported' ? u : a;
+    const bizLabel = (bizEl && bizEl.value !== '__all' && bizEl.value !== '__none') ? bizEl.value : 'Receipts';
+    close();
+    await printReceiptsPdf(rows, { title: bizLabel, from: fromEl.value, to: toEl.value });
   });
 }
 
@@ -557,6 +630,26 @@ function openSettings() {
       </div>
     </div>
 
+    <div class="settings-section">
+      <h3>Vehicles</h3>
+      <p class="hint">Saved vehicles for the trip log (also remembered automatically as you type them). Stays in this app — not exported to KennelOS.</p>
+      <ul class="tag-list" id="veh-list"></ul>
+      <div class="add-row">
+        <input type="text" id="veh-add-input" placeholder="Add a vehicle…" autocomplete="off">
+        <button class="btn btn-soft" id="veh-add-btn" type="button">Add</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Drivers</h3>
+      <p class="hint">Saved drivers for the trip log (also remembered automatically as you type them). Stays in this app — not exported to KennelOS.</p>
+      <ul class="tag-list" id="drv-list"></ul>
+      <div class="add-row">
+        <input type="text" id="drv-add-input" placeholder="Add a driver…" autocomplete="off">
+        <button class="btn btn-soft" id="drv-add-btn" type="button">Add</button>
+      </div>
+    </div>
+
     <div class="about muted">
       <p><strong>Receipts</strong> — a companion to KennelOS. All data stays on this device. ${ocrAvailable ? 'Offline receipt scanning is ready.' : 'Receipt scanning isn’t available on this device — enter details by hand.'}</p>
     </div>`);
@@ -600,6 +693,25 @@ function openSettings() {
     if (input.value.trim()) { addCustomCategory(input.value); input.value = ''; renderCats(); }
   });
   renderCats();
+
+  // --- Vehicles & Drivers (live add/remove) — a shared little manager ---
+  function wireList(listId, addBtnId, addInputId, get, add, remove, dataAttr, emptyMsg) {
+    const listEl = el.querySelector(listId);
+    function render() {
+      const list = get();
+      listEl.innerHTML = list.length
+        ? list.map((x) => `<li><span>${esc(x)}</span><button type="button" class="chip-x" ${dataAttr}="${esc(x)}" aria-label="Remove">✕</button></li>`).join('')
+        : `<li class="muted">${esc(emptyMsg)}</li>`;
+      listEl.querySelectorAll(`[${dataAttr}]`).forEach((btn) => btn.addEventListener('click', () => { remove(btn.getAttribute(dataAttr)); render(); }));
+    }
+    el.querySelector(addBtnId).addEventListener('click', () => {
+      const input = el.querySelector(addInputId);
+      if (input.value.trim()) { add(input.value); input.value = ''; render(); }
+    });
+    render();
+  }
+  wireList('#veh-list', '#veh-add-btn', '#veh-add-input', getVehicles, addVehicle, removeVehicle, 'data-veh', 'None yet — add one, or just type it on a trip.');
+  wireList('#drv-list', '#drv-add-btn', '#drv-add-input', getDrivers, addDriver, removeDriver, 'data-drv', 'None yet — add one, or just type it on a trip.');
 }
 
 init();
