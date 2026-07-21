@@ -42,7 +42,10 @@ These are load-bearing. Changing any of them is a design decision, not a routine
    GitHub Pages) — never opened as `file://`, which CORS-blocks module imports.
 4. **No CDN / no network deps.** Everything third-party is vendored under
    `KennelOS/vendor/` and loaded by relative path (Dexie, PapaParse, lz-string). The
-   app must work fully offline after first load.
+   app must work fully offline after first load. The one deliberate exception is the
+   **Dropbox sync feature set** (§26): those buttons talk to the Dropbox HTTP API with
+   plain `fetch` (still no vendored/CDN code) and are online-only by design — every
+   other part of the app keeps working offline.
 5. **One thin repo per entity**, uniform surface (see §6). New entity = new repo + new
    page; you don't reshape existing ones.
 
@@ -58,6 +61,10 @@ KennelOS/
   companion-view.html          Recipient-facing Companion share shell (§20) — a
                                self-contained, read-only static file; NOT part of
                                the app's page/nav set, but IS precached
+  assistant.html               KennelAssistant shell (§26) — the junior-helper
+                               mini-app; standalone like companion-view (no
+                               nav/app.js boot), but read-write and precached
+  assistant.js                 KennelAssistant page logic (§26)
   app.js                       Shared shell bootstrap (nav, PWA, first-run flow)
   nav.js                       Top-nav definition + rendering
   sw.js                        Service worker (app-shell precache, offline)
@@ -79,6 +86,10 @@ KennelOS/
     csvImport.js               Generic CSV match-or-create engine + mappings
     importExport.js            JSON backup / restore
     companionExport.js         Companion allow-list bundle builder (§20)
+    dropbox.js                 Dropbox API client — PKCE OAuth + JSON up/download (§26)
+    assistantSync.js           Owner-side Dropbox flows: backup push/pull,
+                               assistant feed builder, outbox import (§26)
+    assistantStore.js          KennelAssistant's OWN Dexie db + its data layer (§26)
     appReset.js                Full "reset to first run" teardown
     sampleData.js              "Thornfield Kennels" demo seed/clear
     seedImport.js              Optional breed+test vocabulary seed
@@ -499,8 +510,11 @@ way.
   generator's default accepted payment methods, §24, via
   `getInvoiceDefaults`/`setInvoiceDefaults`), `mileageDefaults` (the add-expense form's
   default rate per mile for mileage entries, §21, via
-  `getMileageDefaults`/`setMileageDefaults`). `clearAllSettings()` drops them all (used by
-  Reset App).
+  `getMileageDefaults`/`setMileageDefaults`), `dropbox` (the Dropbox connection blob —
+  app key, refresh token, cached access token, in-flight PKCE verifier — §26, via
+  `getDropboxSettings`/`setDropboxSettings`/`clearDropboxSettings`), `assistantLastSync`
+  (when the KennelAssistant page last pulled the dog feed, §26). `clearAllSettings()`
+  drops them all (used by Reset App).
 - **nudgeState.js** — a second, deliberately separate `localStorage` module (one key,
   `kennelOS.nudgeDismissals`): the derived-nudge dismissal ledger (§19). Kept out of
   `settings.js`/`clearAllSettings()` on purpose — `appReset.js` calls its own `clearAll()`
@@ -1375,3 +1389,94 @@ unchanged — it reads the link types from the repo), and the Companion console/
 seeds a full foster-in example (Meadow Ridge / Dana Ruiz: an external dam Marigold, a foster litter
 with two available pups whose `breeder_kennel_id` is the owner kennel, a `foster` contract, a
 `foster_split` payout, and one reimbursed + one pending reimbursable cost).
+
+---
+
+## 26. Dropbox sync & KennelAssistant
+
+Two zero-cost, online-only features layered over the existing backup engine: **push/pull
+between the owner's phones through the owner's own free Dropbox**, and **KennelAssistant**,
+a deliberately tiny read-write mini-app for a junior helper's phone (log weight checks and
+other events against a synced dog list — nothing else). Both are strictly opt-in buttons;
+nothing syncs on its own, and the rest of the app stays fully offline-capable (§2.4).
+
+### The Dropbox transport (`data/dropbox.js`)
+
+- Talks straight to the Dropbox HTTP API with `fetch` — **no SDK, nothing vendored**.
+- Auth is **OAuth2 + PKCE, entirely client-side** (no secret, no backend), against a
+  Dropbox app the owner creates once (free account is plenty): *Scoped access*, access type
+  **App folder** (tokens can only ever see `/Apps/<app name>/`), permissions
+  `files.content.write` + `files.content.read`, and every connecting page's URL listed
+  under **Redirect URIs** (`pages/import-export.html` and `assistant.html`, deployed +
+  localhost variants). The app key is pasted into the connect UI once per device.
+- `beginDropboxAuth(appKey)` redirects out; `completeDropboxAuth()` (called on load by
+  both connecting pages) finishes the `?code=` round-trip, storing a long-lived refresh
+  token (`token_access_type=offline`) and minting short-lived access tokens as needed.
+  Tokens live in the `dropbox` settings blob (§11); `disconnectDropbox()` forgets tokens
+  but keeps the app key. The kid's phone signs into the **same Dropbox account**; the
+  app-folder scope is what makes that acceptable.
+- `dropboxUploadJson(path, obj)` / `dropboxDownloadJson(path)` (download returns `null`
+  for a file that doesn't exist yet). One 401-retry with a forced token refresh.
+
+### The three files — one writer each (`data/assistantSync.js`)
+
+All under the app folder, named in `DROPBOX_PATHS` (dropbox.js). **Each file has exactly
+one writer**, which is what makes the scheme conflict-free — preserve that invariant:
+
+| File | Writer | Reader | Contents |
+|---|---|---|---|
+| `/kennelos-backup.json` | owner (`pushToDropbox`) | owner's other phone | the full `exportAll()` backup |
+| `/assistant-feed.json` | owner (`pushToDropbox`) | assistant | allow-listed dog fields + all dog-subject events |
+| `/assistant-outbox.json` | assistant ("Send my updates") | owner | events the helper logged, with their own UUIDs |
+
+- **Push** uploads backup + a freshly rebuilt feed in one act (and stamps
+  `lastBackupDate`). **Pull** fetches the backup and **merge**-restores it (same upsert
+  engine as file restore, §10) after a confirm showing export date + record count. The
+  documented discipline: don't edit the *same record* on both phones between push and
+  pull — merge is a blind per-id upsert and the pulled copy wins.
+- **Privacy is enforced at feed-build time**, same posture as `companionExport.js`:
+  `ASSISTANT_DOG_FIELDS` is a positive allow-list (id, call/registered name, breed, sex,
+  status, DOB/DOD, color/markings, url, is_archived — **no** microchip, registration,
+  ownership, parentage, prices), and only `subject_type === 'dog'` events ride along
+  (currently **all** event types, a deliberate "trim later" decision). Contacts, sales,
+  financials, kennels, contracts never reach the assistant device at all — that, not UI
+  hiding, is the security boundary (everything client-side is inspectable).
+- **Outbox import** (`fetchAssistantOutbox` → preview → `importAssistantEvents`) is the
+  app's standard dry-run-then-commit posture: rows are annotated `new` / `update` /
+  `no_dog` (unknown subject dog → **skipped, never invented**, per the import rule) /
+  `invalid`, shown in a preview modal, then bulk-upserted by id — so re-importing the
+  same outbox is a no-op. The assistant's local `pending` marker is stripped on import.
+
+### KennelAssistant (`assistant.html` + `assistant.js` + `data/assistantStore.js`)
+
+- Standalone shell like `companion-view.html` (no nav.js/app.js boot), but read-write. It
+  reuses `assets/app.css`, `assets/ui.js`'s `esc()`, `vocab.js` (the event-type catalog
+  drives its log form: same fields, spans get an end date, `combobox` degrades to plain
+  text, `relatedContact` pickers are omitted), `dateUtils.js`, and `data/dropbox.js`.
+- Its data layer is `assistantStore.js` with its **own Dexie database
+  (`KennelOSAssistant`)** — never the main `KennelOSBreedingApp` db — holding exactly two
+  tables: `dogs: 'id'` and `events: 'id, [subject_type+subject_id], event_date'`. Same
+  conventions as the main schema (UUID ids, YYYY-MM-DD dates, filter-in-JS flags).
+- Flows: **Get latest dogs** replaces the synced slice from the feed (dogs wholesale;
+  events except locally-pending ones) and stamps `assistantLastSync`; **tap a dog → log
+  event** creates a local event with `pending: 1`; **Send my updates** uploads all pending
+  events as the outbox (rewritten wholesale each send). Only pending events can be
+  deleted on the device — synced history is the owner's.
+- **Acknowledgment loop**: after the owner imports the outbox and later pushes a fresh
+  feed, the feed carries those same event ids back; the feed sync's `bulkPut` overwrites
+  the pending copies, clearing the flag. Until then pending events keep riding every
+  send, which is harmless (owner-side import is an idempotent upsert).
+- The feed/outbox shapes carry `format_version` (`ASSISTANT_FORMAT_VERSION` /
+  `ASSISTANT_OUTBOX_FORMAT_VERSION`, both 1) — bump only on an incompatible shape change.
+
+### Maintenance notes
+
+- Widening/narrowing what the helper sees = edit `ASSISTANT_DOG_FIELDS` or add an
+  event-type filter in `buildAssistantFeed()` — one place, and update this section.
+- All five new files (`assistant.html`, `assistant.js`, `data/dropbox.js`,
+  `data/assistantSync.js`, `data/assistantStore.js`) are in the sw.js precache; the
+  Dropbox API calls are cross-origin, so the service worker's cache-first handler ignores
+  them (§12) — sync is always live network.
+- No new tables, FKs, or `referenceRegistry.js` entries in the **main** schema: imported
+  assistant events are ordinary Event rows, and the assistant db is a separate database
+  on a separate device.
