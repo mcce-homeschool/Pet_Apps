@@ -570,7 +570,7 @@ async function viewPhoto(photoId, entry) {
   if (!url) return;
   const pdfBtn = entry ? `<button class="btn btn-soft" id="photo-pdf">🖼 Save as PDF</button>` : '';
   const { el, close } = openModal(`<div class="photo-full"><img src="${url}" alt="receipt photo"><div class="form-actions">${pdfBtn}<span class="spacer"></span><button class="btn" data-close>Close</button></div></div>`, () => URL.revokeObjectURL(url));
-  el.querySelector('#photo-pdf')?.addEventListener('click', () => printReceiptsPdf([entry], { title: entry.business || 'Receipt', summary: false }));
+  el.querySelector('#photo-pdf')?.addEventListener('click', () => { close(); printReceiptsPdf([entry], { title: entry.business || 'Receipt', summary: false }); });
 }
 
 function confirmDelete(entry, closeParent) {

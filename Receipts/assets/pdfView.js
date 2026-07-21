@@ -99,8 +99,18 @@ export async function printReceiptsPdf(entries, opts = {}) {
     window.removeEventListener('afterprint', cleanup);
   };
   window.addEventListener('afterprint', cleanup);
-  // Give the images a tick to lay out before the print dialog snapshots them.
-  setTimeout(() => window.print(), 60);
+  // Wait for every receipt image to actually finish decoding, then force a
+  // layout and let two frames paint, before opening the print dialog. A fixed
+  // delay isn't enough headroom on mobile: several full-resolution camera
+  // photos as data URLs can take longer than a few ms to decode/paint, and if
+  // the print snapshot is taken before that finishes, some mobile browsers
+  // (notably Android print-to-PDF) rasterize the still-stale page underneath
+  // instead of the newly built document.
+  const imgs = Array.from(root.querySelectorAll('img'));
+  await Promise.all(imgs.map((img) => (img.decode ? img.decode().catch(() => {}) : Promise.resolve())));
+  void root.offsetHeight;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  window.print();
   // Safety net if afterprint never fires (some mobile browsers).
   setTimeout(cleanup, 120000);
 }

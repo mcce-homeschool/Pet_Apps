@@ -7,7 +7,7 @@
 // (~7 MB) are deliberately NOT precached — they are runtime-cached on first scan
 // by the fetch handler below, so install stays fast/reliable and OCR still works
 // offline after you've scanned once. If you change those files, bump CACHE_NAME.
-const CACHE_NAME = 'receipts-shell-v6';
+const CACHE_NAME = 'receipts-shell-v7';
 
 const PRECACHE_URLS = [
   './',
