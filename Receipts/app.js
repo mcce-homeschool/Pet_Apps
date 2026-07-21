@@ -19,8 +19,20 @@ import { printReceiptsPdf } from './assets/pdfView.js';
 import { esc, fmtMoney, fmtDate, todayYMD, toast, openModal } from './assets/ui.js';
 
 let ocrAvailable = false;
+let kind = 'receipt'; // 'receipt' | 'trip' — the list never mixes the two
 let filterMode = 'all'; // 'all' | 'unexported'
-let filterBusiness = ''; // '' = all businesses
+// Light filter, applied on top of the kind + exported-status toggles above.
+// business applies to both kinds; category only to receipts, vehicle only to
+// trips (the other is simply ignored for the kind not showing).
+const filters = { from: '', to: '', business: '__all', category: '__all', vehicle: '__all' };
+function filtersActiveCount() {
+  let n = 0;
+  if (filters.from || filters.to) n++;
+  if (filters.business !== '__all') n++;
+  if (kind === 'receipt' && filters.category !== '__all') n++;
+  if (kind === 'trip' && filters.vehicle !== '__all') n++;
+  return n;
+}
 
 // ---- Register the service worker (PWA / offline) ----
 if ('serviceWorker' in navigator) {
@@ -32,36 +44,63 @@ async function init() {
   document.getElementById('btn-trip').addEventListener('click', () => openTripForm());
   document.getElementById('btn-export').addEventListener('click', openExport);
   document.getElementById('btn-settings').addEventListener('click', openSettings);
+  document.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => {
+    kind = b.dataset.kind;
+    document.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('active', x === b));
+    renderList();
+  }));
   document.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => {
     filterMode = b.dataset.filter;
     document.querySelectorAll('[data-filter]').forEach((x) => x.classList.toggle('active', x === b));
     renderList();
   }));
+  document.getElementById('btn-list-filter').addEventListener('click', () => openFilterModal());
   ocr.isAvailable().then((v) => { ocrAvailable = v; }).catch(() => { ocrAvailable = false; });
   await renderList();
+}
+
+// Apply the light filter (dates + business + category/vehicle) on top of the
+// kind + exported-status toggles.
+function applyFilters(list) {
+  return list.filter((e) => {
+    if (filters.from && e.entry_date < filters.from) return false;
+    if (filters.to && e.entry_date > filters.to) return false;
+    if (filters.business === '__none' && e.business) return false;
+    if (filters.business !== '__all' && filters.business !== '__none' && e.business !== filters.business) return false;
+    if (kind === 'receipt' && filters.category !== '__all' && e.category !== filters.category) return false;
+    if (kind === 'trip' && filters.vehicle !== '__all' && e.vehicle !== filters.vehicle) return false;
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------- list ----
 async function renderList() {
   const listEl = document.getElementById('list');
   const all = await entryRepo.getAll();
-  const entries = filterMode === 'unexported' ? all.filter((e) => !e.exported_at) : all;
+  const ofKind = all.filter((e) => e.kind === kind);
+  const exportScoped = filterMode === 'unexported' ? ofKind.filter((e) => !e.exported_at) : ofKind;
+  const entries = applyFilters(exportScoped);
 
   const unexported = all.filter((e) => !e.exported_at).length;
   const badge = document.getElementById('unexported-count');
   badge.textContent = unexported ? String(unexported) : '';
   badge.style.display = unexported ? '' : 'none';
 
+  const filterBtn = document.getElementById('btn-list-filter');
+  const activeCount = filtersActiveCount();
+  filterBtn.textContent = activeCount ? `Filter (${activeCount})` : 'Filter';
+  filterBtn.classList.toggle('active', activeCount > 0);
+
+  const kindLabel = kind === 'trip' ? 'trips' : 'receipts';
   if (!entries.length) {
     listEl.innerHTML = `<div class="empty">
-      <p class="empty-emoji">🧾</p>
-      <p><strong>${all.length ? 'Nothing here with this filter.' : 'No receipts or trips yet.'}</strong></p>
-      <p class="muted">${all.length ? 'Switch back to “All”.' : 'Tap <strong>＋ Receipt</strong> to snap one, or <strong>＋ Trip</strong> to log mileage.'}</p>
+      <p class="empty-emoji">${kind === 'trip' ? '🚗' : '🧾'}</p>
+      <p><strong>${ofKind.length ? `Nothing here with this filter.` : `No ${kindLabel} yet.`}</strong></p>
+      <p class="muted">${ofKind.length ? 'Try widening the filter.' : `Tap <strong>＋ ${kind === 'trip' ? 'Trip' : 'Receipt'}</strong> to add one.`}</p>
     </div>`;
     return;
   }
 
-  // Render cards (thumbnails fetched async and slotted in).
   listEl.innerHTML = entries.map(cardHtml).join('');
   listEl.querySelectorAll('[data-open]').forEach((el) => {
     el.addEventListener('click', () => {
@@ -69,39 +108,108 @@ async function renderList() {
       if (entry.kind === 'trip') openTripForm(entry); else openReceiptForm(entry);
     });
   });
-  for (const e of entries) {
-    if (!e.photo_id) continue;
-    photoRepo.getThumbnail(e.photo_id).then((thumb) => {
-      const img = listEl.querySelector(`[data-thumb="${e.id}"]`);
-      if (img && thumb) { img.style.backgroundImage = `url(${thumb})`; img.classList.add('has-img'); }
-    });
-  }
 }
 
 function cardHtml(e) {
   const amt = effectiveAmount(e);
   const isTrip = e.kind === 'trip';
-  const subj = e.subject_type === 'dog' ? esc(e.subject_name || 'Dog') : (esc(e.subject_name) || 'Kennel');
-  const meta = isTrip
-    ? `${e.miles ?? '?'} mi × ${fmtMoney(e.mileage_rate)}`
-    : (e.vendor ? esc(e.vendor) : categoryLabel(e.category));
-  const exportedTag = e.exported_at ? `<span class="tag tag-exported">exported</span>` : '';
+  const meta = isTrip ? `${e.miles ?? '?'} mi × ${fmtMoney(e.mileage_rate)}` : esc(e.vendor || '');
   const bizTag = e.business ? `<span class="tag tag-biz">${esc(e.business)}</span>` : '';
-  const rcpt = e.receipt_number ? `<span class="card-rcpt">${esc(e.receipt_number)}</span>` : '';
   return `<button class="card" data-open="${esc(e.id)}">
-    <div class="card-thumb ${isTrip ? 'is-trip' : ''}" data-thumb="${esc(e.id)}">${isTrip ? '🚗' : '🧾'}</div>
     <div class="card-body">
       <div class="card-top">
-        <span class="card-amount">${fmtMoney(amt)}</span>
+        <div class="card-amt-vendor">
+          <span class="card-amount">${fmtMoney(amt)}</span>
+          ${meta ? `<span class="card-vendor">${meta}</span>` : ''}
+        </div>
         <span class="card-date">${esc(fmtDate(e.entry_date))}</span>
       </div>
       <div class="card-sub">
         <span class="chip chip-${esc(e.category)}">${esc(categoryLabel(e.category))}</span>
-        <span class="card-subject">${subj}</span>
+        ${bizTag}
       </div>
-      <div class="card-meta">${rcpt}${meta}${bizTag}${exportedTag}</div>
     </div>
   </button>`;
+}
+
+// ------------------------------------------------------- list filter ------
+function openFilterModal() {
+  const businesses = getBusinesses();
+  const bizField = `
+    <label>Business
+      <select name="business">
+        <option value="__all">All businesses</option>
+        ${businesses.map((b) => `<option value="${esc(b)}"${filters.business === b ? ' selected' : ''}>${esc(b)}</option>`).join('')}
+        <option value="__none"${filters.business === '__none' ? ' selected' : ''}>(No business)</option>
+      </select>
+    </label>`;
+  const kindField = kind === 'receipt'
+    ? `<label>Category
+        <select name="category">
+          <option value="__all">All categories</option>
+          ${categoryList(getCustomCategories()).map((c) => `<option value="${esc(c.value)}"${filters.category === c.value ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+        </select>
+      </label>`
+    : `<label>Vehicle
+        <select name="vehicle">
+          <option value="__all">All vehicles</option>
+          ${getVehicles().map((v) => `<option value="${esc(v)}"${filters.vehicle === v ? ' selected' : ''}>${esc(v)}</option>`).join('')}
+        </select>
+      </label>`;
+
+  const { el, close } = openModal(`
+    <div class="modal-head">
+      <h2>Filter ${kind === 'trip' ? 'trips' : 'receipts'}</h2>
+      <button class="icon-btn" data-close aria-label="Close">✕</button>
+    </div>
+    <form id="filter-form" class="form">
+      <label>Date range <span class="muted">(optional)</span></label>
+      <div class="quick-range">
+        <button type="button" class="btn btn-soft" data-days="7">Last 7 days</button>
+        <button type="button" class="btn btn-soft" data-days="30">Last 30 days</button>
+        <button type="button" class="btn btn-soft" data-days="90">Last 90 days</button>
+      </div>
+      <div class="grid2">
+        <label>From
+          <input type="date" name="from" value="${esc(filters.from)}">
+        </label>
+        <label>To
+          <input type="date" name="to" value="${esc(filters.to)}">
+        </label>
+      </div>
+      ${bizField}
+      ${kindField}
+      <div class="form-actions">
+        <button type="button" class="btn btn-soft" id="filter-clear">Clear filters</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Apply</button>
+      </div>
+    </form>`);
+
+  const form = el.querySelector('#filter-form');
+  form.querySelectorAll('[data-days]').forEach((b) => b.addEventListener('click', () => {
+    const days = Number(b.dataset.days);
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - (days - 1));
+    form.from.value = todayYMD(from);
+    form.to.value = todayYMD(to);
+  }));
+  el.querySelector('#filter-clear').addEventListener('click', () => {
+    filters.from = ''; filters.to = ''; filters.business = '__all'; filters.category = '__all'; filters.vehicle = '__all';
+    close();
+    renderList();
+  });
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    filters.from = form.from.value;
+    filters.to = form.to.value;
+    filters.business = form.business.value;
+    if (kind === 'receipt') filters.category = form.category.value; else filters.vehicle = form.vehicle.value;
+    close();
+    renderList();
+  });
 }
 
 // ---------------------------------------------------- shared form bits ----

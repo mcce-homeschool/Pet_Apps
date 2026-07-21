@@ -19,6 +19,10 @@ the browser, works offline as an installable PWA.
   dollar amount is figured the same way KennelOS figures it, so a trip becomes a clean
   deductible-mileage expense. Odometer/vehicle/driver stay in this app for your mileage
   log — the KennelOS export carries only miles × rate.
+- **Receipts / Trips toggle** — the main list shows one kind at a time (never mixed),
+  newest first. A light **Filter** panel narrows it further by date range (or a quick
+  last‑7/30/90‑days pick), business, and — depending on the toggle — category (receipts)
+  or vehicle (trips).
 - **⬆ Export to KennelOS** — download a CSV of everything (or just what you haven't
   exported yet). Load it in KennelOS under **Import / Export → Import expenses (CSV)**,
   which shows a preview where you can **attach each expense to a dog, litter, pairing,

@@ -23,8 +23,7 @@ export function fmtDate(ymd) {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export function todayYMD() {
-  const d = new Date();
+export function todayYMD(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
