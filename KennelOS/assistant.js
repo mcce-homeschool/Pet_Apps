@@ -9,7 +9,7 @@ import { EVENT_TYPES, ASSISTANT_EVENT_TYPES, DOG_STATUS, SEX, descriptor, eventT
 import { todayYMD } from './data/dateUtils.js';
 import {
   completeDropboxAuth, beginDropboxAuth, isDropboxConnected,
-  dropboxRedirectUri, getDropboxAppKey, dropboxUploadJson, dropboxDownloadJson,
+  dropboxUploadJson, dropboxDownloadJson,
   DROPBOX_PATHS
 } from './data/dropbox.js';
 import {
@@ -42,8 +42,6 @@ async function renderAll() {
   show('dogs-card', connected);
   if (!connected) {
     show('pending-card', false);
-    document.getElementById('redirect-uri').textContent = dropboxRedirectUri();
-    document.getElementById('dbx-app-key').value = getDropboxAppKey();
     return;
   }
   await Promise.all([renderSyncStatus(), renderPending(), renderDogs()]);
@@ -377,7 +375,7 @@ function openWeighLitterModal(group) {
 
 document.getElementById('dbx-connect').addEventListener('click', async () => {
   try {
-    await beginDropboxAuth(document.getElementById('dbx-app-key').value);
+    await beginDropboxAuth();
   } catch (e) {
     flash(e.message || String(e), 'err');
   }

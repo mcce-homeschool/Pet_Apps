@@ -280,12 +280,13 @@ export function setWizardStepIndexRaw(index) {
 }
 
 // --- Dropbox sync (data/dropbox.js) -----------------------------------------
-// One JSON blob holding the user-created Dropbox app key plus the OAuth tokens
-// the PKCE flow produces (refresh token, cached short-lived access token, and
-// the in-flight PKCE verifier during a redirect). App-level config, so it lives
-// here like every other setting — never in IndexedDB, and it rides Reset App's
-// clearAllSettings like everything else. The SAME connection is shared by the
-// Import/Export page and the KennelAssistant page (same origin, same folder).
+// One JSON blob holding the OAuth tokens the PKCE flow produces (refresh
+// token, cached short-lived access token, and the in-flight PKCE verifier
+// during a redirect) — the app key itself is hardcoded in data/dropbox.js,
+// not stored here. App-level config, so it lives here like every other
+// setting — never in IndexedDB, and it rides Reset App's clearAllSettings
+// like everything else. The SAME connection is shared by the Import/Export
+// page and the KennelAssistant page (same origin, same folder).
 export function getDropboxSettings() {
   const raw = localStorage.getItem(KEYS.dropbox);
   if (!raw) return {};

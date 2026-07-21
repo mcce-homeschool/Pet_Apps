@@ -10,8 +10,7 @@ import { isTourAvailable, restartWizard } from '../data/wizardState.js';
 import { runWizardStep } from '../assets/wizardUI.js';
 import { esc, confirmModal } from '../assets/ui.js';
 import {
-  completeDropboxAuth, beginDropboxAuth, isDropboxConnected, disconnectDropbox,
-  dropboxRedirectUri, getDropboxAppKey
+  completeDropboxAuth, beginDropboxAuth, isDropboxConnected, disconnectDropbox
 } from '../data/dropbox.js';
 import {
   pushToDropbox, fetchDropboxBackup, mergeDropboxBackup,
@@ -229,22 +228,14 @@ const dropboxBody = document.getElementById('dropbox-body');
 function renderDropbox() {
   if (!isDropboxConnected()) {
     dropboxBody.innerHTML = `
-      <p class="muted">One-time setup: create a free app at
-        <strong>dropbox.com/developers/apps</strong> (Scoped access, <strong>App folder</strong> access type,
-        permissions <strong>files.content.write</strong> + <strong>files.content.read</strong>), add this page's address to its
-        <strong>Redirect URIs</strong>, then paste its <strong>App key</strong> below. Also add the assistant page's address
-        (same address, ending <code>assistant.html</code> instead of <code>pages/import-export.html</code>) so your kid's phone can connect too.</p>
-      <p class="muted">Redirect URI for this page: <code>${esc(dropboxRedirectUri())}</code></p>
-      <div class="field field-wide">
-        <label>Dropbox app key</label>
-        <input id="dbx-app-key" type="text" autocomplete="off" value="${esc(getDropboxAppKey())}" placeholder="e.g. a1b2c3d4e5f6g7h">
-      </div>
+      <p class="muted">Connect your own free Dropbox account to back up and sync your records — you'll sign in with
+        Dropbox and this app only ever sees its own private app folder, never the rest of your account.</p>
       <div class="form-actions">
         <button class="btn btn-primary" id="dbx-connect">Connect Dropbox</button>
       </div>`;
     document.getElementById('dbx-connect').addEventListener('click', async () => {
       try {
-        await beginDropboxAuth(document.getElementById('dbx-app-key').value);
+        await beginDropboxAuth();
       } catch (e) {
         flash(e.message || String(e), 'err');
       }

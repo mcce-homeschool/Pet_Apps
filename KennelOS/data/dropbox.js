@@ -3,20 +3,25 @@
 // straight to the Dropbox HTTP API with fetch — no SDK, nothing vendored.
 //
 // Auth is OAuth2 + PKCE, which runs entirely client-side (no app secret, no
-// backend), against a Dropbox app the OWNER creates once at
-// https://www.dropbox.com/developers/apps with:
-//   - Access type: "App folder" — tokens can only ever see /Apps/<app name>/,
-//     never the rest of the Dropbox account;
+// backend). APP_KEY below is a public OAuth client id (not a secret — PKCE is
+// built for exactly this "public client" case) for the "KennelOS" app
+// registered once at https://www.dropbox.com/developers/apps with:
+//   - Access type: "App folder" — tokens can only ever see /Apps/KennelOS/,
+//     never the rest of whichever Dropbox account signs in;
 //   - Redirect URIs: every page that calls beginDropboxAuth(), i.e. the
 //     Import/Export page URL and the assistant.html URL (both the deployed
 //     https://… addresses and http://localhost:8000/… for local dev).
-// The app key is pasted into the connect UI and stored in settings; the flow
-// stores a long-lived refresh token (token_access_type=offline) and mints
-// short-lived access tokens from it as needed.
+// Every install of this app shares APP_KEY, but each user still does their own
+// "Connect" and signs into their own Dropbox account — the key just tells
+// Dropbox which application is asking, it grants no access by itself. The
+// flow stores a long-lived refresh token (token_access_type=offline) and
+// mints short-lived access tokens from it as needed.
 //
 // These are cross-origin calls, so the service worker's cache-first fetch
 // handler ignores them entirely — every sync action is live network, by design
 // (the sync features are online-only; the rest of the app still works offline).
+const APP_KEY = 'd4fna4tzs2qbcva';
+
 import { getDropboxSettings, setDropboxSettings, clearDropboxSettings } from './settings.js';
 
 // The three files of the sync scheme, all relative to the app folder. Each has
@@ -38,33 +43,27 @@ function b64url(bytes) {
 }
 
 // The redirect URI is the calling page's own URL (no query/hash) — each page
-// that offers "Connect" round-trips back to itself. Shown in the connect UI so
-// it can be copy-pasted into the Dropbox app console's Redirect URIs list.
-export function dropboxRedirectUri() {
+// that offers "Connect" round-trips back to itself. Must match one of the
+// URIs registered on the Dropbox app (a one-time developer setup step).
+function dropboxRedirectUri() {
   return location.origin + location.pathname;
 }
 
 export function isDropboxConnected() {
   const s = getDropboxSettings();
-  return Boolean(s.appKey && s.refreshToken);
+  return Boolean(s.refreshToken);
 }
 
-export function getDropboxAppKey() {
-  return getDropboxSettings().appKey || '';
-}
-
-// Kick off the PKCE authorization redirect. Stores the app key + verifier
-// (localStorage, so they survive the round-trip through dropbox.com), then
-// navigates away; completeDropboxAuth() finishes the job when Dropbox sends
-// the browser back with ?code=.
-export async function beginDropboxAuth(appKey) {
-  const key = String(appKey || '').trim();
-  if (!key) throw new Error('Enter your Dropbox app key first.');
+// Kick off the PKCE authorization redirect. Stores the verifier (localStorage,
+// so it survives the round-trip through dropbox.com), then navigates away;
+// completeDropboxAuth() finishes the job when Dropbox sends the browser back
+// with ?code=.
+export async function beginDropboxAuth() {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  setDropboxSettings({ appKey: key, pkceVerifier: verifier });
+  setDropboxSettings({ pkceVerifier: verifier });
   const params = new URLSearchParams({
-    client_id: key,
+    client_id: APP_KEY,
     response_type: 'code',
     code_challenge: b64url(new Uint8Array(digest)),
     code_challenge_method: 'S256',
@@ -87,14 +86,14 @@ export async function completeDropboxAuth() {
   history.replaceState(null, '', url.toString());
 
   const s = getDropboxSettings();
-  if (!s.appKey || !s.pkceVerifier) {
+  if (!s.pkceVerifier) {
     throw new Error('Dropbox sent back an authorization code, but no connection attempt is in progress. Try Connect again.');
   }
   const tokens = await tokenRequest({
     code,
     grant_type: 'authorization_code',
     code_verifier: s.pkceVerifier,
-    client_id: s.appKey,
+    client_id: APP_KEY,
     redirect_uri: dropboxRedirectUri()
   });
   setDropboxSettings({
@@ -106,12 +105,9 @@ export async function completeDropboxAuth() {
   return true;
 }
 
-// Forget the tokens (and cached access token). The app key is kept so
-// reconnecting doesn't mean digging it out of the Dropbox console again.
+// Forget the tokens (and cached access token).
 export function disconnectDropbox() {
-  const { appKey } = getDropboxSettings();
   clearDropboxSettings();
-  if (appKey) setDropboxSettings({ appKey });
 }
 
 async function tokenRequest(fields) {
@@ -137,7 +133,7 @@ async function tokenRequest(fields) {
 // when the cached one is missing/expired.
 async function getAccessToken({ force = false } = {}) {
   const s = getDropboxSettings();
-  if (!s.appKey || !s.refreshToken) {
+  if (!s.refreshToken) {
     throw new Error('Not connected to Dropbox — use Connect first.');
   }
   if (!force && s.accessToken && s.accessTokenExpiresAt && Date.now() < s.accessTokenExpiresAt) {
@@ -146,7 +142,7 @@ async function getAccessToken({ force = false } = {}) {
   const tokens = await tokenRequest({
     grant_type: 'refresh_token',
     refresh_token: s.refreshToken,
-    client_id: s.appKey
+    client_id: APP_KEY
   });
   setDropboxSettings({
     accessToken: tokens.access_token,

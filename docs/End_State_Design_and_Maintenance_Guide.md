@@ -511,7 +511,8 @@ way.
   `getInvoiceDefaults`/`setInvoiceDefaults`), `mileageDefaults` (the add-expense form's
   default rate per mile for mileage entries, §21, via
   `getMileageDefaults`/`setMileageDefaults`), `dropbox` (the Dropbox connection blob —
-  app key, refresh token, cached access token, in-flight PKCE verifier — §26, via
+  refresh token, cached access token, in-flight PKCE verifier; the app key itself is
+  hardcoded in `data/dropbox.js`, not stored here — §26, via
   `getDropboxSettings`/`setDropboxSettings`/`clearDropboxSettings`), `assistantLastSync`
   (when the KennelAssistant page last pulled the dog feed, §26). `clearAllSettings()`
   drops them all (used by Reset App).
@@ -1404,17 +1405,23 @@ nothing syncs on its own, and the rest of the app stays fully offline-capable (�
 
 - Talks straight to the Dropbox HTTP API with `fetch` — **no SDK, nothing vendored**.
 - Auth is **OAuth2 + PKCE, entirely client-side** (no secret, no backend), against a
-  Dropbox app the owner creates once (free account is plenty): *Scoped access*, access type
-  **App folder** (tokens can only ever see `/Apps/<app name>/`), permissions
-  `files.content.write` + `files.content.read`, and every connecting page's URL listed
-  under **Redirect URIs** (`pages/import-export.html` and `assistant.html`, deployed +
-  localhost variants). The app key is pasted into the connect UI once per device.
-- `beginDropboxAuth(appKey)` redirects out; `completeDropboxAuth()` (called on load by
-  both connecting pages) finishes the `?code=` round-trip, storing a long-lived refresh
-  token (`token_access_type=offline`) and minting short-lived access tokens as needed.
-  Tokens live in the `dropbox` settings blob (§11); `disconnectDropbox()` forgets tokens
-  but keeps the app key. The kid's phone signs into the **same Dropbox account**; the
-  app-folder scope is what makes that acceptable.
+  Dropbox app registered once, by the developer, at dropbox.com/developers/apps:
+  *Scoped access*, access type **App folder** (tokens can only ever see
+  `/Apps/KennelOS/`), permissions `files.content.write` + `files.content.read`, and every
+  connecting page's URL listed under **Redirect URIs** (`pages/import-export.html` and
+  `assistant.html`, deployed + localhost variants).
+- The **app key itself is hardcoded** as `APP_KEY` in `data/dropbox.js` — same pattern as
+  `KennelPapers/data/dropbox.js`. This is safe because a PKCE client id is a public
+  identifier, not a secret: every install shares the one key, but each user still does
+  their own "Connect" and signs into their **own** Dropbox account, landing in their own
+  private `/Apps/KennelOS/` folder. The key grants no access by itself, so there's no
+  per-device paste step and nothing for the user to register.
+- `beginDropboxAuth()` redirects out; `completeDropboxAuth()` (called on load by both
+  connecting pages) finishes the `?code=` round-trip, storing a long-lived refresh token
+  (`token_access_type=offline`) and minting short-lived access tokens as needed. Tokens
+  live in the `dropbox` settings blob (§11); `disconnectDropbox()` forgets them. The kid's
+  phone signs into the **same Dropbox account** as the owner; the app-folder scope is
+  what makes that acceptable.
 - `dropboxUploadJson(path, obj)` / `dropboxDownloadJson(path)` (download returns `null`
   for a file that doesn't exist yet). One 401-retry with a forced token refresh.
 
