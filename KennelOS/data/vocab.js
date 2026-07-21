@@ -371,7 +371,7 @@ export function eventTypesFor(subjectType) {
 // the two can never drift. Lives here (not in either sync module) because both
 // sides import vocab and neither should import the other's database module.
 // Widen/narrow by editing this list.
-export const ASSISTANT_EVENT_TYPES = ['weight_check', 'milestone', 'note'];
+export const ASSISTANT_EVENT_TYPES = ['weight_check', 'milestone', 'note', 'preventative', 'medication'];
 
 // --- Financials (the Expense ledger) --------------------------------------
 // The controlled category vocabulary for an Expense. Same shape as every other

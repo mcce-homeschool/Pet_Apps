@@ -1448,8 +1448,12 @@ one writer**, which is what makes the scheme conflict-free — preserve that inv
   grouping key, `litter_nickname`, `sire_name`/`dam_name` as call-name copies — named
   copies, never the litters table or parentage FKs). Only `subject_type === 'dog'`
   events whose type is in **`ASSISTANT_EVENT_TYPES`** (vocab.js — currently
-  `weight_check`, `milestone`, `note`) ride along; the same list gates the assistant's
-  log form, so what the helper sees and what they can log never drift. Contacts, sales,
+  `weight_check`, `milestone`, `note`, `preventative`, `medication`) ride along; the same
+  list gates the assistant's log form, so what the helper sees and what they can log
+  never drift. `preventative` (product/dose) and `medication` (drug/dose/frequency,
+  a span — the log form's end-date field shows automatically per `duration: 'span'`)
+  reuse the main app's existing field defs as-is, no assistant-side field changes
+  needed. Contacts, sales,
   financials, kennels, contracts never reach the assistant device at all — that, not UI
   hiding, is the security boundary (everything client-side is inspectable).
 - **Outbox import** (`fetchAssistantOutbox` → preview → `importAssistantEvents`) is the
