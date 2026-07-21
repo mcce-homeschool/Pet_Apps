@@ -85,7 +85,16 @@ function normalize(data) {
     // A human-facing receipt/reference number (plain, unindexed) that ties this
     // ledger row back to a paper/photo receipt — e.g. the number the Receipts
     // companion app stamps on each capture. Trimmed to null when blank.
-    receipt_number: (data.receipt_number == null ? '' : String(data.receipt_number)).trim() || null
+    receipt_number: (data.receipt_number == null ? '' : String(data.receipt_number)).trim() || null,
+    // Reimbursable ledger fields (plain, unindexed — guide §4/§21). A foster-in
+    // cost the dam's owner has agreed to pay back is flagged `reimbursable`; once
+    // settled, `reimbursed_date` records when. A reimbursed-but-unflagged row is
+    // coerced to reimbursable=true so the two can't contradict. Litter P&L nets a
+    // reimbursed reimbursable out of your cost and lists a pending one as a
+    // receivable (litterFinances.js). "Reimbursable to whom" is derived from the
+    // litter's foster partner, so no per-expense contact FK is stored here.
+    reimbursable: !!data.reimbursable || !!(data.reimbursed_date),
+    reimbursed_date: data.reimbursed_date || null
   };
 }
 

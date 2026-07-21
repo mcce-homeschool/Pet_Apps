@@ -24,8 +24,14 @@ const REQUIRED_FIELDS = ['contract_type'];
 // caller. Sale/stud contracts already reach their counterparty through the linked
 // Sale.buyer_contact_id / StudService.partner_contact_id, so related_contact_id
 // stays null there and never double-sources the same relationship.
-export const DOG_LINK_TYPES = ['lease', 'co_own', 'other'];
-export const CONTACT_LINK_TYPES = ['lease', 'co_own', 'other'];
+// `foster` joins these: a foster contract reaches its fostered dam through
+// related_dog_id and its counterparty (owner for foster-in, caretaker for
+// foster-out) through related_contact_id — the same shape as lease/co_own/other,
+// so no new Contract FK is needed. It is also partner-facing (isLivePartnerContract
+// / CONTACT_LINK_TYPES below), so a live foster contract confers partner membership
+// and appears in the partner companion bundle like a lease.
+export const DOG_LINK_TYPES = ['lease', 'co_own', 'foster', 'other'];
+export const CONTACT_LINK_TYPES = ['lease', 'co_own', 'foster', 'other'];
 
 // Statuses that take a contract out of play. A partner never sees a contract in
 // one of these states, and such a contract never confers partner membership —

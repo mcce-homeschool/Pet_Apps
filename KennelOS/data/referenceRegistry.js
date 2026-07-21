@@ -87,7 +87,8 @@ export const CONTACT_REFERENCES = [
   { table: 'stud_services', field: 'partner_contact_id',      label: 'partner contact in a stud service' },
   { table: 'stud_services', field: 'referred_by_contact_id',  label: 'referrer on a stud service' },
   { table: 'events',        field: 'related_contact_id',      label: 'contact on a boarding event' },
-  { table: 'contracts',     field: 'related_contact_id',      label: 'counterparty on a contract' }
+  { table: 'contracts',     field: 'related_contact_id',      label: 'counterparty on a contract' },
+  { table: 'litters',       field: 'foster_partner_contact_id', label: 'foster partner on a litter' }
 ];
 
 // --- Kennel: what can point at a Kennel -------------------------------------

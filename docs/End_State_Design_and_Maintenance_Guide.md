@@ -15,10 +15,11 @@ code disagree, the code wins and the doc is what gets fixed.
 ## 1. What the app is
 
 A **local-first, static, multi-page web app** for managing a dog-breeding program:
-dogs and pedigrees, contacts, kennels, pairings and litters, sales/placements, stud
-services, contracts, a polymorphic health/history event log, an expense/income ledger,
-reminders, a dashboard, analytics reports, CSV/JSON import-export, and a read-only
-Companion share-out for buyers and partners.
+dogs and pedigrees, contacts, kennels, pairings and litters (including **foster-in /
+foster-out** litters, §25), sales/placements, stud services, contracts, a polymorphic
+health/history event log, an expense/income ledger, reminders, a dashboard, analytics
+reports, CSV/JSON import-export, and a read-only Companion share-out for buyers and
+partners.
 
 - **No backend, no build step.** Plain ES modules served over HTTP. Hosted on GitHub
   Pages; all data lives in the browser (IndexedDB via Dexie).
@@ -125,12 +126,12 @@ commonly blank at entry time.
 | **Contact** | `name` | `contact_type[]` (multi), `email`, `phone`, `address`, `kennel_id`, `waitlist_status`, `first_contact_source`, `notes`, `companion_note` (plain, unindexed — a per-recipient message **meant for the recipient's eyes**, shown on their companion share page; deliberately distinct from the private `notes`; §20). Buyers are Contacts — **there is no Buyer table**. `address` also resolves an in-person stud service's away-board location (§19). |
 | **Kennel** | `kennel_name` | `is_own_kennel`, `prefix`, `location`, `website` (plain, unindexed — a link for this kennel, mirrors `Dog.url`), `logo_data_url` (plain, unindexed — a downscaled PNG/SVG **data URL** for the kennel's logo, uploaded/removed on the kennel detail page, rendered on its invoices/receipts (§24) and puppy records (§23); rides the JSON backup), `preferred_tests[]`, `preferred_breeds[]`, `promote_nudge_enabled` (bool, default off), `promote_age_male_months`/`promote_age_female_months` (the promote-lifecycle nudge's per-kennel thresholds, §19). Lightweight; added inline from the Contact form. |
 | **Pairing** | `sire_id`, `dam_id`, `pairing_type`, `status` | `method`, `planned_date` (shown as "Planned first date" — the first planned/tie date), `last_observed_date` (plain, unindexed — a subsequent observed tie/breeding date), `expected_due_date` (prefilled on the detail page as 63 days after `planned_date` when still empty, never clobbering a deliberate edit), `notes`. Sire ≠ dam (hard block). |
-| **Litter** | `dam_id`, `sire_id`, `status` | `nickname` (plain, unindexed — optional friendly label, e.g. "Party of Five"; when set it leads the detail-page title and shows as its own column on the Litters list and report, searchable across all three; falls back to `dam × sire` when blank), `pairing_id`, `whelp_date`, `accept_deposits_date` (plain, unindexed — when the breeder begins accepting deposits; on the detail page it sits between `whelp_date` and `estimated_ready_date`, and surfaces in the **prospective** companion bundle between "Born" and "Estimated ready" when set, §20), `estimated_ready_date` (plain, unindexed — prefilled as 8 weeks/56 days after `whelp_date` when still empty, never clobbering a deliberate edit), `litter_registration_number`, `puppies_born_total/alive/deceased/abnormalities` (the last a count, not mutually exclusive with alive/deceased), `expected_price_male`/`expected_price_female`/`expected_deposit_male`/`expected_deposit_female` (plain, unindexed — per-litter defaults, grouped by sex on the detail page; `sale.js` prefills a new Sale's `price` and `deposit_amount` from the matching-sex pair by the puppy's `sex`, only into fields still empty), `notes`. The litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
+| **Litter** | `dam_id`, `sire_id`, `status` | `nickname` (plain, unindexed — optional friendly label, e.g. "Party of Five"; when set it leads the detail-page title and shows as its own column on the Litters list and report, searchable across all three; falls back to `dam × sire` when blank), `pairing_id`, `whelp_date`, `accept_deposits_date` (plain, unindexed — when the breeder begins accepting deposits; on the detail page it sits between `whelp_date` and `estimated_ready_date`, and surfaces in the **prospective** companion bundle between "Born" and "Estimated ready" when set, §20), `estimated_ready_date` (plain, unindexed — prefilled as 8 weeks/56 days after `whelp_date` when still empty, never clobbering a deliberate edit), `litter_registration_number`, `puppies_born_total/alive/deceased/abnormalities` (the last a count, not mutually exclusive with alive/deceased), `expected_price_male`/`expected_price_female`/`expected_deposit_male`/`expected_deposit_female` (plain, unindexed — per-litter defaults, grouped by sex on the detail page; `sale.js` prefills a new Sale's `price` and `deposit_amount` from the matching-sex pair by the puppy's `sex`, only into fields still empty), `foster_direction` (plain, unindexed — nullable `foster_in`/`foster_out`; null = an ordinary litter. **Foster is a per-litter fact** (guide §25): the same dam can have foster and non-foster litters, so it can't live on the Dog. A foster puppy is distinguished from a plain "external" dog purely by DERIVATION of its litter's `foster_direction` — it stays a normal `status='puppy'` Dog we manage and sell), `foster_partner_contact_id` (**indexed FK → Contact**, `version(2)`; the counterparty — the dam's owner for foster-in, the caretaker for foster-out — guarded in `CONTACT_REFERENCES`; its `kennel_id` is the owner/caretaker kennel a companion share can reveal), `foster_comp_model` (plain, unindexed — `income_split`/`flat_per_pup`; how the partner is paid), `foster_our_share_pct`/`foster_split_basis` (the income-split terms), `foster_flat_fee_per_pup` (the per-pup flat fee), `foster_split_notes` (all plain, unindexed — documentation of the terms for either model; the actual payout to the other party is a real `foster_split` ("Foster compensation") Expense, never a stored derived number), `notes`. The litter's own sire/dam are authoritative. Puppy roster is **derived** (`Dog WHERE litter_id`). |
 | **Sale** | `dog_id`, `buyer_contact_id`, `placement_type`, `status` | `sale_date`, `price`, `deposit_amount`, `deposit_date`, `balance_due_date`, `balance_paid_date`, `transport_fee` (plain, unindexed — a flat delivery/transport charge, decimal), `deferred_boarding_amount`/`deferred_boarding_frequency`/`deferred_boarding_duration_days` (plain, unindexed — a boarding rate for a buyer who delayed pickup: decimal amount + `BOARDING_FREQUENCY_OPTIONS` Day/Week/Month + a free-text **count of frequency units** (despite the `_days` name, the value is the number of units — `2` with frequency `Week` means two weeks), rendered as "amount per frequency × count"; the family companion bundle multiplies `amount × count` into a deferred-pickup total feeding the computed remaining balance (§20); never cents, never an Expense — see §21), `lead_source`, `referred_by_contact_id` (indexed FK → the Contact who referred this buyer; `CONTACT_REFERENCES`; on save `saleRepo` auto-tags that contact `buyer_referrer` via `contactRepo.ensureType`), `payment_method`/`payment_reference`/`invoice_number`/`invoice_notes` (plain, unindexed — invoice/receipt document fields set from the Financials generator modal; §24), `notes`. On the detail page (`sale.js`) all fee fields render/edit above all date fields. Its own table (not a Dog field) so reserve/return/re-place stay distinct facts. |
-| **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `related_dog_id` (canonical Dog link, used only for `lease`/`co_own`/`other` types — where no linked Sale/StudService reaches a dog; forced `null` for other types via `contractRepo.DOG_LINK_TYPES`/`normalizeLinks`), `related_contact_id` (canonical counterparty link — lessee/co-owner/partner — for the same `lease`/`co_own`/`other` types via `CONTACT_LINK_TYPES`; sale/stud contracts reach their counterparty through the linked Sale/StudService, so it stays `null` there; scopes a contract into the **partner** companion bundle, §20), `document_url` (plain, unindexed — a share link to the signed document, e.g. a Drive "anyone with the link" URL; carried as a *pointer* into the buyer bundle, §20), `signed_date`, `lease_start_date`/`lease_end_date` (lease type; UI shows them and hides Related sale/stud fields when `contract_type='lease'`), `title`, `terms_summary`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf for its own hard-delete (nothing points *at* a contract), but it points *at* its Dog via `related_dog_id` (guarded under `DOG_REFERENCES`) and its counterparty via `related_contact_id` (guarded under `CONTACT_REFERENCES`). |
+| **Contract** | `contract_type` | `status` (defaults `draft`), `related_sale_id`, `related_stud_service_id`, `related_dog_id` (canonical Dog link, used only for `lease`/`co_own`/`foster`/`other` types — where no linked Sale/StudService reaches a dog; forced `null` for other types via `contractRepo.DOG_LINK_TYPES`/`normalizeLinks`), `related_contact_id` (canonical counterparty link — lessee/co-owner/partner/foster owner — for the same `lease`/`co_own`/`foster`/`other` types via `CONTACT_LINK_TYPES`; sale/stud contracts reach their counterparty through the linked Sale/StudService, so it stays `null` there; scopes a contract into the **partner** companion bundle, §20), `document_url` (plain, unindexed — a share link to the signed document, e.g. a Drive "anyone with the link" URL; carried as a *pointer* into the buyer bundle, §20), `signed_date`, `lease_start_date`/`lease_end_date` (lease type; UI shows them and hides Related sale/stud fields when `contract_type='lease'`), `title`, `terms_summary`, `notes`. Generic across sale/stud/co-ownership/lease. Leaf for its own hard-delete (nothing points *at* a contract), but it points *at* its Dog via `related_dog_id` (guarded under `DOG_REFERENCES`) and its counterparty via `related_contact_id` (guarded under `CONTACT_REFERENCES`). |
 | **StudService** | `direction`, `our_dog_id`, `partner_dog_id`, `partner_contact_id`, `status` | `pairing_id`, `fee_amount`, `fee_structure`, `pick_status` (plain, unindexed — suggested `pending`/`claimed`, free text allowed; meaningful **only** when `fee_structure ∈ {pick_of_litter, flat_plus_pick}`, forced `null` otherwise; feeds the partner companion bundle's compensation, §20), `pick_value_amount` (plain, unindexed decimal — the breeder's own estimated dollar value of the pick puppy, for income tracking; gated the same way as `pick_status`; deliberately **separate** from `fee_amount` (the actual cash); internal only — never in the partner bundle), `result_notes`, `type` (`in_person`/`ai` — coarse physical-travel flag; `in_person` + `sent_date`/`returned_date` window feeds the away-board, §19), `referred_by_contact_id` (indexed FK → the referring Contact; `CONTACT_REFERENCES`; on save `studServiceRepo` auto-tags `stud_referrer` via `contactRepo.ensureType`), `payment_method`/`payment_reference`/`invoice_number`/`invoice_notes` (plain, unindexed — invoice/receipt document fields, mirroring Sale's; only the outgoing direction is invoiceable, since incoming stud is an expense; §24), plus optional logistics dates. Covers both `incoming` and `outgoing`. |
 | **Event** | `subject_type`, `subject_id`, `event_type`, `event_date`, `title` | `event_end_date`, `reminder_date`, `reminder_dismissed`, `related_dog_id`, `related_contact_id`, `details{}`, `notes`. See §8. **No `cost` field** — a cost entered on the event form is written to the Expense ledger (`expenses.event_id` = the event) and read back via `expenseRepo.getByEvent`; see the Expense row and §21. |
-| **Expense** | `subject_type` (`dog`/`litter`/`pairing`/`kennel`), `subject_id`, `amount`, `category`, `expense_date` | `event_id` (nullable FK → the Event a cost was captured from — the one canonical event↔cost link; reverse is `expenseRepo.getByEvent`), `miles`/`mileage_rate` (plain, unindexed — a **mileage** expense: when `miles` is set, `amount` is **derived** = `miles × mileage_rate` in `expenseRepo.normalize`, never entered directly; both null on a flat expense. Default rate prefilled from `settings.getMileageDefaults()`; §21), `vendor`, `receipt_number` (plain, unindexed — a human-facing receipt/reference number that ties a ledger row back to a paper/photo receipt, e.g. the number the Receipts companion app stamps on each capture; shown/edited on both expense forms and the Financials ledger, searchable there, and the idempotent key on CSV re-import when present, §9), `notes`. The Financials ledger: the single home for money spent. Polymorphic like Event; `kennel`-subject rows are kennel-wide overhead. Leaf entity (`EXPENSE_REFERENCES` empty). See §21. |
+| **Expense** | `subject_type` (`dog`/`litter`/`pairing`/`kennel`), `subject_id`, `amount`, `category`, `expense_date` | `event_id` (nullable FK → the Event a cost was captured from — the one canonical event↔cost link; reverse is `expenseRepo.getByEvent`), `miles`/`mileage_rate` (plain, unindexed — a **mileage** expense: when `miles` is set, `amount` is **derived** = `miles × mileage_rate` in `expenseRepo.normalize`, never entered directly; both null on a flat expense. Default rate prefilled from `settings.getMileageDefaults()`; §21), `vendor`, `receipt_number` (plain, unindexed — a human-facing receipt/reference number that ties a ledger row back to a paper/photo receipt, e.g. the number the Receipts companion app stamps on each capture; shown/edited on both expense forms and the Financials ledger, searchable there, and the idempotent key on CSV re-import when present, §9), `reimbursable`/`reimbursed_date` (plain, unindexed — a cost owed back to you, e.g. a foster-in rearing cost the dam's owner reimburses; `reimbursed_date` records when it was settled, and a set date coerces `reimbursable=true`. Litter P&L nets a reimbursed reimbursable out of your cost and lists a pending one as a receivable — §21/§25. "Reimbursable to whom" is derived from the litter's foster partner, so no per-expense contact FK), `notes`. The Financials ledger: the single home for money spent. Polymorphic like Event; `kennel`-subject rows are kennel-wide overhead. Leaf entity (`EXPENSE_REFERENCES` empty). See §21. |
 
 ### 4.2 Relationship direction — the sixth design principle
 
@@ -180,7 +181,8 @@ expenses:      id, event_id, [subject_type+subject_id], category,
 contacts:      id, kennel_id, waitlist_status, is_archived
 kennels:       id, is_archived
 pairings:      id, sire_id, dam_id, status, pairing_type, is_archived
-litters:       id, pairing_id, sire_id, dam_id, status, whelp_date, is_archived
+litters:       id, pairing_id, sire_id, dam_id, status, whelp_date,
+               foster_partner_contact_id, is_archived        ← foster_partner_contact_id added in version(2)
 sales:         id, dog_id, buyer_contact_id, referred_by_contact_id, status,
                placement_type, is_archived
 contracts:     id, contract_type, status, related_sale_id,
@@ -205,14 +207,26 @@ Index notes:
 - `is_archived` is filtered in JS, not by index (IndexedDB can't key on booleans;
   trivial at kennel scale).
 
+A second, **additive** `version(2)` block now exists (foster whelps, §25):
+
+```
+db.version(2).stores({
+  litters: 'id, pairing_id, sire_id, dam_id, status, whelp_date, foster_partner_contact_id, is_archived'
+});
+```
+
+It adds exactly one index — `litters.foster_partner_contact_id` — so the referential
+guard can protect a foster partner Contact. Dexie inherits every unchanged table, so
+only `litters` is redeclared. `foster_direction` and the split fields are plain
+unindexed fields and so are not in the string.
+
 ### The versioning rule
 
-The single `version(1)` block is editable **only** because nothing has shipped that
-needs migration — reconcile any change by Reset App + re-seed. **At the first real
-release this changes permanently:** from then on, schema changes are *additive only* —
-new tables/indexes go in a new `db.version(2).stores({...})` block, and shipped version
-blocks are **never edited again**. If you add an index/table after real data exists, use
-a new version block.
+`version(1)` is now **frozen** — the arrival of `version(2)` above makes the
+additive-only rule live. From here on, schema changes are *additive only*: new
+tables/indexes go in a **new** `db.version(N).stores({...})` block, and every shipped
+version block (1 **and** 2) is **never edited again**. If you add an index/table, append
+a `version(3)` block — do not edit `version(1)` or `version(2)`.
 
 ---
 
@@ -291,9 +305,10 @@ the normal remove and never cascades**.
   per entry and returns human-readable `{label, count}` blockers; `hardDelete` throws
   `ReferenceBlockedError` if any exist.
 - `CONTACT_REFERENCES` covers owner/co-owner of a dog, buyer + referrer on a sale,
-  partner + referrer on a stud service, contact on a boarding event, and the
-  lease/co_own/other contract counterparty — so a contact documented anywhere can't be
-  hard-deleted out from under it.
+  partner + referrer on a stud service, contact on a boarding event, the
+  lease/co_own/foster/other contract counterparty, and the **foster partner on a
+  litter** (`litters.foster_partner_contact_id`, §25) — so a contact documented anywhere
+  can't be hard-deleted out from under it.
 - `EVENT_REFERENCES` is `[{ expenses.event_id }]`: an event carrying a linked expense is
   hard-delete-blocked (archive it, or clear the Cost first). `eventRepo` is
   `makeRepo('events', EVENT_REFERENCES)`.
@@ -565,7 +580,7 @@ intro-card / pinned-top-card presentation postdate it).
 
 App-shell cache so the app installs and works offline after first load.
 
-- `CACHE_NAME` (currently `kennelos-shell-v74`) + a `PRECACHE_URLS` list of **every** app
+- `CACHE_NAME` (currently `kennelos-shell-v86`) + a `PRECACHE_URLS` list of **every** app
   file (html/js/css/icons/vendor/resources).
 - `install` precaches the list (**`cache.addAll` is atomic** — one missing/renamed file
   fails the whole install). `activate` deletes old caches. Fetch is **cache-first** for
@@ -973,13 +988,17 @@ child only emits when both are on; the console greys out a child whose master is
 The flags, by type:
 - **prospective:** `parents` (→ `parentRegisteredName`, `parentCallName`, `parentPhotos`,
   `parentTests`), `pricing` (→ `pricingPrice`, `pricingDeposit`), `litterDates` (born /
-  accept-deposits / estimated-ready), `markings`. When every `dogCard` field is off the card is
-  omitted entirely; when no pup carries a price/deposit the shell drops the deposit disclaimer.
+  accept-deposits / estimated-ready), `markings`, `fosterOwnerKennel` (the litter card's
+  `breederKennel` — the foster dam's **owner kennel**, §25; emitted only for a foster litter,
+  empty for every ordinary litter regardless of the flag). When every `dogCard` field is off the
+  card is omitted entirely; when no pup carries a price/deposit the shell drops the deposit
+  disclaimer.
 - **family:** `age`, `parentage`, `photos`, `readyPlacement`, `financials` (price, deposit,
   transport, deferred-pickup, remaining balance, balance-due — **not** placement type / sale
   status, which always show), the five history flags `histVaccination`/`histPreventative`/
   `histWeight`/`histMilestone`/`histNote`, `histBoarding` (deferred-pickup boarding section),
-  `contract`.
+  `contract`, `fosterOwnerKennel` (the pup card's `breederKennel` — the owner kennel of a
+  pup that came from a foster litter, §25; empty otherwise).
 - **partner:** `studServices` (master → `studRegisteredName`, `studCallName`, `studPhotos`,
   `studTests` for the Stud/Dam cards, plus `studAgreement` for the Agreement Details/
   compensation and `studContract` for the per-service contract), and top-level `contracts`
@@ -1049,6 +1068,16 @@ bulk food, registration dues, marketing) lives on `subject_type='kennel'`; there
 **no `general` subject** — program overhead is logged against your own kennel, so there is never
 a null `subject_id`. Revenue is **not stored** here (it stays on `Sale.price`/`deposit_amount`
 and `StudService.fee_amount`); this table is costs only.
+
+**Foster compensation & reimbursables (§25).** A foster litter needs no new income
+machinery: whoever holds the puppies books the gross Sales, and the **other party's cut is a
+real Expense** — the `foster_split` category ("Foster compensation", whether the terms are a %
+split or a flat per-pup fee) — so it flows into the
+Litter P&L as cost like any other spend. Owner-reimbursable rearing costs use the ledger's
+`reimbursable`/`reimbursed_date` fields: `litterFinances.js` **excludes a reimbursed
+reimbursable from your cost** (it washes out — someone paid you back) and tallies a
+**still-pending** one as an outstanding receivable (`reimbursablePending`, the report's "Owed
+back" column) while leaving it in cost until settled.
 
 The ledger has a **CSV import path** (the `expense` mapping in `csvImport.js`, reached from
 Import/Export → "Import expenses (CSV)"), so a companion receipts/mileage app — or any
@@ -1275,3 +1304,74 @@ synchronously within the click handler** and only navigated afterward — openin
 await would let iOS Safari's pop-up blocker silently swallow it (the gesture is spent), so the
 invoice/receipt would never appear on iPhone. The document **never prints itself** — the owner
 triggers the browser's Print → Save as PDF with the page's "Print / Save as PDF" button.
+
+---
+
+## 25. Foster whelps (foster-in & foster-out)
+
+Tracking a litter whelped/raised under a **caretaker↔owner arrangement** where the two parties
+differ, with a contract and an income split. Added in schema `version(2)` (§5) — the first
+additive block past the collapsed `version(1)`.
+
+### The two settling ideas
+
+- **Foster is a per-litter fact, not a dog fact.** The same dam can have more than one foster
+  litter (and non-foster litters), so foster lives on the **Litter** (`foster_direction` +
+  `foster_partner_contact_id` + split terms), never on the Dog. A foster **puppy** is an ordinary
+  `status='puppy'` Dog we manage and sell; its foster-ness is a **derived** read of its litter's
+  `foster_direction` (badge only) — it is emphatically **not** an `external`/`external_reference`
+  dog (that is a reference-only record we don't raise). The reverse of "is this puppy fostered?"
+  is a query over the litter, per the one-canonical-direction rule (§4.2).
+- **Whoever holds the puppies books the Sales; the other party's cut is an Expense.** Direction
+  only decides who holds the Sales:
+  - **foster-in** — an external dam's litter is raised in our care → **we** record the puppy
+    Sales (full gross) and pay the **owner's** split out as a `foster_split` Expense;
+  - **foster-out** — our dam's litter is raised elsewhere → the pups are still our Dog records; if
+    we handle placement we record the Sales and pay the **caretaker's** cut as a `foster_split`
+    Expense (identical shape, roles swapped).
+
+  This is why foster needs **no new income machinery** — it rides the existing Sale → derived
+  income path (§21), and the split-payout is a normal cost, exactly like an incoming stud fee we
+  pay. (A fully hands-off foster-out where we never see the sales — just receive a check — is the
+  one gap; it is deferred, not modeled.)
+
+  The partner's compensation is one of two models (`foster_comp_model`, owner's choice per
+  litter): an **income split** (`foster_our_share_pct` + `foster_split_basis`) or a **flat fee per
+  pup** (`foster_flat_fee_per_pup`). Both document the terms only — the money is the same
+  `foster_split` ("Foster compensation") Expense either way, so the P&L stays model-agnostic. The
+  `litter.js` edit form swaps the share-% / basis fields for a per-pup fee field as the model
+  changes.
+
+### Model touch-points (all additive; all covered in §4/§5/§7/§20/§21)
+
+- **Litter:** `foster_direction` (plain, nullable `foster_in`/`foster_out`),
+  `foster_partner_contact_id` (**indexed FK → Contact**, the one schema change — `version(2)`;
+  guarded in `CONTACT_REFERENCES`), `foster_comp_model` (`income_split`/`flat_per_pup`), and
+  `foster_our_share_pct`/`foster_split_basis`/`foster_flat_fee_per_pup`/`foster_split_notes`
+  (plain, documentation of the compensation terms; the real payout is the Expense). `litterRepo`
+  hard-checks only a known direction, a known comp model, a 0–100 share %, and a non-negative flat
+  fee; everything else is warn-only in `litter.js`.
+- **Vocab:** `FOSTER_DIRECTION`, `FOSTER_COMP_MODEL`, `FOSTER_SPLIT_BASIS`, a `foster`
+  `CONTRACT_TYPE`, and a `foster_split` ("Foster compensation") `EXPENSE_CATEGORIES` value.
+- **Contract:** `foster` joins `contractRepo.DOG_LINK_TYPES`/`CONTACT_LINK_TYPES` — a foster
+  contract reaches the fostered dam (`related_dog_id`) and the counterparty (`related_contact_id`)
+  the same way a lease does, so **no new Contract FK**. It is also partner-facing
+  (`isLivePartnerContract`), so a live foster contract confers Companion **Partner** membership.
+- **Expense:** `reimbursable`/`reimbursed_date` plain fields (§21). Reimbursed costs wash out of
+  the Litter P&L; pending ones surface as the "Owed back" receivable.
+- **Companion (§20):** the owner/breeder **kennel** is revealed via a `breederKennel` field on
+  the prospective litter card and the family pup card, sourced from the foster partner contact's
+  `kennel_id`, allow-listed by name in `companionExport.js`, gated by the `fosterOwnerKennel`
+  include flag, and emitted **only for a foster-IN litter** (on foster-out WE are the breeder, so
+  there is nothing external to reveal; empty otherwise). `companion-view.html` renders it as a
+  "Bred by" line (additive; older bundles omit it).
+
+### Surfaces
+
+`litter.js` (a "Foster arrangement" edit section + a read-only callout + a title badge),
+`litters.js` (Foster filter + badge), `litter-finances-report.js` (Foster filter + "Owed back"
+column), `expensePanel.js` (the Reimbursable toggle + Reimbursed-on date), the contract page (works
+unchanged — it reads the link types from the repo), and the Companion console/shell. Sample data
+seeds a full foster-in example (Meadow Ridge / Dana Ruiz: an external dam Marigold, a foster litter
+with two available pups whose `breeder_kennel_id` is the owner kennel, a `foster` contract, a
+`foster_split` payout, and one reimbursed + one pending reimbursable cost).

@@ -103,6 +103,8 @@ function openExpenseForm({ subjectType, subjectId, expense = null, onSaved }) {
     expense_date: expense?.expense_date || todayYMD(),
     vendor: expense?.vendor || '',
     receipt_number: expense?.receipt_number || '',
+    reimbursable: !!expense?.reimbursable,
+    reimbursed_date: expense?.reimbursed_date || '',
     notes: expense?.notes || ''
   };
 
@@ -124,6 +126,10 @@ function openExpenseForm({ subjectType, subjectId, expense = null, onSaved }) {
           <input id="xf-vendor" type="text" value="${esc(draft.vendor)}" placeholder="Who was paid"></div>
         <div class="field"><label>Receipt #</label>
           <input id="xf-receipt" type="text" value="${esc(draft.receipt_number)}" placeholder="e.g. R-0007 (ties to a photo receipt)"></div>
+        <div class="field"><label>Reimbursable</label>
+          <label class="check-inline"><input type="checkbox" id="xf-reimbursable"${draft.reimbursable ? ' checked' : ''}> Owed back (e.g. by a foster dam's owner)</label></div>
+        <div class="field" id="xf-reimbursed-wrap"${draft.reimbursable ? '' : ' style="display:none;"'}><label>Reimbursed on</label>
+          <input id="xf-reimbursed" type="date" value="${esc(draft.reimbursed_date)}"></div>
         <div class="field field-wide"><label>Notes</label>
           <textarea id="xf-notes">${esc(draft.notes)}</textarea></div>
       </div>
@@ -139,6 +145,14 @@ function openExpenseForm({ subjectType, subjectId, expense = null, onSaved }) {
   categorySel.value = draft.category;
   const mileage = wireMileageMode(modal, 'xf', categorySel);
 
+  // Reimbursable toggle reveals the "Reimbursed on" date (the repo also coerces
+  // reimbursable=true whenever a reimbursed date is present, so the two agree).
+  const reimbursableEl = modal.querySelector('#xf-reimbursable');
+  const reimbursedWrap = modal.querySelector('#xf-reimbursed-wrap');
+  reimbursableEl.addEventListener('change', () => {
+    reimbursedWrap.style.display = reimbursableEl.checked ? '' : 'none';
+  });
+
   function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
   function onKey(e) { if (e.key === 'Escape') close(); }
 
@@ -149,6 +163,8 @@ function openExpenseForm({ subjectType, subjectId, expense = null, onSaved }) {
       expense_date: modal.querySelector('#xf-date').value,
       vendor: modal.querySelector('#xf-vendor').value.trim(),
       receipt_number: modal.querySelector('#xf-receipt').value.trim(),
+      reimbursable: reimbursableEl.checked,
+      reimbursed_date: reimbursableEl.checked ? (modal.querySelector('#xf-reimbursed').value || null) : null,
       notes: modal.querySelector('#xf-notes').value,
       ...mileage.payloadBits()
     };
@@ -210,11 +226,16 @@ export function renderExpensePanel(opts) {
       const receiptMeta = x.receipt_number ? `Receipt ${esc(x.receipt_number)}` : '';
       const meta = [mileageMeta, x.vendor ? esc(x.vendor) : '', receiptMeta, x.notes ? esc(x.notes) : ''].filter(Boolean).join(' — ');
       const eventTag = x.event_id ? ' <span class="badge badge-gray" title="Captured from an event">🔗 event</span>' : '';
+      const reimbursableTag = x.reimbursable
+        ? (x.reimbursed_date
+            ? ` <span class="badge badge-green" title="Reimbursed">↩︎ reimbursed ${esc(fmtDate(x.reimbursed_date))}</span>`
+            : ' <span class="badge badge-amber" title="Reimbursable — awaiting reimbursement">↩︎ reimbursable</span>')
+        : '';
       const logBtn = (!x.event_id && EVENTABLE.has(subjectType))
         ? `<button class="btn btn-sm" data-act="log-event" data-idx="${i}" title="Create a linked event for this cost">Log event →</button>` : '';
       return `<li class="row-between${x.is_archived ? ' row-archived' : ''}" style="padding:8px 0; border-top:1px solid var(--border); gap:10px;">
         <div style="flex:1;">
-          <div>${badge(EXPENSE_CATEGORIES, x.category)} <strong>${esc(fmtMoney(x.amount))}</strong> <span class="faint">${esc(fmtDate(x.expense_date))}</span>${eventTag}</div>
+          <div>${badge(EXPENSE_CATEGORIES, x.category)} <strong>${esc(fmtMoney(x.amount))}</strong> <span class="faint">${esc(fmtDate(x.expense_date))}</span>${eventTag}${reimbursableTag}</div>
           ${meta ? `<div class="muted" style="font-size:14px;">${meta}</div>` : ''}
         </div>
         <div class="pill-row">

@@ -102,7 +102,8 @@ const INCLUDE_OPTIONS = {
     { key: 'pricingPrice', label: 'Price', master: 'pricing' },
     { key: 'pricingDeposit', label: 'Deposit', master: 'pricing' },
     { key: 'litterDates', label: 'Litter dates (born, accepting deposits, estimated ready)' },
-    { key: 'markings', label: 'Puppy markings' }
+    { key: 'markings', label: 'Puppy markings' },
+    { key: 'fosterOwnerKennel', label: 'Owner kennel on foster litters' }
   ],
   family: [
     { key: 'age', label: 'Puppy age' },
@@ -116,7 +117,8 @@ const INCLUDE_OPTIONS = {
     { key: 'histMilestone', label: 'History — Milestones' },
     { key: 'histNote', label: 'History — Notes' },
     { key: 'histBoarding', label: 'Deferred pickup boarding' },
-    { key: 'contract', label: 'Contract link' }
+    { key: 'contract', label: 'Contract link' },
+    { key: 'fosterOwnerKennel', label: 'Owner kennel on foster litters' }
   ],
   partner: [
     { key: 'studServices', label: 'Stud services' },

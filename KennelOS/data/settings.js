@@ -118,12 +118,20 @@ const COMPANION_INCLUDE_DEFAULTS = {
   prospective: {
     parents: true, parentRegisteredName: true, parentCallName: true, parentPhotos: true, parentTests: true,
     pricing: true, pricingPrice: true, pricingDeposit: true,
-    litterDates: true, markings: true
+    litterDates: true, markings: true,
+    // Reveal the owner/breeder kennel on FOSTER-IN litters only (the field is
+    // emitted empty for a non-foster or foster-out litter regardless of this flag —
+    // on foster-out we are the breeder). Defaults on, per the "all include flags
+    // default true" invariant; turn it off to keep a foster dam's owner kennel
+    // private on a prospective share.
+    fosterOwnerKennel: true
   },
   family: {
     age: true, parentage: true, photos: true, readyPlacement: true, financials: true,
     histVaccination: true, histPreventative: true, histWeight: true, histMilestone: true, histNote: true,
-    histBoarding: true, contract: true
+    histBoarding: true, contract: true,
+    // Same as prospective: only populated for a puppy from a foster litter.
+    fosterOwnerKennel: true
   },
   partner: {
     studServices: true, studRegisteredName: true, studCallName: true, studPhotos: true, studTests: true,

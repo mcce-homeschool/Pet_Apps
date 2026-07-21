@@ -31,6 +31,8 @@ import { contractRepo } from './contractRepo.js';
 import { studServiceRepo } from './studServiceRepo.js';
 import { eventRepo } from './eventRepo.js';
 import { litterRepo } from './litterRepo.js';
+import { contactRepo } from './contactRepo.js';
+import { kennelRepo } from './kennelRepo.js';
 import { todayYMD } from './dateUtils.js';
 import { getCompanionSettings } from './settings.js';
 
@@ -160,6 +162,21 @@ function familyEventDetail(e) {
   }
 }
 
+// The owner/breeder kennel to reveal on a FOSTER-IN litter — the kennel the
+// foster partner (the dam's owner, who is the breeder of record) belongs to.
+// Returns just the kennel name (never the whole record), or '' otherwise.
+// Deliberately **foster-in ONLY**: on a foster-OUT litter WE are the breeder, so
+// the partner is the caretaker (not the breeder) and there is nothing external to
+// reveal. Gated by the `fosterOwnerKennel` include flag at the call site so it can
+// be withheld even for foster-in. Reads through repos, never db.*.
+async function fosterOwnerKennelName(litter) {
+  if (!litter || litter.foster_direction !== 'foster_in' || !litter.foster_partner_contact_id) return '';
+  const partner = await contactRepo.getById(litter.foster_partner_contact_id);
+  if (!partner || !partner.kennel_id) return '';
+  const kennel = await kennelRepo.getById(partner.kennel_id);
+  return kennel ? (kennel.kennel_name || '') : '';
+}
+
 // Positive allow-list assertion — abort the send rather than emit a superset.
 function assertOnlyKeys(obj, allowed, ctx) {
   for (const k of Object.keys(obj)) {
@@ -247,6 +264,9 @@ export async function buildProspectiveBundle(contact) {
       whelpDate: inc.litterDates ? (l.whelp_date || null) : null,
       acceptDepositsDate: inc.litterDates ? (l.accept_deposits_date || null) : null,
       readyDate: inc.litterDates ? (l.estimated_ready_date || null) : null,
+      // Owner/breeder kennel — populated only for a foster litter and only when the
+      // owner leaves the flag on; empty for every ordinary litter (see §20/§4).
+      breederKennel: inc.fosterOwnerKennel ? await fosterOwnerKennelName(l) : '',
       sire: inc.parents ? await dogCard(sireDog, dogOpts) : null,
       dam: inc.parents ? await dogCard(damDog, dogOpts) : null,
       pups
@@ -359,6 +379,9 @@ export async function buildFamilyBundle(contact) {
         deferredPickup: showFin ? deferredPickup : null,
         remainingBalance: showFin ? remainingBalance : null,
         balanceDueDate: showFin ? (sale.balance_due_date || null) : null,
+        // Owner/breeder kennel — populated only when this pup came from a foster
+        // litter and the owner leaves the flag on; empty otherwise (§20/§4).
+        breederKennel: (inc.fosterOwnerKennel && litter) ? await fosterOwnerKennelName(litter) : '',
         eventSections
       };
       if (litter && litter.nickname) pup.litterNickname = litter.nickname;

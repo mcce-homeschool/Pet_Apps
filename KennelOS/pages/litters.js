@@ -5,7 +5,7 @@ import { litterRepo } from '../data/litterRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
 import { createListView } from '../assets/listView.js';
 import { badge, fmtDate, esc } from '../assets/ui.js';
-import { LITTER_STATUS } from '../data/vocab.js';
+import { LITTER_STATUS, FOSTER_DIRECTION } from '../data/vocab.js';
 
 const mount = document.getElementById('litter-list');
 
@@ -39,6 +39,7 @@ async function init() {
       { id: 'status', label: 'Status', options: LITTER_STATUS, match: (l, v) => l.status === v },
       { id: 'dam', label: 'Dam', options: nameOptions(damIds), match: (l, v) => l.dam_id === v },
       { id: 'sire', label: 'Sire', options: nameOptions(sireIds), match: (l, v) => l.sire_id === v },
+      { id: 'foster', label: 'Foster', options: FOSTER_DIRECTION, match: (l, v) => l.foster_direction === v },
       { id: 'year', label: 'Whelp year', options: years, match: (l, v) => (l.whelp_date || '').slice(0, 4) === v }
     ],
     // Nickname, Dam, Sire, and Status stay visible at every width; Breed, Whelp
@@ -51,7 +52,7 @@ async function init() {
       { header: 'Breed', collapse: true, cell: (l) => { const b = damBreed(l); return b ? esc(b) : '<span class="faint">—</span>'; } },
       { header: 'Whelp date', collapse: true, cell: (l) => l.whelp_date ? esc(fmtDate(l.whelp_date)) : '<span class="faint">—</span>' },
       { header: 'Born', collapse: true, cell: (l) => l.puppies_born_total != null && l.puppies_born_total !== '' ? esc(String(l.puppies_born_total)) : '<span class="faint">—</span>' },
-      { header: 'Status', cell: (l) => badge(LITTER_STATUS, l.status) }
+      { header: 'Status', cell: (l) => badge(LITTER_STATUS, l.status) + (l.foster_direction ? ' ' + badge(FOSTER_DIRECTION, l.foster_direction) : '') }
     ],
     onRowClick: (l) => { location.href = `litter.html?id=${encodeURIComponent(l.id)}`; },
     load: (o) => litterRepo.getAll(o),

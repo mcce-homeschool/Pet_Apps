@@ -263,6 +263,9 @@
         meta += row('Born', l.whelpDate ? esc(fmtDate(l.whelpDate)) : '');
         meta += row('Accepting deposits', l.acceptDepositsDate ? esc(fmtDate(l.acceptDepositsDate)) : '');
         meta += row('Estimated ready', l.readyDate ? esc(fmtDate(l.readyDate)) : '');
+        // Owner/breeder kennel — present only on a foster litter when the owner
+        // opted to reveal it (additive field; older bundles simply omit it).
+        meta += row('Bred by', l.breederKennel ? esc(l.breederKennel) : '');
         if (meta) h += '<div style="margin-top:8px;">' + meta + '</div>';
         if (l.readyDate) h += '<p class="disclaimer">*' + esc(READY_DISCLAIMER) + '</p>';
 
@@ -376,6 +379,9 @@
         h += '<div class="card">';
         h += '<h2>' + esc(sexLabel(p.sex)) + ' ' + (p.callName ? esc(p.callName) : 'Your puppy') + '</h2>';
         if (p.litterNickname) h += '<p class="subhead">From the ' + esc(p.litterNickname) + ' litter</p>';
+        // Owner/breeder kennel — present only for a foster-litter pup the owner
+        // opted to reveal (additive; older bundles omit it).
+        if (p.breederKennel) h += '<p class="subhead">Bred by ' + esc(p.breederKennel) + '</p>';
 
         var sireCall = p.sire && p.sire.callName ? esc(p.sire.callName) : '';
         var damCall = p.dam && p.dam.callName ? esc(p.dam.callName) : '';

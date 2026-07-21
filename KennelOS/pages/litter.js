@@ -8,7 +8,8 @@ import { pairingRepo } from '../data/pairingRepo.js';
 import { dogRepo } from '../data/dogRepo.js';
 import { saleRepo } from '../data/saleRepo.js';
 import { contactRepo } from '../data/contactRepo.js';
-import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX, SALE_STATUS, descriptor } from '../data/vocab.js';
+import { kennelRepo } from '../data/kennelRepo.js';
+import { LITTER_STATUS, PAIRING_STATUS, DOG_STATUS, SEX, SALE_STATUS, FOSTER_DIRECTION, FOSTER_COMP_MODEL, FOSTER_SPLIT_BASIS, descriptor } from '../data/vocab.js';
 import { esc, badge, fmtDate, fmtMoney, todayYMD, param, confirmModal } from '../assets/ui.js';
 import { addDaysToYMD } from '../data/dateUtils.js';
 import { renderTimeline } from '../assets/timeline.js';
@@ -38,7 +39,9 @@ const els = {
 const blankLitter = () => ({
   pairing_id: '', dam_id: '', sire_id: '', nickname: '', whelp_date: '', accept_deposits_date: '', estimated_ready_date: '', litter_registration_number: '',
   puppies_born_total: '', puppies_born_alive: '', puppies_born_deceased: '', puppies_born_abnormalities: '', status: '', notes: '',
-  expected_price_male: '', expected_price_female: '', expected_deposit_male: '', expected_deposit_female: ''
+  expected_price_male: '', expected_price_female: '', expected_deposit_male: '', expected_deposit_female: '',
+  foster_direction: '', foster_partner_contact_id: '', foster_comp_model: '',
+  foster_our_share_pct: '', foster_split_basis: '', foster_flat_fee_per_pup: '', foster_split_notes: ''
 });
 
 const ctx = {
@@ -48,19 +51,27 @@ const ctx = {
   pickerArchived: false,
   allDogs: [],
   allPairings: [],
+  allContacts: [],
   dogsById: new Map(),
-  pairingsById: new Map()
+  pairingsById: new Map(),
+  contactsById: new Map(),
+  kennelsById: new Map()
 };
 
 async function loadRefs() {
-  const [dogs, pairings] = await Promise.all([
+  const [dogs, pairings, contacts, kennels] = await Promise.all([
     dogRepo.getAll({ includeArchived: true }),
-    pairingRepo.getAll({ includeArchived: true })
+    pairingRepo.getAll({ includeArchived: true }),
+    contactRepo.getAll({ includeArchived: true }),
+    kennelRepo.getAll({ includeArchived: true })
   ]);
   ctx.allDogs = dogs;
   ctx.allPairings = pairings;
+  ctx.allContacts = contacts;
   ctx.dogsById = new Map(dogs.map((d) => [d.id, d]));
   ctx.pairingsById = new Map(pairings.map((p) => [p.id, p]));
+  ctx.contactsById = new Map(contacts.map((c) => [c.id, c]));
+  ctx.kennelsById = new Map(kennels.map((k) => [k.id, k]));
 }
 
 function dogName(id) {
@@ -104,6 +115,23 @@ function pairingOptions(current) {
   return `<option value="">— none —</option>` + opts;
 }
 
+function contactOptions(current) {
+  const opts = ctx.allContacts
+    .filter((c) => ctx.pickerArchived || !c.is_archived || c.id === current)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .map((c) => `<option value="${esc(c.id)}"${c.id === current ? ' selected' : ''}>${esc(c.name)}${c.is_archived ? ' (archived)' : ''}</option>`)
+    .join('');
+  return `<option value="">— none —</option>` + opts;
+}
+
+// A foster partner contact's kennel name, if that contact is tied to a kennel —
+// this is the "owner kennel" (foster-in) / "caretaker kennel" (foster-out) that
+// can optionally be revealed on a companion share.
+function contactKennelName(contactId) {
+  const c = ctx.contactsById.get(contactId);
+  return c?.kennel_id ? (ctx.kennelsById?.get(c.kennel_id)?.kennel_name || '') : '';
+}
+
 // --- Read-only view ------------------------------------------------------
 function row(label, valueHtml) {
   return `<dt>${esc(label)}</dt><dd>${valueHtml || '<span class="faint">—</span>'}</dd>`;
@@ -132,6 +160,7 @@ function renderView() {
     : '';
   els.body.innerHTML = `
     ${syncWarningHtml(l)}
+    ${fosterViewHtml(l)}
     <dl class="dl-meta" style="margin-top:14px;">
       ${row('Nickname', esc(l.nickname))}
       ${row('Dam', dogLink(l.dam_id))}
@@ -149,6 +178,37 @@ function renderView() {
       ${row('Expected deposit (female)', esc(money(l.expected_deposit_female)))}
       ${row('Notes', l.notes ? esc(l.notes).replace(/\n/g, '<br>') : '')}
     </dl>`;
+}
+
+// Foster arrangement (version(2), guide §4): a callout above the profile, shown
+// only for a foster litter. The partner is the dam's owner (foster-in) or the
+// caretaker (foster-out); their kennel is the "owner/caretaker kennel" that a
+// companion share can optionally reveal. The income split is documentation — the
+// real payout to the other party is a `foster_split` Expense on this litter.
+function fosterViewHtml(l) {
+  if (!l.foster_direction) return '';
+  const partner = ctx.contactsById.get(l.foster_partner_contact_id);
+  const kennelName = contactKennelName(l.foster_partner_contact_id);
+  const partnerLabel = l.foster_direction === 'foster_in' ? 'Owner (dam belongs to)' : 'Caretaker (raising the pups)';
+  // Compensation reads by model: a flat per-pup fee, or a % income split.
+  const isFlat = l.foster_comp_model === 'flat_per_pup';
+  const compRows = isFlat
+    ? row('Flat fee per pup', l.foster_flat_fee_per_pup != null && l.foster_flat_fee_per_pup !== ''
+        ? `${esc(money(l.foster_flat_fee_per_pup))} per pup` : '')
+    : row('Our income share', l.foster_our_share_pct != null && l.foster_our_share_pct !== ''
+        ? `${esc(String(l.foster_our_share_pct))}% to us${l.foster_split_basis ? ` · ${esc(descriptor(FOSTER_SPLIT_BASIS, l.foster_split_basis).label)}` : ''}` : '');
+  return `<div class="card" style="margin-top:14px; border-left:3px solid var(--amber, #d97706);">
+    <div class="row-between" style="align-items:center;">
+      <h3 style="margin:0;">Foster arrangement ${badge(FOSTER_DIRECTION, l.foster_direction)}</h3>
+    </div>
+    <dl class="dl-meta" style="margin-top:10px;">
+      ${row(partnerLabel, partner ? `<a href="contact.html?id=${encodeURIComponent(partner.id)}">${esc(partner.name)}</a>${kennelName ? ` <span class="faint">(${esc(kennelName)})</span>` : ''}` : '')}
+      ${row('Compensation', l.foster_comp_model ? esc(descriptor(FOSTER_COMP_MODEL, l.foster_comp_model).label) : '')}
+      ${compRows}
+      ${row('Terms', l.foster_split_notes ? esc(l.foster_split_notes).replace(/\n/g, '<br>') : '')}
+    </dl>
+    <p class="muted" style="margin:6px 0 0; font-size:12px;">Record the other party's cut as a <strong>Foster compensation</strong> expense below; flag any owner-reimbursable costs as <strong>Reimbursable</strong>.</p>
+  </div>`;
 }
 
 // Sync-and-warn (Data Model §5.4 / Stage 3 Brief §3): when a pairing is linked,
@@ -204,9 +264,21 @@ function renderEdit() {
       ${field('Expected price (female)', `<input id="f-expected_price_female" type="number" min="0" step="0.01" value="${esc(l.expected_price_female)}">`, { hint: 'Prefills a new sale\'s price when the puppy sold is female. Still editable per sale.' })}
       ${field('Expected deposit (female)', `<input id="f-expected_deposit_female" type="number" min="0" step="0.01" value="${esc(l.expected_deposit_female)}">`, { hint: 'Prefills a new sale\'s deposit amount when the puppy sold is female. Still editable per sale.' })}
       <div class="field field-wide">
-        <label class="check-inline"><input id="picker-archived" type="checkbox"${ctx.pickerArchived ? ' checked' : ''}> Include archived dogs/pairings in the pickers above</label>
+        <label class="check-inline"><input id="picker-archived" type="checkbox"${ctx.pickerArchived ? ' checked' : ''}> Include archived dogs/pairings/contacts in the pickers above</label>
       </div>
       ${field('Notes', `<textarea id="f-notes">${esc(l.notes)}</textarea>`, { wide: true })}
+      <div class="field field-wide"><h3 style="margin:8px 0 0;">Foster arrangement</h3>
+        <span class="field-hint">Leave the direction blank for an ordinary litter. Foster is per-litter — the same dam can have foster and non-foster litters.</span></div>
+      ${field('Foster direction', `<select id="f-foster_direction">${vocabOptions(FOSTER_DIRECTION, l.foster_direction, '— none (not a foster litter) —')}</select>`, { hint: 'Foster in: an external dam\'s litter raised in your care. Foster out: your dam\'s litter raised elsewhere.', wide: true })}
+      ${field('Foster partner', `<select id="f-foster_partner_contact_id">${contactOptions(l.foster_partner_contact_id)}</select>`, { hint: 'The dam\'s owner (foster in) or the caretaker (foster out). Their kennel is the owner/caretaker kennel a companion share can reveal.', wide: true })}
+      ${field('Compensation model', `<select id="f-foster_comp_model">${vocabOptions(FOSTER_COMP_MODEL, l.foster_comp_model, '— income split (default) —')}</select>`, { hint: 'How the other party is paid. Either way, log their actual cut as a Foster compensation expense.', wide: true })}
+      ${l.foster_comp_model === 'flat_per_pup'
+        ? field('Flat fee per pup', `<input id="f-foster_flat_fee_per_pup" type="number" min="0" step="0.01" value="${esc(l.foster_flat_fee_per_pup)}">`, { hint: 'A fixed amount per puppy. Documentation only — the actual payout is a Foster compensation expense.' })
+        : field('Our income share (%)', `<input id="f-foster_our_share_pct" type="number" min="0" max="100" step="0.1" value="${esc(l.foster_our_share_pct)}">`, { hint: 'Documentation only — record the other party\'s actual cut as a Foster compensation expense.' })}
+      ${l.foster_comp_model === 'flat_per_pup'
+        ? ''
+        : field('Split basis', `<select id="f-foster_split_basis">${vocabOptions(FOSTER_SPLIT_BASIS, l.foster_split_basis, '—')}</select>`)}
+      ${field('Terms', `<textarea id="f-foster_split_notes">${esc(l.foster_split_notes)}</textarea>`, { hint: 'The exact agreed terms, in your words.', wide: true })}
     </div>
     <div id="form-warn"></div>`;
 
@@ -227,6 +299,12 @@ function renderEdit() {
       if (!ctx.draft.dam_id) ctx.draft.dam_id = p.dam_id || '';
       if (!ctx.draft.sire_id) ctx.draft.sire_id = p.sire_id || '';
     }
+    renderEdit();
+  });
+  // Switching the foster compensation model swaps which fields show (flat fee
+  // per pup vs. income share % + basis), so re-render off the current draft.
+  document.getElementById('f-foster_comp_model').addEventListener('change', () => {
+    ctx.draft = readForm();
     renderEdit();
   });
   // Whelp date prefills estimated ready date (8 weeks later) — only while that
@@ -262,7 +340,16 @@ function readForm() {
     expected_price_female: val('f-expected_price_female'),
     expected_deposit_male: val('f-expected_deposit_male'),
     expected_deposit_female: val('f-expected_deposit_female'),
-    notes: val('f-notes')
+    notes: val('f-notes'),
+    foster_direction: val('f-foster_direction'),
+    foster_partner_contact_id: val('f-foster_partner_contact_id'),
+    foster_comp_model: val('f-foster_comp_model'),
+    // The comp-model-specific inputs only exist in the DOM for their model, so a
+    // hidden one keeps its stored draft value (never clobbered to '' by val()).
+    foster_our_share_pct: document.getElementById('f-foster_our_share_pct') ? val('f-foster_our_share_pct') : (ctx.draft.foster_our_share_pct ?? ''),
+    foster_split_basis: document.getElementById('f-foster_split_basis') ? val('f-foster_split_basis') : (ctx.draft.foster_split_basis ?? ''),
+    foster_flat_fee_per_pup: document.getElementById('f-foster_flat_fee_per_pup') ? val('f-foster_flat_fee_per_pup') : (ctx.draft.foster_flat_fee_per_pup ?? ''),
+    foster_split_notes: val('f-foster_split_notes')
   };
 }
 
@@ -283,6 +370,9 @@ function updateWarnings() {
   }
   if (l.whelp_date && WHELPED_OR_LATER.includes(l.status) && l.whelp_date > todayYMD()) {
     warns.push('Whelp date is in the future but the status is at or past “Whelped”.');
+  }
+  if (l.foster_direction && !l.foster_partner_contact_id) {
+    warns.push('This is a foster litter but no foster partner (owner/caretaker) is selected.');
   }
   const box = document.getElementById('form-warn');
   if (box) box.innerHTML = warns.length ? `<div class="inline-warn">${warns.map(esc).join('<br>')}</div>` : '';
@@ -358,6 +448,17 @@ function normalizeCounts(candidate) {
     candidate[k] = candidate[k] === '' || candidate[k] == null ? null : Number(candidate[k]);
   }
   candidate.pairing_id = candidate.pairing_id || null;
+  // Foster: empty → null (a non-foster litter stores null direction/partner). The
+  // share % becomes a real Number or null; partner/basis/notes drop to null blank.
+  candidate.foster_direction = candidate.foster_direction || null;
+  candidate.foster_partner_contact_id = candidate.foster_partner_contact_id || null;
+  candidate.foster_comp_model = candidate.foster_comp_model || null;
+  candidate.foster_our_share_pct = candidate.foster_our_share_pct === '' || candidate.foster_our_share_pct == null
+    ? null : Number(candidate.foster_our_share_pct);
+  candidate.foster_split_basis = candidate.foster_split_basis || null;
+  candidate.foster_flat_fee_per_pup = candidate.foster_flat_fee_per_pup === '' || candidate.foster_flat_fee_per_pup == null
+    ? null : Number(candidate.foster_flat_fee_per_pup);
+  candidate.foster_split_notes = (candidate.foster_split_notes || '').trim() || null;
   return candidate;
 }
 
@@ -599,7 +700,8 @@ function renderTitle() {
   }
   const l = ctx.original;
   const cross = `${dogName(l.dam_id) || '—'} × ${dogName(l.sire_id) || '—'}`;
-  const archived = l.is_archived ? ' <span class="badge badge-gray">Archived</span>' : '';
+  const foster = l.foster_direction ? ' ' + badge(FOSTER_DIRECTION, l.foster_direction) : '';
+  const archived = (l.is_archived ? ' <span class="badge badge-gray">Archived</span>' : '') + foster;
   const whelped = l.whelp_date ? `Whelped ${esc(fmtDate(l.whelp_date))}` : '';
   // The nickname is the friendly label; when present it leads, with dam × sire
   // and whelp date demoted to the subtitle. Otherwise dam × sire is the title.

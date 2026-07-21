@@ -26,11 +26,15 @@ export async function getLitterFinances() {
 
   const acc = new Map(); // litterId -> accumulator
   const get = (id) => {
-    if (!acc.has(id)) acc.set(id, { earned: 0, anticipated: 0, litterExpenses: 0, puppyExpenses: 0, puppiesSold: 0 });
+    if (!acc.has(id)) acc.set(id, { earned: 0, anticipated: 0, litterExpenses: 0, puppyExpenses: 0, reimbursedOffset: 0, reimbursablePending: 0, puppiesSold: 0 });
     return acc.get(id);
   };
 
   // Income: only sale rows carry a litter_id (stud income is never litter-scoped).
+  // For a foster litter, the puppy sales are still ours (whoever holds the pups
+  // books the gross Sales); the other party's income split is recorded as a
+  // `foster_split` litter-subject Expense below, so it flows into cost naturally
+  // and needs no special income handling here.
   for (const r of rows) {
     if (r.source_type !== 'sale' || !r.litter_id) continue;
     const a = get(r.litter_id);
@@ -40,26 +44,40 @@ export async function getLitterFinances() {
   }
 
   // Cost (option b): litter-subject expenses + each puppy's dog-subject expenses.
+  // Reimbursable handling (guide §21): a reimbursed reimbursable cost washes out
+  // (someone paid you back), so it is EXCLUDED from your cost; a still-pending
+  // reimbursable stays in cost (you are out that cash today) but is also tallied
+  // as an outstanding receivable so the report can flag "$X still owed to you".
   for (const e of expenses) {
     const amt = Number(e.amount) || 0;
-    if (e.subject_type === 'litter') {
-      get(e.subject_id).litterExpenses += amt;
-    } else if (e.subject_type === 'dog') {
-      const litterId = dogById.get(e.subject_id)?.litter_id;
-      if (litterId) get(litterId).puppyExpenses += amt;
-    }
+    let litterId = null;
+    if (e.subject_type === 'litter') litterId = e.subject_id;
+    else if (e.subject_type === 'dog') litterId = dogById.get(e.subject_id)?.litter_id || null;
+    if (!litterId) continue;
+    const a = get(litterId);
+    const reimbursed = e.reimbursable && e.reimbursed_date;
+    if (reimbursed) { a.reimbursedOffset += amt; continue; } // washes out — not your cost
+    if (e.subject_type === 'litter') a.litterExpenses += amt;
+    else a.puppyExpenses += amt;
+    if (e.reimbursable && !e.reimbursed_date) a.reimbursablePending += amt;
   }
 
   return litters.map((l) => {
-    const a = acc.get(l.id) || { earned: 0, anticipated: 0, litterExpenses: 0, puppyExpenses: 0, puppiesSold: 0 };
+    const a = acc.get(l.id) || { earned: 0, anticipated: 0, litterExpenses: 0, puppyExpenses: 0, reimbursedOffset: 0, reimbursablePending: 0, puppiesSold: 0 };
     const totalExpenses = a.litterExpenses + a.puppyExpenses;
     return {
       litter: l,
+      fosterDirection: l.foster_direction || null,
       earned: a.earned,
       anticipated: a.anticipated,
       litterExpenses: a.litterExpenses,
       puppyExpenses: a.puppyExpenses,
       totalExpenses,
+      // Money already paid back to you on reimbursed costs (excluded from cost).
+      reimbursedOffset: a.reimbursedOffset,
+      // Reimbursable costs you've fronted but not yet been paid back for — a
+      // receivable, still counted in totalExpenses/net until settled.
+      reimbursablePending: a.reimbursablePending,
       net: a.earned - totalExpenses,
       puppiesSold: a.puppiesSold
     };

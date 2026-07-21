@@ -40,6 +40,39 @@ export const DISPOSITION = [
   { value: 'placed',    label: 'Placed',    badge: 'badge-neutral' }
 ];
 
+// Foster direction — a per-litter fact (a litter fostered under a caretaker↔owner
+// arrangement, not a permanent ownership fact of any dog, so the same dam can have
+// more than one foster litter). Null/unset means an ordinary, non-foster litter.
+//   foster_in  — an external dam's litter is whelped/raised in OUR care (we sell
+//                the pups and pay the owner their income split).
+//   foster_out — OUR dam's litter is raised elsewhere (the caretaker sells; we
+//                receive our split).
+// A foster puppy is distinguished from a plain "external" dog purely by DERIVATION
+// (its litter's foster_direction) — it stays a normal status='puppy' Dog we manage
+// and sell, never an external_reference. See guide §4.
+export const FOSTER_DIRECTION = [
+  { value: 'foster_in',  label: 'Foster in — external dam',      badge: 'badge-amber' },
+  { value: 'foster_out', label: 'Foster out — raised elsewhere', badge: 'badge-amber' }
+];
+
+// How the foster partner is compensated. Two models (owner picks per litter):
+//   income_split — a percentage of puppy income (`foster_our_share_pct` +
+//                  `foster_split_basis`).
+//   flat_per_pup — a fixed dollar amount per puppy (`foster_flat_fee_per_pup`).
+// Both are DOCUMENTATION only — the actual money is a real `foster_split`
+// ("Foster compensation") Expense either way (§25), so the P&L is model-agnostic.
+export const FOSTER_COMP_MODEL = [
+  { value: 'income_split', label: 'Income split (%)',   badge: 'badge-neutral' },
+  { value: 'flat_per_pup', label: 'Flat fee per pup',   badge: 'badge-neutral' }
+];
+
+// Basis an income-split compensation is computed on (only meaningful when the
+// comp model is `income_split`). Documentation only. Suggest-not-enforce.
+export const FOSTER_SPLIT_BASIS = [
+  { value: 'gross', label: 'Gross puppy income', badge: 'badge-neutral' },
+  { value: 'net',   label: 'Net after expenses', badge: 'badge-neutral' }
+];
+
 // --- Pairing & Litter vocabularies (Data Model doc §5.3–5.4) ---------------
 export const PAIRING_TYPE = [
   { value: 'planned', label: 'Planned', badge: 'badge-blue' },
@@ -115,6 +148,7 @@ export const CONTRACT_TYPE = [
   { value: 'stud_service', label: 'Stud service', badge: 'badge-purple' },
   { value: 'co_own',       label: 'Co-own',       badge: 'badge-green' },
   { value: 'lease',        label: 'Lease',        badge: 'badge-amber' },
+  { value: 'foster',       label: 'Foster',       badge: 'badge-amber' },
   { value: 'other',        label: 'Other',        badge: 'badge-gray' }
 ];
 
@@ -345,6 +379,7 @@ export const EXPENSE_CATEGORIES = [
   { value: 'boarding',     label: 'Boarding & travel',  badge: 'badge-amber' },
   { value: 'mileage',      label: 'Mileage / travel',   badge: 'badge-amber' },
   { value: 'stud_fee',     label: 'Stud fee',           badge: 'badge-purple' },
+  { value: 'foster_split', label: 'Foster compensation',  badge: 'badge-purple' },
   { value: 'dog_purchase', label: 'New dog purchase',   badge: 'badge-red' },
   { value: 'marketing',    label: 'Marketing',          badge: 'badge-blue' },
   { value: 'insurance',    label: 'Insurance',          badge: 'badge-neutral' },

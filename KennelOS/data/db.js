@@ -74,6 +74,25 @@ db.version(1).stores({
   stud_services: 'id, our_dog_id, partner_dog_id, partner_contact_id, referred_by_contact_id, direction, status, pairing_id, is_archived'
 });
 
+// --- version(2): foster whelps (additive) ---------------------------------
+// The FIRST additive version block past the collapsed version(1) above. Foster
+// is a per-litter fact (the same dam can have more than one foster litter, so it
+// can't live on the Dog): a litter carries a nullable `foster_direction`
+// (foster_in / foster_out) plus the counterparty `foster_partner_contact_id`
+// (the dam's owner for foster-in, the caretaker for foster-out) and its split
+// terms. Only `foster_partner_contact_id` is INDEXED here — the referential guard
+// (CONTACT_REFERENCES) probes it so a foster partner contact can't be
+// hard-deleted out from under a litter. `foster_direction` and the split fields
+// (`foster_our_share_pct`, `foster_split_basis`, `foster_split_notes`) are plain
+// unindexed fields (filtered in JS, like is_archived) and so are NOT listed.
+//
+// Per the versioning rule (CLAUDE.md / guide §5): from here on, schema changes
+// are additive-only — new version(N) blocks, and version(1) above is FROZEN.
+// Dexie inherits every unchanged table, so only `litters` is redeclared.
+db.version(2).stores({
+  litters: 'id, pairing_id, sire_id, dam_id, status, whelp_date, foster_partner_contact_id, is_archived'
+});
+
 // --- First-run storage durability ----------------------------------------
 // Ask the browser to keep this origin's data from being evicted under storage
 // pressure (Data Model doc §2.1). Best-effort; safe to ignore if unsupported.

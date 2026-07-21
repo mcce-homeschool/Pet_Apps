@@ -480,6 +480,59 @@ export async function seedSampleData() {
   });
   manifest.litters.push(expectedLitter.id);
 
+  // --- Foster-IN scenario (version(2), guide §4/§21) — Thornfield is whelping and
+  // selling a litter for another breeder (Dana Ruiz / Meadow Ridge) under a foster
+  // agreement with a 60/40 income split. Marigold is Dana's dam, in Thornfield's
+  // care; the litter is `foster_in` with Dana as the foster partner. The pups are
+  // ordinary owned puppies we manage and sell (NOT external_reference) but their
+  // breeder_kennel_id is Meadow Ridge (the owner is the breeder of record) — that
+  // is exactly what a companion share reveals as the owner kennel. The split payout
+  // to Dana and the owner-reimbursable vet cost are seeded as Expenses below.
+  const marigold = await dogRepo.create({
+    call_name: 'Marigold', sex: 'female', breed: BREED,
+    date_of_birth: '2022-04-12', registered_name: 'Meadow Ridge Marigold', registry: 'AKC',
+    color_markings: 'Black & white', ownership_type: 'external', owner_contact_id: dana.id,
+    status: 'external_reference', breeder_kennel_id: meadowRidge.id, kennel_id: meadowRidge.id
+  });
+  const fosterLitter = await litterRepo.create({
+    dam_id: marigold.id, sire_id: gunnar.id, nickname: 'Meadow Ridge foster litter',
+    whelp_date: daysFromToday(-56), estimated_ready_date: daysFromToday(0),
+    litter_registration_number: 'MDWR-L-2026-01',
+    puppies_born_total: 2, puppies_born_alive: 2, puppies_born_deceased: 0, puppies_born_abnormalities: 0,
+    expected_price_male: 2600, expected_price_female: 2800,
+    expected_deposit_male: 500, expected_deposit_female: 500,
+    status: 'ready',
+    foster_direction: 'foster_in', foster_partner_contact_id: dana.id,
+    foster_comp_model: 'income_split', foster_our_share_pct: 60, foster_split_basis: 'gross',
+    foster_split_notes: '60% to Thornfield / 40% to Meadow Ridge of gross puppy sales; Thornfield fronts rearing costs, vet reimbursable.'
+  });
+  const bramblePup = await dogRepo.create({
+    call_name: 'Bramble', sex: 'male', breed: BREED,
+    date_of_birth: daysFromToday(-56), sire_id: gunnar.id, dam_id: marigold.id, litter_id: fosterLitter.id,
+    ownership_type: 'owned', status: 'puppy', disposition: 'available', kennel_id: thornfield.id,
+    breeder_kennel_id: meadowRidge.id
+  });
+  const sorrelPup = await dogRepo.create({
+    call_name: 'Sorrel', sex: 'female', breed: BREED,
+    date_of_birth: daysFromToday(-56), sire_id: gunnar.id, dam_id: marigold.id, litter_id: fosterLitter.id,
+    ownership_type: 'owned', status: 'puppy', disposition: 'available', kennel_id: thornfield.id,
+    breeder_kennel_id: meadowRidge.id
+  });
+  manifest.dogs.push(marigold.id, bramblePup.id, sorrelPup.id);
+  manifest.litters.push(fosterLitter.id);
+
+  // The foster agreement itself — a `foster` contract reaching the fostered dam
+  // (related_dog_id) and the counterparty (related_contact_id), same shape as a
+  // lease/co_own. Being live + partner-facing, it puts Dana on the Companion
+  // Partners tab too.
+  const fosterContract = await contractRepo.create({
+    contract_type: 'foster', status: 'signed', signed_date: daysFromToday(-70),
+    related_dog_id: marigold.id, related_contact_id: dana.id,
+    title: 'Meadow Ridge foster / co-rearing agreement',
+    terms_summary: '60/40 split of gross puppy sales; Thornfield rears and places; vet costs reimbursable by Meadow Ridge.'
+  });
+  manifest.contracts.push(fosterContract.id);
+
   // --- Stud Service SS1 (outgoing, in-person) — Birch services Nell at Ellen's.
   // Links to Pairing P3 via the canonical pairing_id. `arranged` with a passed
   // sent_date and no returned_date: Birch is physically away right now, so this is
@@ -770,7 +823,15 @@ export async function seedSampleData() {
     // from his acquisition event's Cost field.
     { subject_type: 'dog', subject_id: diesel.id, amount: 2500, category: 'dog_purchase', expense_date: '2022-02-14', vendor: 'Ridgeline Boxers', notes: 'Purchase of Diesel' },
     // Captured-from-event row (links back to the vet visit above).
-    { event_id: vetVisit.id, subject_type: 'dog', subject_id: juniper.id, amount: 145, category: 'veterinary', expense_date: daysFromToday(-20), vendor: 'Green Mountain Vet', notes: 'Exam + medication' }
+    { event_id: vetVisit.id, subject_type: 'dog', subject_id: juniper.id, amount: 145, category: 'veterinary', expense_date: daysFromToday(-20), vendor: 'Green Mountain Vet', notes: 'Exam + medication' },
+    // Foster-in ledger (guide §21): the split payout to the owner is a real
+    // Expense (money leaving our program), so it flows into the litter P&L as cost
+    // and needs no income machinery. Two owner-reimbursable rearing costs show both
+    // states — one already reimbursed (washes out of net), one still pending (a
+    // receivable on the Litter P&L's "Owed back" column).
+    { subject_type: 'litter', subject_id: fosterLitter.id, amount: 640, category: 'foster_split', expense_date: daysFromToday(-2), vendor: 'Meadow Ridge Kennels', notes: 'Owner share (40%) of deposits received to date' },
+    { subject_type: 'litter', subject_id: fosterLitter.id, amount: 220, category: 'veterinary', expense_date: daysFromToday(-40), vendor: 'Green Mountain Vet', reimbursable: true, reimbursed_date: daysFromToday(-20), notes: 'Dam prenatal + whelp check — reimbursed by owner' },
+    { subject_type: 'litter', subject_id: fosterLitter.id, amount: 130, category: 'food', expense_date: daysFromToday(-25), vendor: 'Chewy', reimbursable: true, notes: 'Puppy food — awaiting owner reimbursement' }
   ];
   for (const x of expenses) {
     const saved = await expenseRepo.create(x);
@@ -798,6 +859,7 @@ export async function seedSampleData() {
     tessa: tessa.id, grace: grace.id, rex: rex.id, nora: nora.id, marcus: marcus.id,
     sam: sam.id, hugo: hugo.id, patricia: patricia.id,
     summerLitter: litter.id, springLitter: litter2.id, autumnLitter: autumnLitter.id, winterLitter: expectedLitter.id,
+    marigold: marigold.id, bramble: bramblePup.id, sorrel: sorrelPup.id, fosterLitter: fosterLitter.id, fosterContract: fosterContract.id,
     pairingP1: pairingP1.id, pairingP2: pairingP2.id, pairingP3: pairingP3.id,
     pairingP4: pairingP4.id, pairingP5: pairingP5.id, pairingP6: pairingP6.id,
     hazelSale: hazelSale.id, daisySale: daisySale.id, cedarSale: cedarSale.id,
