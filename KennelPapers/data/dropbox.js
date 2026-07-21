@@ -4,14 +4,14 @@
 // intact; Dropbox's API sends CORS headers so this works straight from the
 // browser).
 //
-// ⚠️ SETUP REQUIRED: register a free Dropbox app at
-// https://www.dropbox.com/developers/apps — "Scoped access", "App folder"
-// access type (confines this app to /Apps/Kennel Papers), and grant the
-// `files.content.write` + `files.content.read` scopes. Paste its App key
-// below. No client secret is needed (PKCE is for public/static clients).
-// Also register the exact origin(s) this app is served from (localhost for
-// dev, your GitHub Pages URL for prod) as OAuth redirect URIs.
-const APP_KEY = 'REPLACE_WITH_YOUR_DROPBOX_APP_KEY';
+// App key is set (Dropbox app "KennelPapers", App-folder scoped — see
+// docs/Kennel_Papers_Design_and_Maintenance_Guide.md §9). No client secret
+// is needed or used (PKCE is for public/static clients). The app's
+// Permissions tab must have `files.content.write` + `files.content.read`
+// granted, and its OAuth2 Redirect URIs must include the exact origin(s)
+// this is served from (e.g. http://localhost:8000/ for dev, the GitHub
+// Pages URL for prod) — Dropbox requires an exact match at connect time.
+const APP_KEY = 'fvmtvesy1u1l0xf';
 
 import {
   getAccessToken as getCachedAccessToken, setAccessToken, getAccessExpiry,
