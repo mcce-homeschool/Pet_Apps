@@ -159,10 +159,9 @@ function readSubject(form) {
 
 // Business (this app's own bucket) + Receipt # (auto-assigned on save if blank).
 function metaFields(entry) {
-  const bizHint = getBusinesses().length ? '' : ' <span class="hint">— add businesses in ⚙ Settings</span>';
   return `
     <div class="grid2">
-      <label>Business${bizHint}
+      <label>Business
         <select name="business">${businessOptions(entry ? entry.business : getDefaultBusiness())}</select>
       </label>
       <label>Receipt #
@@ -619,10 +618,6 @@ function openSettings() {
       <h3>Businesses</h3>
       <p class="hint">Tag each entry with a business so you can scope an export (e.g. only kennel expenses). Names stay in this app — they never go to KennelOS.</p>
       <ul class="tag-list" id="biz-list"></ul>
-      <div class="add-row">
-        <input type="text" id="biz-add-input" placeholder="Add a business…" autocomplete="off">
-        <button class="btn btn-soft" id="biz-add-btn" type="button">Add</button>
-      </div>
       <label style="margin-top:10px;">Default for new entries
         <select id="biz-default"></select>
       </label>
@@ -632,29 +627,25 @@ function openSettings() {
       <h3>Custom categories</h3>
       <p class="hint">Your own categories, on top of the KennelOS ones. KennelOS files anything it doesn’t recognize under “Other”, so these suit non-kennel businesses you scope out of the KennelOS export.</p>
       <ul class="tag-list" id="cat-list"></ul>
-      <div class="add-row">
-        <input type="text" id="cat-add-input" placeholder="Add a category…" autocomplete="off">
-        <button class="btn btn-soft" id="cat-add-btn" type="button">Add</button>
-      </div>
     </div>
 
     <div class="settings-section">
       <h3>Vehicles</h3>
       <p class="hint">Saved vehicles for the trip log (also remembered automatically as you type them). Stays in this app — not exported to KennelOS.</p>
       <ul class="tag-list" id="veh-list"></ul>
-      <div class="add-row">
-        <input type="text" id="veh-add-input" placeholder="Add a vehicle…" autocomplete="off">
-        <button class="btn btn-soft" id="veh-add-btn" type="button">Add</button>
-      </div>
     </div>
 
     <div class="settings-section">
       <h3>Drivers</h3>
       <p class="hint">Saved drivers for the trip log (also remembered automatically as you type them). Stays in this app — not exported to KennelOS.</p>
       <ul class="tag-list" id="drv-list"></ul>
-      <div class="add-row">
-        <input type="text" id="drv-add-input" placeholder="Add a driver…" autocomplete="off">
-        <button class="btn btn-soft" id="drv-add-btn" type="button">Add</button>
+    </div>
+
+    <div class="settings-section">
+      <div class="form-actions" style="margin-top:0;">
+        <button type="button" class="btn btn-soft" id="list-add-btn">+ Add New</button>
+        <button type="button" class="btn btn-soft" id="list-delete-btn">🗑 Delete</button>
+        <span class="spacer"></span>
       </div>
     </div>
 
@@ -669,57 +660,133 @@ function openSettings() {
     toast('Saved');
   });
 
-  // --- Businesses (live add/remove) ---
+  // --- Businesses, categories, vehicles & drivers ---
+  // Read-only reference lists here; adding and deleting entries both go
+  // through the single "Add New" / "Delete" modals below (openAddNewModal /
+  // openDeleteEntryModal), which cover all four lists via MANAGED_LISTS.
   const bizList = el.querySelector('#biz-list');
   const bizDefault = el.querySelector('#biz-default');
   function renderBiz() {
     const list = getBusinesses();
     bizList.innerHTML = list.length
-      ? list.map((b) => `<li><span>${esc(b)}</span><button type="button" class="chip-x" data-biz="${esc(b)}" aria-label="Remove">✕</button></li>`).join('')
+      ? list.map((b) => `<li><span>${esc(b)}</span></li>`).join('')
       : '<li class="muted">None yet.</li>';
     bizDefault.innerHTML = `<option value="">— none —</option>` + list.map((b) => `<option value="${esc(b)}"${b === getDefaultBusiness() ? ' selected' : ''}>${esc(b)}</option>`).join('');
-    bizList.querySelectorAll('[data-biz]').forEach((btn) => btn.addEventListener('click', () => { removeBusiness(btn.dataset.biz); renderBiz(); }));
   }
-  el.querySelector('#biz-add-btn').addEventListener('click', () => {
-    const input = el.querySelector('#biz-add-input');
-    if (input.value.trim()) { addBusiness(input.value); input.value = ''; renderBiz(); }
-  });
   bizDefault.addEventListener('change', () => { setDefaultBusiness(bizDefault.value); toast('Default business set'); });
-  renderBiz();
 
-  // --- Custom categories (live add/remove) ---
   const catList = el.querySelector('#cat-list');
   function renderCats() {
     const list = getCustomCategories();
     catList.innerHTML = list.length
-      ? list.map((c) => `<li><span>${esc(c)}</span><button type="button" class="chip-x" data-cat="${esc(c)}" aria-label="Remove">✕</button></li>`).join('')
+      ? list.map((c) => `<li><span>${esc(c)}</span></li>`).join('')
       : '<li class="muted">None yet — the KennelOS categories are always available.</li>';
-    catList.querySelectorAll('[data-cat]').forEach((btn) => btn.addEventListener('click', () => { removeCustomCategory(btn.dataset.cat); renderCats(); }));
   }
-  el.querySelector('#cat-add-btn').addEventListener('click', () => {
-    const input = el.querySelector('#cat-add-input');
-    if (input.value.trim()) { addCustomCategory(input.value); input.value = ''; renderCats(); }
-  });
-  renderCats();
 
-  // --- Vehicles & Drivers (live add/remove) — a shared little manager ---
-  function wireList(listId, addBtnId, addInputId, get, add, remove, dataAttr, emptyMsg) {
-    const listEl = el.querySelector(listId);
-    function render() {
-      const list = get();
-      listEl.innerHTML = list.length
-        ? list.map((x) => `<li><span>${esc(x)}</span><button type="button" class="chip-x" ${dataAttr}="${esc(x)}" aria-label="Remove">✕</button></li>`).join('')
-        : `<li class="muted">${esc(emptyMsg)}</li>`;
-      listEl.querySelectorAll(`[${dataAttr}]`).forEach((btn) => btn.addEventListener('click', () => { remove(btn.getAttribute(dataAttr)); render(); }));
-    }
-    el.querySelector(addBtnId).addEventListener('click', () => {
-      const input = el.querySelector(addInputId);
-      if (input.value.trim()) { add(input.value); input.value = ''; render(); }
-    });
-    render();
+  const vehList = el.querySelector('#veh-list');
+  function renderVeh() {
+    const list = getVehicles();
+    vehList.innerHTML = list.length
+      ? list.map((v) => `<li><span>${esc(v)}</span></li>`).join('')
+      : '<li class="muted">None yet — add one, or just type it on a trip.</li>';
   }
-  wireList('#veh-list', '#veh-add-btn', '#veh-add-input', getVehicles, addVehicle, removeVehicle, 'data-veh', 'None yet — add one, or just type it on a trip.');
-  wireList('#drv-list', '#drv-add-btn', '#drv-add-input', getDrivers, addDriver, removeDriver, 'data-drv', 'None yet — add one, or just type it on a trip.');
+
+  const drvList = el.querySelector('#drv-list');
+  function renderDrv() {
+    const list = getDrivers();
+    drvList.innerHTML = list.length
+      ? list.map((d) => `<li><span>${esc(d)}</span></li>`).join('')
+      : '<li class="muted">None yet — add one, or just type it on a trip.</li>';
+  }
+
+  function refreshManagedLists() { renderBiz(); renderCats(); renderVeh(); renderDrv(); }
+  refreshManagedLists();
+
+  el.querySelector('#list-add-btn').addEventListener('click', () => openAddNewModal(refreshManagedLists));
+  el.querySelector('#list-delete-btn').addEventListener('click', () => openDeleteEntryModal(refreshManagedLists));
+}
+
+// One table of the four small saved-name lists (businesses, custom
+// categories, vehicles, drivers) — shared by the Add New and Delete modals so
+// both offer a "which list?" dropdown instead of a per-section add/remove UI.
+const MANAGED_LISTS = [
+  { key: 'business', label: 'Business', get: getBusinesses, add: addBusiness, remove: removeBusiness },
+  { key: 'category', label: 'Custom category', get: getCustomCategories, add: addCustomCategory, remove: removeCustomCategory },
+  { key: 'vehicle', label: 'Vehicle', get: getVehicles, add: addVehicle, remove: removeVehicle },
+  { key: 'driver', label: 'Driver', get: getDrivers, add: addDriver, remove: removeDriver }
+];
+
+function openAddNewModal(onDone) {
+  const { el, close } = openModal(`
+    <div class="modal-head">
+      <h2>Add new</h2>
+      <button class="icon-btn" data-close aria-label="Close">✕</button>
+    </div>
+    <form id="add-new-form" class="form">
+      <label>List
+        <select name="list">${MANAGED_LISTS.map((l) => `<option value="${l.key}">${esc(l.label)}</option>`).join('')}</select>
+      </label>
+      <label>Name
+        <input type="text" name="name" placeholder="e.g. Tractor Supply" autocomplete="off" required>
+      </label>
+      <div class="form-actions"><span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Add</button>
+      </div>
+    </form>`);
+  const form = el.querySelector('#add-new-form');
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const cfg = MANAGED_LISTS.find((l) => l.key === form.list.value);
+    const name = form.name.value.trim();
+    if (!cfg || !name) return;
+    cfg.add(name);
+    close();
+    onDone();
+    toast(`${cfg.label} added`);
+  });
+}
+
+function openDeleteEntryModal(onDone) {
+  const { el, close } = openModal(`
+    <div class="modal-head">
+      <h2>Delete an entry</h2>
+      <button class="icon-btn" data-close aria-label="Close">✕</button>
+    </div>
+    <form id="del-entry-form" class="form">
+      <label>List
+        <select name="list">${MANAGED_LISTS.map((l) => `<option value="${l.key}">${esc(l.label)}</option>`).join('')}</select>
+      </label>
+      <label>Name
+        <select name="name" id="del-name-select"></select>
+      </label>
+      <div class="form-actions"><span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-danger">Delete</button>
+      </div>
+    </form>`);
+  const form = el.querySelector('#del-entry-form');
+  const nameSelect = form.querySelector('#del-name-select');
+  function refreshNames() {
+    const cfg = MANAGED_LISTS.find((l) => l.key === form.list.value);
+    const items = cfg.get();
+    nameSelect.innerHTML = items.length
+      ? items.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('')
+      : '<option value="">None yet</option>';
+    nameSelect.disabled = !items.length;
+  }
+  form.list.addEventListener('change', refreshNames);
+  refreshNames();
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const cfg = MANAGED_LISTS.find((l) => l.key === form.list.value);
+    const name = nameSelect.value;
+    if (!cfg || !name) return;
+    cfg.remove(name);
+    close();
+    onDone();
+    toast(`${cfg.label} deleted`);
+  });
 }
 
 init();
