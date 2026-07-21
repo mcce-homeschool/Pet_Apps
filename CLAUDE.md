@@ -60,11 +60,17 @@ an icon, a `vendor/` or `resources/` asset):
    install and silently breaks offline.
 2. **Bump `CACHE_NAME`** in `KennelOS/sw.js` (e.g. `kennelos-shell-vN` → `vN+1`).
    Without this, clients keep serving the old cache and never see your change.
+   **Only bump after the user confirms there are no more changes** — do it as the
+   final step of a batch of related edits, not once per individual file edit, so a
+   multi-edit session ships as a single cache rollover rather than a churn of bumps.
+   (`PRECACHE_URLS` edits in step 1 are not optional and still land with the edit
+   that changes the file set — this deferral is about `CACHE_NAME` only.)
 
 There is a sanity check (a short Python snippet) in the End-State guide's invariants
 section that lists any app file missing from the precache and any precache entry with
 no file on disk — run it if you touched the file set. Editing an *existing* file's
-contents still needs the `CACHE_NAME` bump so clients re-fetch it.
+contents still needs the `CACHE_NAME` bump so clients re-fetch it — again, as the
+final confirmed step.
 
 ## Architecture non-negotiables
 - Multi-page static: one `.html` per section, shared JS (`nav.js`/`db.js`/repos). No SPA router.
