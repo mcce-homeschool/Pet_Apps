@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kennel Papers — for KennelOS</title>
+  <link rel="stylesheet" href="assets/app.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#182438">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kennel Papers">
+</head>
+<body>
+  <header class="app-bar">
+    <div class="app-bar-inner">
+      <div class="brand">
+        <span class="brand-mark">📄</span>
+        <div>
+          <h1>Kennel Papers</h1>
+          <p class="brand-sub">Document vault for KennelOS</p>
+        </div>
+      </div>
+      <div class="app-bar-actions">
+        <button class="icon-btn" id="btn-backup" title="Back up now">⬆<span class="count-badge" id="backup-badge" hidden></span></button>
+        <button class="icon-btn" id="btn-settings" title="Settings">⚙</button>
+      </div>
+    </div>
+    <div class="filter-row" id="type-filter-row"></div>
+    <div class="filter-row filter-row-search">
+      <input type="search" id="search-input" placeholder="Search title, dog, notes…" aria-label="Search documents">
+      <select id="dog-filter" aria-label="Filter by dog">
+        <option value="">All dogs</option>
+      </select>
+    </div>
+  </header>
+
+  <main id="list" class="list"></main>
+
+  <div class="fab-row">
+    <button class="fab fab-primary" id="btn-add">＋<span>Add document</span></button>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
